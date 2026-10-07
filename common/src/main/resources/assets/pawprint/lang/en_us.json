@@ -212,7 +212,7 @@
   "pawprint.materials.none": "No blocks that need items.",
   "pawprint.materials.text.header": "Materials for \"%s\": %s kinds, %s items",
   "pawprint.materials.text.header_placed": "Still needed for \"%s\": %s kinds, %s items",
-  "pawprint.materials.text.line": "%s: %s — %s",
+  "pawprint.materials.text.line": "%s (%s): %s — %s",
   "pawprint.materials.text.count": "%s",
   "pawprint.materials.text.count_stacks": "%s (%s stacks + %s)",
   "pawprint.materials.text.enough": "have %s, enough",

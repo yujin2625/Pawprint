@@ -13,7 +13,8 @@ import java.util.List;
  * the library's material screen.
  */
 final class MaterialTable {
-    static final int ROW = 18;
+    /** Two lines per row: the name in the game language, and the ID below it. */
+    static final int ROW = 22;
 
     private MaterialTable() {
     }
@@ -45,18 +46,20 @@ final class MaterialTable {
         int y = top + 12;
         for (int i = scroll; i < lines.size() && y + ROW <= bottom; i++) {
             MaterialList.Line line = lines.get(i);
-            graphics.renderItem(new ItemStack(line.item()), left, y);
+            graphics.renderItem(new ItemStack(line.item()), left, y + 2);
             String name = font.plainSubstrByWidth(line.item().getDescription().getString(), nameRight - left - 26);
-            graphics.drawString(font, name, left + 20, y + 4, 0xFFFFFF);
+            graphics.drawString(font, name, left + 20, y + 1, 0xFFFFFF);
+            graphics.drawString(font, font.plainSubstrByWidth(MaterialList.id(line), nameRight - left - 26),
+                    left + 20, y + 11, 0x808080);
             int needed = showRemaining ? line.remaining() : line.total();
             int haveColor = line.have() >= needed ? 0x55FF55 : 0xFF5555;
             if (showRemaining) {
                 int remainingColor = line.remaining() == 0 ? 0x55FF55 : line.have() >= line.remaining() ? 0xFFFF55 : 0xFF5555;
-                graphics.drawString(font, String.valueOf(line.remaining()), columnRemaining, y + 4, remainingColor);
+                graphics.drawString(font, String.valueOf(line.remaining()), columnRemaining, y + 6, remainingColor);
                 haveColor = 0xC0C0C0;
             }
-            graphics.drawString(font, String.valueOf(line.have()), columnHave, y + 4, haveColor);
-            graphics.drawString(font, String.valueOf(line.total()), columnTotal, y + 4, 0xC0C0C0);
+            graphics.drawString(font, String.valueOf(line.have()), columnHave, y + 6, haveColor);
+            graphics.drawString(font, String.valueOf(line.total()), columnTotal, y + 6, 0xC0C0C0);
             y += ROW;
         }
         if (result.withoutItem() > 0) {

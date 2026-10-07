@@ -212,7 +212,7 @@
   "pawprint.materials.none": "아이템이 필요한 블럭이 없습니다.",
   "pawprint.materials.text.header": "\"%s\" 필요 재료: %s종류, %s개",
   "pawprint.materials.text.header_placed": "\"%s\" 남은 재료: %s종류, %s개",
-  "pawprint.materials.text.line": "%s: %s개 — %s",
+  "pawprint.materials.text.line": "%s (%s): %s개 — %s",
   "pawprint.materials.text.count": "%s",
   "pawprint.materials.text.count_stacks": "%s (%s세트 + %s)",
   "pawprint.materials.text.enough": "보유 %s, 충분",

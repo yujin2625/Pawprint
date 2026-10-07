@@ -159,7 +159,7 @@ public final class MaterialList {
             Component status = missing == 0
                     ? Component.translatable("pawprint.materials.text.enough", line.have())
                     : Component.translatable("pawprint.materials.text.missing", line.have(), missing);
-            text.append(Component.translatable("pawprint.materials.text.line", line.item().getDescription(),
+            text.append(Component.translatable("pawprint.materials.text.line", line.item().getDescription(), id(line),
                     amount(count, line.item().getDefaultMaxStackSize()), status).getString()).append('\n');
         }
         if (needed.isEmpty()) {
@@ -171,6 +171,11 @@ public final class MaterialList {
                     .append('\n');
         }
         return text.toString();
+    }
+
+    /** The item's ID, as used in commands such as {@code /give}. */
+    public static String id(Line line) {
+        return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(line.item()).toString();
     }
 
     /** "150" becomes "150 (2 stacks + 22)" for items that stack. */
