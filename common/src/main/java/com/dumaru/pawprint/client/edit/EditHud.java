@@ -2,6 +2,7 @@ package com.dumaru.pawprint.client.edit;
 
 import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.PawprintKeys;
+import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.studio.Studio;
 import com.dumaru.pawprint.shape.Shape;
 import net.minecraft.ChatFormatting;
@@ -31,6 +32,9 @@ public final class EditHud {
         List<Component> lines = new ArrayList<>();
         if (Studio.pasteProgress() >= 0) {
             lines.add(Component.translatable("pawprint.studio.pasting", Studio.pasteProgress()).withStyle(ChatFormatting.GOLD));
+        }
+        if (PlacementManager.layer() != null && PlacementManager.isVisible()) {
+            lines.add(Component.translatable("pawprint.hud.layer", PlacementManager.layer()).withStyle(ChatFormatting.GREEN));
         }
         if (Freecam.isActive()) {
             lines.add(Component.translatable("pawprint.hud.freecam", PawprintKeys.TOGGLE_FREECAM.getTranslatedKeyMessage())

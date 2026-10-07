@@ -176,5 +176,12 @@
   "pawprint.library.export.structure": "구조 블럭 / Create (.nbt)",
   "pawprint.library.exported": "%s을(를) pawprint/exports 폴더에 내보냈습니다.",
   "pawprint.library.imported_files": "파일 %s개를 가져왔습니다. 원본은 pawprint/imported 폴더로 옮겼습니다.",
-  "pawprint.library.import_failed": "파일 %s개를 가져오지 못했습니다. 예: %s"
+  "pawprint.library.import_failed": "파일 %s개를 가져오지 못했습니다. 예: %s",
+  "key.pawprint.layer_up": "층 보기: 위로",
+  "key.pawprint.layer_down": "층 보기: 아래로",
+  "pawprint.layer.shown": "Y=%s 층만 표시합니다. 전체 층 보기는 배치 패널(%s)에서 켤 수 있습니다.",
+  "pawprint.layer.all": "모든 층 보기",
+  "pawprint.hud.layer": "층 보기: Y=%s",
+  "pawprint.library.manage.share": "공유 문자열 복사",
+  "pawprint.library.share_copied": "공유 문자열을 복사했습니다 (%s자). 받는 사람은 '클립보드 가져오기'로 붙여넣으면 됩니다."
 }

@@ -55,6 +55,8 @@ public class PlacementScreen extends Screen {
                 minecraft.keyboardHandler.setClipboard(MaterialList.toText(materials));
             }
         }).bounds(materialLeft(), bottom, 120, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("pawprint.layer.all"), b -> PlacementManager.setLayer(null))
+                .bounds(materialLeft() + 124, bottom, 90, 20).build()).active = PlacementManager.layer() != null;
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
                 .bounds(width - MARGIN - 80, bottom, 80, 20).build());
         recompute();

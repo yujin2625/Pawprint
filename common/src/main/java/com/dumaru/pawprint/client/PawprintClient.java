@@ -56,6 +56,12 @@ public final class PawprintClient {
         while (PawprintKeys.TOGGLE_FREECAM.consumeClick()) {
             Freecam.toggle(minecraft);
         }
+        while (PawprintKeys.LAYER_UP.consumeClick()) {
+            stepLayer(minecraft, 1);
+        }
+        while (PawprintKeys.LAYER_DOWN.consumeClick()) {
+            stepLayer(minecraft, -1);
+        }
         while (PawprintKeys.STUDIO.consumeClick()) {
             if (minecraft.screen == null) {
                 minecraft.setScreen(new StudioScreen());
@@ -81,6 +87,15 @@ public final class PawprintClient {
             markCorner(minecraft);
         }
         handlePlacementKeys(minecraft);
+    }
+
+    /** The first press starts the layer view at the viewer's feet; later presses move it up or down. */
+    private static void stepLayer(Minecraft minecraft, int delta) {
+        Integer layer = PlacementManager.layer();
+        int next = layer == null ? BlockPos.containing(ViewRay.eye(minecraft)).getY() - 1 : layer + delta;
+        PlacementManager.setLayer(next);
+        notify(minecraft, Component.translatable("pawprint.layer.shown", next,
+                PawprintKeys.PLACEMENT_PANEL.getTranslatedKeyMessage()));
     }
 
     private static void togglePlacementView(Minecraft minecraft) {

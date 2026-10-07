@@ -20,6 +20,8 @@ public final class PawprintKeys {
     public static final KeyMapping PLACEMENT_PANEL = key("placement_panel", GLFW.GLFW_KEY_O);
     public static final KeyMapping TOGGLE_FREECAM = key("toggle_freecam", GLFW.GLFW_KEY_K);
     public static final KeyMapping STUDIO = key("studio", GLFW.GLFW_KEY_P);
+    public static final KeyMapping LAYER_UP = key("layer_up", GLFW.GLFW_KEY_PERIOD);
+    public static final KeyMapping LAYER_DOWN = key("layer_down", GLFW.GLFW_KEY_COMMA);
 
     // Moves are relative to the direction the player faces.
     public static final KeyMapping MOVE_FORWARD = key("move_forward", GLFW.GLFW_KEY_UP);
@@ -32,7 +34,7 @@ public final class PawprintKeys {
     public static final KeyMapping MIRROR = key("mirror", GLFW.GLFW_KEY_LEFT_BRACKET);
 
     public static final List<KeyMapping> ALL = List.of(
-            OPEN_LIBRARY, MARK_CORNER, TOGGLE_EDIT, EDIT_MENU, TOGGLE_PLACEMENT_VIEW, PLACEMENT_PANEL, TOGGLE_FREECAM, STUDIO,
+            OPEN_LIBRARY, MARK_CORNER, TOGGLE_EDIT, EDIT_MENU, TOGGLE_PLACEMENT_VIEW, PLACEMENT_PANEL, TOGGLE_FREECAM, STUDIO, LAYER_UP, LAYER_DOWN,
             MOVE_FORWARD, MOVE_BACK, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, ROTATE, MIRROR);
 
     private PawprintKeys() {

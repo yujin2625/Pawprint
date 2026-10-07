@@ -176,5 +176,12 @@
   "pawprint.library.export.structure": "Structure Block / Create (.nbt)",
   "pawprint.library.exported": "Exported %s to the pawprint/exports folder.",
   "pawprint.library.imported_files": "Imported %s file(s). Originals were moved to pawprint/imported.",
-  "pawprint.library.import_failed": "%s file(s) could not be imported, e.g. %s"
+  "pawprint.library.import_failed": "%s file(s) could not be imported, e.g. %s",
+  "key.pawprint.layer_up": "Layer View: Up",
+  "key.pawprint.layer_down": "Layer View: Down",
+  "pawprint.layer.shown": "Showing only layer Y=%s. Show all layers again from the placement panel (%s).",
+  "pawprint.layer.all": "Show All Layers",
+  "pawprint.hud.layer": "Layer view: Y=%s",
+  "pawprint.library.manage.share": "Copy Share String",
+  "pawprint.library.share_copied": "Share string copied (%s characters). Others can paste it with Import Clipboard."
 }

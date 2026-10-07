@@ -124,6 +124,10 @@ public final class GhostRenderer {
         List<GhostStore.Section> visible = new ArrayList<>();
         for (GhostStore store : List.of(PlacementManager.placementGhosts(), PlacementManager.draftGhosts())) {
             for (GhostStore.Section section : store.sections()) {
+                Integer layer = PlacementManager.layer();
+                if (layer != null && (layer < section.originY || layer >= section.originY + 16)) {
+                    continue;
+                }
                 if (section.isChecked() && GhostStore.distanceSq(section, cam) <= rangeSq
                         && (frustum == null || frustum.isVisible(bounds(section)))) {
                     visible.add(section);

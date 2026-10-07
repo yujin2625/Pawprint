@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
@@ -109,6 +110,67 @@ public final class BlueprintIO {
             CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.create(MAX_NBT_HEAP));
             return fromNbt(meta, tag);
         }
+    }
+
+    /** Prefix of share strings; the number is the share format version. */
+    public static final String SHARE_PREFIX = "PAW1:";
+    private static final int MAX_SHARE_CHARS = 8 << 20;
+
+    /**
+     * The blueprint as one line of text for chat: {@code PAW1:} and Base64 (URL-safe) of the compressed NBT with the
+     * name and tags included. Thumbnails and other metadata are left out.
+     */
+    public static String toShareString(Blueprint blueprint) throws IOException {
+        CompoundTag tag = toNbt(blueprint);
+        tag.putString("Name", blueprint.meta().name);
+        tag.putString("Description", blueprint.meta().description);
+        ListTag tags = new ListTag();
+        blueprint.meta().tags.forEach(text -> tags.add(StringTag.valueOf(text)));
+        tag.put("Tags", tags);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        NbtIo.writeCompressed(tag, bytes);
+        return SHARE_PREFIX + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray());
+    }
+
+    public static Blueprint fromShareString(String text, String author) throws IOException {
+        String trimmed = text.strip();
+        int start = trimmed.indexOf(SHARE_PREFIX);
+        if (start < 0) {
+            throw new IOException("Not a Pawprint share string");
+        }
+        String payload = trimmed.substring(start + SHARE_PREFIX.length()).split("\\s")[0];
+        if (payload.length() > MAX_SHARE_CHARS) {
+            throw new IOException("Share string too long");
+        }
+        byte[] bytes;
+        try {
+            bytes = java.util.Base64.getUrlDecoder().decode(payload);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Share string is damaged (incomplete copy?)", e);
+        }
+        CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(bytes), NbtAccounter.create(MAX_NBT_HEAP));
+        BlueprintMeta meta = new BlueprintMeta();
+        meta.id = java.util.UUID.randomUUID().toString();
+        meta.name = tag.getString("Name").isBlank() ? "Shared Blueprint" : tag.getString("Name");
+        meta.description = tag.getString("Description");
+        ListTag tags = tag.getList("Tags", Tag.TAG_STRING);
+        for (int i = 0; i < tags.size(); i++) {
+            meta.tags.add(tags.getString(i));
+        }
+        meta.author = author;
+        meta.created = meta.modified = java.time.Instant.now().toString();
+        meta.dataVersion = tag.getInt("DataVersion");
+        Blueprint blueprint = fromNbt(meta, tag);
+        // Recompute derived fields (mods, block list, versions) like any new blueprint.
+        Blueprint.Builder builder = Blueprint.builder();
+        for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
+            long pos = entry.getLongKey();
+            builder.put(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), blueprint.palette().get(entry.getIntValue()));
+        }
+        for (long pos : blueprint.removals()) {
+            builder.remove(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos));
+        }
+        return builder.build(meta);
     }
 
     private static CompoundTag toNbt(Blueprint blueprint) {

@@ -3,6 +3,7 @@ package com.dumaru.pawprint.client.render;
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.placement.BlockStatus;
 import com.dumaru.pawprint.client.placement.GhostStore;
+import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -60,9 +61,10 @@ final class GhostMesh implements AutoCloseable {
         PoseStack poseStack = new PoseStack();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
+        Integer layer = PlacementManager.layer();
         for (int i = 0; i < section.size(); i++) {
             BlockStatus status = section.status(i);
-            if (status == BlockStatus.CORRECT) {
+            if (status == BlockStatus.CORRECT || (layer != null && section.y(i) != layer)) {
                 continue;
             }
             pos.set(section.x(i), section.y(i), section.z(i));

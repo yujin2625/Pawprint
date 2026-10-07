@@ -148,6 +148,10 @@ public final class SelfTest {
                     blueprint.meta().blockCount, back.meta().blockCount,
                     back.meta().blockCount == blueprint.meta().blockCount ? " OK" : " MISMATCH");
         }
+        String share = com.dumaru.pawprint.format.BlueprintIO.toShareString(blueprint);
+        Blueprint shared = com.dumaru.pawprint.format.BlueprintIO.fromShareString("Look: " + share + " (my house)", "test");
+        Pawprint.LOG.info("SELFTEST share string: {} chars, {} blocks, {} removals, name {}", share.length(),
+                shared.meta().blockCount, shared.meta().removalCount, shared.meta().name);
         CompoundTag legacy = new CompoundTag();
         legacy.putShort("Width", (short) 3);
         legacy.putShort("Height", (short) 1);

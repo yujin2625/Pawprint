@@ -54,6 +54,8 @@ public final class PlacementManager {
     /** Ghosts of all placements, and separately of the draft, so editing the draft never rebuilds big placements. */
     private static final GhostStore placementGhosts = new GhostStore();
     private static final GhostStore draftGhosts = new GhostStore();
+    /** Layer view: only ghosts at this Y are shown; null shows everything. */
+    private static @Nullable Integer layer;
     /** Frees a section's GPU mesh; set by the renderer. */
     private static Consumer<GhostStore.Section> meshRelease = section -> {
     };
@@ -90,6 +92,20 @@ public final class PlacementManager {
 
     public static GhostStore draftGhosts() {
         return draftGhosts;
+    }
+
+    public static @Nullable Integer layer() {
+        return layer;
+    }
+
+    /** Sets or clears the layer view; meshes are rebuilt to show only that layer. */
+    public static void setLayer(@Nullable Integer value) {
+        layer = value;
+        for (GhostStore store : List.of(placementGhosts, draftGhosts)) {
+            for (GhostStore.Section section : store.sections()) {
+                section.meshDirty = true;
+            }
+        }
     }
 
     public static void setMeshRelease(Consumer<GhostStore.Section> release) {

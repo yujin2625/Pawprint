@@ -12,6 +12,7 @@ import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.render.ThumbnailCache;
 import com.dumaru.pawprint.format.Blueprint;
+import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
 import com.dumaru.pawprint.library.BlueprintLibrary;
@@ -363,6 +364,18 @@ public class LibraryScreen extends Screen {
         String text = minecraft.keyboardHandler.getClipboard();
         if (text.length() > AiTools.MAX_CLIPBOARD_CHARS) {
             setStatus(Component.translatable("pawprint.ai.clipboard_too_large", AiTools.MAX_CLIPBOARD_CHARS), ERROR_COLOR);
+            return;
+        }
+        if (text.strip().startsWith(BlueprintIO.SHARE_PREFIX)) {
+            try {
+                Blueprint shared = BlueprintIO.fromShareString(text, minecraft.getUser().getName());
+                String group = groupFilter().startsWith("*") ? "" : groupFilter();
+                Path file = BlueprintLibrary.saveNew(shared, group);
+                refresh(BlueprintLibrary.relativize(file), Component.translatable("pawprint.ai.imported",
+                        shared.meta().name, shared.meta().blockCount), false);
+            } catch (IOException e) {
+                setStatus(Component.translatable("pawprint.library.action_failed", e.getMessage()), ERROR_COLOR);
+            }
             return;
         }
         try {
