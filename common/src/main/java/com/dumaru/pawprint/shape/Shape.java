@@ -21,7 +21,9 @@ public enum Shape {
     HOLLOW_BOX,
     WALLS,
     SPHERE,
-    CYLINDER;
+    CYLINDER,
+    /** Edit tool only: marks a box to save as a blueprint; places nothing. Not part of the text format. */
+    SELECT;
 
     /** Upper bound on cells one shape may touch, to keep edits and undo history bounded. */
     public static final long MAX_CELLS = 262_144;
@@ -39,7 +41,7 @@ public enum Shape {
         return switch (this) {
             case SINGLE -> 1;
             case LINE -> Math.max(Math.abs(b.getX() - a.getX()), Math.max(Math.abs(b.getY() - a.getY()), Math.abs(b.getZ() - a.getZ()))) + 1L;
-            case BOX, HOLLOW_BOX, WALLS -> (long) span(a.getX(), b.getX()) * span(a.getY(), b.getY()) * span(a.getZ(), b.getZ());
+            case BOX, HOLLOW_BOX, WALLS, SELECT -> (long) span(a.getX(), b.getX()) * span(a.getY(), b.getY()) * span(a.getZ(), b.getZ());
             case SPHERE -> {
                 long d = 2L * sphereRadius(a, b) + 1;
                 yield d * d * d;
@@ -58,6 +60,8 @@ public enum Shape {
             case BOX, HOLLOW_BOX, WALLS -> box(a, b, out);
             case SPHERE -> sphere(a, sphereRadius(a, b), out);
             case CYLINDER -> cylinder(a, horizontalRadius(a, b), b.getY(), out);
+            case SELECT -> {
+            }
         }
     }
 

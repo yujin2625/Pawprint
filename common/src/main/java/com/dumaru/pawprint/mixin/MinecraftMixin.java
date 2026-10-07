@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.mixin;
 
+import com.dumaru.pawprint.client.AdjustMode;
 import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.edit.EditMode;
 import net.minecraft.client.Minecraft;
@@ -21,7 +22,11 @@ public abstract class MinecraftMixin {
 
     @Inject(method = "startUseItem", at = @At("HEAD"), cancellable = true)
     private void pawprint$startUseItem(CallbackInfo ci) {
-        if (EditMode.isActive()) {
+        if (AdjustMode.isActive()) {
+            rightClickDelay = 4;
+            AdjustMode.rotate();
+            ci.cancel();
+        } else if (EditMode.isActive()) {
             rightClickDelay = 4; // Same repeat rate as vanilla while the button is held.
             EditMode.onUse((Minecraft) (Object) this);
             ci.cancel();
@@ -32,7 +37,10 @@ public abstract class MinecraftMixin {
 
     @Inject(method = "startAttack", at = @At("HEAD"), cancellable = true)
     private void pawprint$startAttack(CallbackInfoReturnable<Boolean> cir) {
-        if (EditMode.isActive()) {
+        if (AdjustMode.isActive()) {
+            AdjustMode.finish((Minecraft) (Object) this);
+            cir.setReturnValue(false);
+        } else if (EditMode.isActive()) {
             EditMode.onAttack((Minecraft) (Object) this);
             cir.setReturnValue(false);
         } else if (Freecam.isActive()) {
@@ -42,14 +50,17 @@ public abstract class MinecraftMixin {
 
     @Inject(method = "continueAttack", at = @At("HEAD"), cancellable = true)
     private void pawprint$continueAttack(boolean leftClick, CallbackInfo ci) {
-        if (EditMode.isActive() || Freecam.isActive()) {
+        if (AdjustMode.isActive() || EditMode.isActive() || Freecam.isActive()) {
             ci.cancel(); // Holding the attack button must not start breaking real blocks.
         }
     }
 
     @Inject(method = "pickBlock", at = @At("HEAD"), cancellable = true)
     private void pawprint$pickBlock(CallbackInfo ci) {
-        if (EditMode.isActive()) {
+        if (AdjustMode.isActive()) {
+            AdjustMode.mirror();
+            ci.cancel();
+        } else if (EditMode.isActive()) {
             EditMode.onPick((Minecraft) (Object) this);
             ci.cancel();
         }

@@ -49,7 +49,7 @@ public final class Freecam {
         pitch = minecraft.player.getXRot();
         active = true;
         PawprintClient.notify(minecraft, Component.translatable("pawprint.freecam.on",
-                PawprintKeys.TOGGLE_FREECAM.getTranslatedKeyMessage()));
+                PawprintKeys.MENU.getTranslatedKeyMessage()));
     }
 
     public static void tick(Minecraft minecraft) {

@@ -7,6 +7,7 @@ import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.screen.EditMenuScreen;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
 import com.dumaru.pawprint.client.screen.PlacementScreen;
+import com.dumaru.pawprint.client.screen.RadialMenuScreen;
 import com.dumaru.pawprint.client.screen.StudioScreen;
 import com.dumaru.pawprint.client.studio.Studio;
 import com.dumaru.pawprint.library.BlueprintLibrary;
@@ -44,6 +45,12 @@ public final class PawprintClient {
         EditMode.tick(minecraft);
         if (minecraft.player == null) {
             return;
+        }
+        AdjustMode.tick(minecraft);
+        while (PawprintKeys.MENU.consumeClick()) {
+            if (minecraft.screen == null) {
+                minecraft.setScreen(new RadialMenuScreen());
+            }
         }
         while (PawprintKeys.OPEN_LIBRARY.consumeClick()) {
             if (minecraft.screen == null) {
@@ -94,11 +101,32 @@ public final class PawprintClient {
         Integer layer = PlacementManager.layer();
         int next = layer == null ? BlockPos.containing(ViewRay.eye(minecraft)).getY() - 1 : layer + delta;
         PlacementManager.setLayer(next);
-        notify(minecraft, Component.translatable("pawprint.layer.shown", next,
-                PawprintKeys.PLACEMENT_PANEL.getTranslatedKeyMessage()));
+        notify(minecraft, Component.translatable("pawprint.layer.shown", next));
     }
 
-    private static void togglePlacementView(Minecraft minecraft) {
+    /** Mouse wheel in the world. Returns true when Pawprint used it, so the hotbar does not scroll. */
+    public static boolean onScroll(Minecraft minecraft, double amount) {
+        if (AdjustMode.onScroll(minecraft, amount)) {
+            return true;
+        }
+        if (Screen.hasAltDown() && PlacementManager.layer() != null && amount != 0) {
+            stepLayer(minecraft, amount > 0 ? 1 : -1);
+            return true;
+        }
+        return false;
+    }
+
+    /** Turns the layer view on at the viewer's feet, or off. */
+    public static void toggleLayer(Minecraft minecraft) {
+        if (PlacementManager.layer() != null) {
+            PlacementManager.setLayer(null);
+            notify(minecraft, Component.translatable("pawprint.layer.off"));
+        } else {
+            stepLayer(minecraft, 0);
+        }
+    }
+
+    public static void togglePlacementView(Minecraft minecraft) {
         if (EditMode.isActive()) {
             EditMode.toggle(minecraft); // Edit mode already shows everything; switch over to placement mode.
         }
@@ -117,7 +145,7 @@ public final class PawprintClient {
         BoundingBox box = Selection.box();
         if (corner == 2 && box != null) {
             notify(minecraft, Component.translatable("pawprint.selection.complete",
-                    box.getXSpan(), box.getYSpan(), box.getZSpan(), PawprintKeys.OPEN_LIBRARY.getTranslatedKeyMessage()));
+                    box.getXSpan(), box.getYSpan(), box.getZSpan(), PawprintKeys.MENU.getTranslatedKeyMessage()));
         } else {
             notify(minecraft, Component.translatable("pawprint.selection.first", pos.getX(), pos.getY(), pos.getZ()));
         }

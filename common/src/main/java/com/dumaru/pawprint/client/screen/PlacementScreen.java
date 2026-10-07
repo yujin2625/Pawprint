@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.client.screen;
 
+import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.ViewRay;
 import com.dumaru.pawprint.client.placement.MaterialList;
 import com.dumaru.pawprint.client.placement.Placement;
@@ -55,8 +56,11 @@ public class PlacementScreen extends Screen {
                 minecraft.keyboardHandler.setClipboard(MaterialList.toText(materials));
             }
         }).bounds(materialLeft(), bottom, 120, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("pawprint.layer.all"), b -> PlacementManager.setLayer(null))
-                .bounds(materialLeft() + 124, bottom, 90, 20).build()).active = PlacementManager.layer() != null;
+        addRenderableWidget(Button.builder(Component.translatable(PlacementManager.layer() != null ? "pawprint.layer.all" : "pawprint.layer.on"),
+                b -> {
+                    PawprintClient.toggleLayer(minecraft);
+                    b.setMessage(Component.translatable(PlacementManager.layer() != null ? "pawprint.layer.all" : "pawprint.layer.on"));
+                }).bounds(materialLeft() + 124, bottom, 90, 20).build());
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
                 .bounds(width - MARGIN - 80, bottom, 80, 20).build());
         recompute();

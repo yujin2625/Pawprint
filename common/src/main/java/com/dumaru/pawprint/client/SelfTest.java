@@ -188,7 +188,8 @@ public final class SelfTest {
         if (minecraft.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
             minecraft.setScreen(null);
         }
-        if (minecraft.level == null || minecraft.player == null || minecraft.screen != null) {
+        boolean menuOpen = minecraft.screen instanceof com.dumaru.pawprint.client.screen.RadialMenuScreen;
+        if (minecraft.level == null || minecraft.player == null || (minecraft.screen != null && !menuOpen)) {
             return;
         }
         stageTicks++;
@@ -244,6 +245,15 @@ public final class SelfTest {
                                 PlacementManager.placements().isEmpty() ? ""
                                         : ", first at " + PlacementManager.placements().get(0).origin().toShortString());
                         minecraft.player.setXRot(60f);
+                        var placement = PlacementManager.active();
+                        var before = placement.origin();
+                        AdjustMode.toggle(minecraft);
+                        PawprintClient.onScroll(minecraft, 1);
+                        PawprintClient.onScroll(minecraft, 1);
+                        AdjustMode.finish(minecraft);
+                        Pawprint.LOG.info("SELFTEST adjust by wheel: {} -> {} (distance {})", before.toShortString(),
+                                placement.origin().toShortString(), Math.sqrt(before.distSqr(placement.origin())));
+                        minecraft.setScreen(new com.dumaru.pawprint.client.screen.RadialMenuScreen());
                         next();
                     }
                 }
@@ -251,6 +261,7 @@ public final class SelfTest {
                     if (stageTicks > 40) {
                         Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest.png", minecraft.getMainRenderTarget(),
                                 message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
+                        minecraft.setScreen(null);
                         Pawprint.LOG.info("SELFTEST studio round trip finished");
                         next();
                     }

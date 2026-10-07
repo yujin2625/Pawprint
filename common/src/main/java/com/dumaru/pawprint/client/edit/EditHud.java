@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.client.edit;
 
+import com.dumaru.pawprint.client.AdjustMode;
 import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.client.placement.PlacementManager;
@@ -36,8 +37,12 @@ public final class EditHud {
         if (PlacementManager.layer() != null && PlacementManager.isVisible()) {
             lines.add(Component.translatable("pawprint.hud.layer", PlacementManager.layer()).withStyle(ChatFormatting.GREEN));
         }
+        if (AdjustMode.isActive()) {
+            lines.add(Component.translatable("pawprint.hud.adjust").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+            lines.add(Component.translatable("pawprint.hud.adjust_hint").withStyle(ChatFormatting.GRAY));
+        }
         if (Freecam.isActive()) {
-            lines.add(Component.translatable("pawprint.hud.freecam", PawprintKeys.TOGGLE_FREECAM.getTranslatedKeyMessage())
+            lines.add(Component.translatable("pawprint.hud.freecam", PawprintKeys.MENU.getTranslatedKeyMessage())
                     .withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         if (!EditMode.isActive()) {
@@ -57,14 +62,15 @@ public final class EditHud {
                     Math.abs(second.getX() - first.getX()) + 1,
                     Math.abs(second.getY() - first.getY()) + 1,
                     Math.abs(second.getZ() - first.getZ()) + 1).withStyle(ChatFormatting.YELLOW));
+        } else if (EditMode.tool() == Shape.SELECT) {
+            lines.add(Component.translatable("pawprint.hud.hint_select").withStyle(ChatFormatting.GRAY));
         } else if (EditMode.tool() == Shape.SINGLE) {
             lines.add(Component.translatable("pawprint.hud.hint_single").withStyle(ChatFormatting.GRAY));
         } else {
             lines.add(Component.translatable("pawprint.hud.hint_shape").withStyle(ChatFormatting.GRAY));
         }
-        lines.add(Component.translatable("pawprint.hud.hint_keys",
-                PawprintKeys.EDIT_MENU.getTranslatedKeyMessage(),
-                PawprintKeys.TOGGLE_EDIT.getTranslatedKeyMessage()).withStyle(ChatFormatting.GRAY));
+        lines.add(Component.translatable("pawprint.hud.hint_keys", PawprintKeys.MENU.getTranslatedKeyMessage())
+                .withStyle(ChatFormatting.GRAY));
 
         draw(graphics, minecraft, lines);
     }

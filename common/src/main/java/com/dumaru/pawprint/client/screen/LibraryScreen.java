@@ -304,7 +304,7 @@ public class LibraryScreen extends Screen {
             LibraryState.markUsed(entry.relativePath());
             minecraft.setScreen(null);
             PawprintClient.notify(minecraft, Component.translatable("pawprint.placement.placed", entry.meta().name,
-                    PawprintKeys.ROTATE.getTranslatedKeyMessage(), PawprintKeys.MIRROR.getTranslatedKeyMessage()));
+                    PawprintKeys.MENU.getTranslatedKeyMessage()));
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not load blueprint {}", entry.file(), e);
             setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
@@ -515,7 +515,7 @@ public class LibraryScreen extends Screen {
         if (box != null) {
             return Component.translatable("pawprint.screen.library.selection", box.getXSpan(), box.getYSpan(), box.getZSpan());
         }
-        return Component.translatable("pawprint.screen.library.no_selection", PawprintKeys.MARK_CORNER.getTranslatedKeyMessage());
+        return Component.translatable("pawprint.screen.library.no_selection");
     }
 
     @Override

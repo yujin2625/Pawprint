@@ -9,7 +9,8 @@
     "CameraMixin",
     "EntityMixin",
     "KeyboardInputMixin",
-    "MinecraftMixin"
+    "MinecraftMixin",
+    "MouseHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

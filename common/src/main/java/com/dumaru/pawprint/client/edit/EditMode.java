@@ -3,6 +3,7 @@ package com.dumaru.pawprint.client.edit;
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.PawprintKeys;
+import com.dumaru.pawprint.client.Selection;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.shape.Shape;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -162,6 +163,12 @@ public final class EditMode {
         if (hit == null) {
             return;
         }
+        if (tool == Shape.SELECT) {
+            if (!repeat) {
+                selectCorner(minecraft, hit);
+            }
+            return;
+        }
         if (tool == Shape.SINGLE) {
             BlockState state = brushState(minecraft, hit);
             if (state != null) {
@@ -192,6 +199,10 @@ public final class EditMode {
         if (hit == null) {
             return;
         }
+        if (tool == Shape.SELECT) {
+            selectCorner(minecraft, hit);
+            return;
+        }
         if (tool == Shape.SINGLE) {
             if (hit.hovered() == null) {
                 return;
@@ -215,6 +226,22 @@ public final class EditMode {
             cancelShape();
         } else {
             applyShape(minecraft, firstPoint, point, pos -> Draft.set(pos, null));
+        }
+    }
+
+    /** Select Area tool: either button marks a corner of the box to save; the shape preview shows the box. */
+    private static void selectCorner(Minecraft minecraft, EditTarget hit) {
+        BlockPos point = hit.hovered() != null ? hit.hovered() : hit.placePos();
+        if (Selection.mark(point) == 1) {
+            firstPoint = point;
+            pendingErase = false;
+            pendingState = null;
+            PawprintClient.notify(minecraft, Component.translatable("pawprint.selection.first", point.getX(), point.getY(), point.getZ()));
+        } else {
+            cancelShape();
+            var box = Selection.box();
+            PawprintClient.notify(minecraft, Component.translatable("pawprint.selection.complete",
+                    box.getXSpan(), box.getYSpan(), box.getZSpan(), PawprintKeys.MENU.getTranslatedKeyMessage()));
         }
     }
 
@@ -264,7 +291,7 @@ public final class EditMode {
             block = blockItem.getBlock();
         } else {
             PawprintClient.notify(minecraft, Component.translatable("pawprint.edit.no_brush",
-                    PawprintKeys.EDIT_MENU.getTranslatedKeyMessage()));
+                    PawprintKeys.MENU.getTranslatedKeyMessage()));
             return null;
         }
         try {
