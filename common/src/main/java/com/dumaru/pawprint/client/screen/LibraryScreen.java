@@ -8,6 +8,7 @@ import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.client.Selection;
 import com.dumaru.pawprint.client.ViewRay;
 import com.dumaru.pawprint.client.edit.EditMode;
+import com.dumaru.pawprint.client.placement.MaterialList;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.render.ThumbnailCache;
@@ -19,6 +20,7 @@ import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.dumaru.pawprint.library.LibraryState;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -73,6 +75,7 @@ public class LibraryScreen extends Screen {
     private Button placeAtOrigin;
     private Button favorite;
     private Button manage;
+    private Button materials;
     private Button removePlacement;
     private Button captureSelection;
     private @Nullable Component status;
@@ -124,13 +127,17 @@ public class LibraryScreen extends Screen {
 
         // Detail panel buttons.
         int buttonY = TOP + 4 + DETAIL_THUMB + 4 + 6 * 10 + 4;
-        int half = (DETAIL_WIDTH - GAP) / 2;
+        int starWidth = 22;
+        int third = (DETAIL_WIDTH - starWidth - GAP * 2) / 2;
         placeHere = addRenderableWidget(button("pawprint.screen.library.place_here", this::placeHere, detailX, buttonY, DETAIL_WIDTH));
         placeAtOrigin = addRenderableWidget(button("pawprint.screen.library.place_at_origin", this::placeAtOrigin,
                 detailX, buttonY + 22, DETAIL_WIDTH));
         favorite = addRenderableWidget(Button.builder(Component.empty(), b -> toggleFavorite())
-                .bounds(detailX, buttonY + 44, half, 20).build());
-        manage = addRenderableWidget(button("pawprint.library.manage", this::openManage, detailX + half + GAP, buttonY + 44, half));
+                .bounds(detailX, buttonY + 44, starWidth, 20).build());
+        materials = addRenderableWidget(button("pawprint.library.materials", this::openMaterials,
+                detailX + starWidth + GAP, buttonY + 44, third));
+        manage = addRenderableWidget(button("pawprint.library.manage", this::openManage,
+                detailX + starWidth + GAP * 2 + third, buttonY + 44, third));
 
         // Bottom bar: global actions in two rows of four.
         int buttonWidth = Math.min(110, (width - MARGIN * 2 - GAP * 3) / 4);
@@ -209,8 +216,9 @@ public class LibraryScreen extends Screen {
         placeHere.active = selected != null;
         placeAtOrigin.active = selected != null && isFromHere(selected.meta().origin);
         favorite.active = selected != null;
-        favorite.setMessage(Component.translatable(selected != null && LibraryState.isFavorite(selected.relativePath())
-                ? "pawprint.library.unfavorite" : "pawprint.library.favorite"));
+        favorite.setMessage(Component.literal(selected != null && LibraryState.isFavorite(selected.relativePath()) ? "★" : "☆"));
+        favorite.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("pawprint.library.favorite_tooltip")));
+        materials.active = selected != null;
         manage.active = selected != null;
         removePlacement.active = PlacementManager.active() != null;
         captureSelection.active = Selection.box() != null;
@@ -317,6 +325,26 @@ public class LibraryScreen extends Screen {
             LibraryState.toggleFavorite(selected.relativePath());
             applyFilter();
         }
+    }
+
+    private void openMaterials() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected == null) {
+            return;
+        }
+        try {
+            Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
+            minecraft.setScreen(new MaterialsScreen(this, selected.meta().name,
+                    MaterialList.forBlueprint(blueprint, minecraft.player)));
+        } catch (IOException e) {
+            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
+    /** The materials screen for any blueprint; used by the self-test. */
+    public static Screen materialsFor(Blueprint blueprint) {
+        Minecraft minecraft = Minecraft.getInstance();
+        return new MaterialsScreen(null, blueprint.meta().name, MaterialList.forBlueprint(blueprint, minecraft.player));
     }
 
     private void openManage() {

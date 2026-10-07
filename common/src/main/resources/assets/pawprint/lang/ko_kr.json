@@ -204,5 +204,19 @@
   "pawprint.hud.adjust_hint": "휠: 앞뒤 · Shift+휠: 위아래 · Ctrl+휠: 좌우 · 우클릭: 회전 · 휠 클릭: 반전 · 좌클릭/Esc: 끝",
   "pawprint.hud.hint_select": "두 모서리를 클릭해 영역을 고른 뒤 라이브러리에서 저장하세요",
   "pawprint.layer.off": "모든 층을 표시합니다.",
-  "pawprint.layer.on": "층 보기"
+  "pawprint.layer.on": "층 보기",
+  "pawprint.library.materials": "재료",
+  "pawprint.library.favorite_tooltip": "즐겨찾기",
+  "pawprint.materials.title": "\"%s\"에 필요한 재료",
+  "pawprint.materials.summary": "%s종류, 모두 %s개",
+  "pawprint.materials.none": "아이템이 필요한 블럭이 없습니다.",
+  "pawprint.materials.text.header": "\"%s\" 필요 재료: %s종류, %s개",
+  "pawprint.materials.text.header_placed": "\"%s\" 남은 재료: %s종류, %s개",
+  "pawprint.materials.text.line": "%s: %s개 — %s",
+  "pawprint.materials.text.count": "%s",
+  "pawprint.materials.text.count_stacks": "%s (%s세트 + %s)",
+  "pawprint.materials.text.enough": "보유 %s, 충분",
+  "pawprint.materials.text.missing": "보유 %s, 부족 %s",
+  "pawprint.materials.text.done": "모두 지었습니다.",
+  "pawprint.materials.copied": "클립보드에 복사했습니다."
 }

@@ -188,8 +188,8 @@ public final class SelfTest {
         if (minecraft.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
             minecraft.setScreen(null);
         }
-        boolean menuOpen = minecraft.screen instanceof com.dumaru.pawprint.client.screen.RadialMenuScreen;
-        if (minecraft.level == null || minecraft.player == null || (minecraft.screen != null && !menuOpen)) {
+        boolean ownScreen = stage >= 4 && minecraft.screen != null;
+        if (minecraft.level == null || minecraft.player == null || (minecraft.screen != null && !ownScreen)) {
             return;
         }
         stageTicks++;
@@ -253,13 +253,27 @@ public final class SelfTest {
                         AdjustMode.finish(minecraft);
                         Pawprint.LOG.info("SELFTEST adjust by wheel: {} -> {} (distance {})", before.toShortString(),
                                 placement.origin().toShortString(), Math.sqrt(before.distSqr(placement.origin())));
-                        minecraft.setScreen(new com.dumaru.pawprint.client.screen.RadialMenuScreen());
+                        IntegratedServer server = minecraft.getSingleplayerServer();
+                        server.execute(() -> server.getPlayerList().getPlayers().forEach(player -> {
+                            player.getInventory().add(new net.minecraft.world.item.ItemStack(Blocks.STONE_BRICKS, 3));
+                            player.getInventory().add(new net.minecraft.world.item.ItemStack(Blocks.OAK_PLANKS, 10));
+                        }));
                         next();
                     }
                 }
                 case 4 -> {
-                    if (stageTicks > 40) {
-                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest.png", minecraft.getMainRenderTarget(),
+                    if (stageTicks == 20) {
+                        minecraft.setScreen(new com.dumaru.pawprint.client.screen.PlacementScreen());
+                    } else if (stageTicks == 40) {
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_panel.png", minecraft.getMainRenderTarget(),
+                                message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
+                        Blueprint sample = TextBlueprintReader.read(SAMPLE, "test").blueprint();
+                        var materials = com.dumaru.pawprint.client.placement.MaterialList.forBlueprint(sample, minecraft.player);
+                        Pawprint.LOG.info("SELFTEST blueprint materials text:\n{}",
+                                com.dumaru.pawprint.client.placement.MaterialList.toText(sample.meta().name, materials, false));
+                        minecraft.setScreen(com.dumaru.pawprint.client.screen.LibraryScreen.materialsFor(sample));
+                    } else if (stageTicks == 60) {
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_materials.png", minecraft.getMainRenderTarget(),
                                 message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
                         minecraft.setScreen(null);
                         Pawprint.LOG.info("SELFTEST studio round trip finished");

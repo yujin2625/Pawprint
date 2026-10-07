@@ -204,5 +204,19 @@
   "pawprint.hud.adjust_hint": "Wheel: forward/back · Shift+wheel: up/down · Ctrl+wheel: sideways · Right: rotate · Middle: mirror · Left/Esc: done",
   "pawprint.hud.hint_select": "Click two corners to select an area, then save it from the library",
   "pawprint.layer.off": "Showing all layers.",
-  "pawprint.layer.on": "Layer View"
+  "pawprint.layer.on": "Layer View",
+  "pawprint.library.materials": "Materials",
+  "pawprint.library.favorite_tooltip": "Favorite",
+  "pawprint.materials.title": "Materials for \"%s\"",
+  "pawprint.materials.summary": "%s kinds, %s items in total",
+  "pawprint.materials.none": "No blocks that need items.",
+  "pawprint.materials.text.header": "Materials for \"%s\": %s kinds, %s items",
+  "pawprint.materials.text.header_placed": "Still needed for \"%s\": %s kinds, %s items",
+  "pawprint.materials.text.line": "%s: %s — %s",
+  "pawprint.materials.text.count": "%s",
+  "pawprint.materials.text.count_stacks": "%s (%s stacks + %s)",
+  "pawprint.materials.text.enough": "have %s, enough",
+  "pawprint.materials.text.missing": "have %s, missing %s",
+  "pawprint.materials.text.done": "Everything is built.",
+  "pawprint.materials.copied": "Copied to the clipboard."
 }

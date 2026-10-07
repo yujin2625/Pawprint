@@ -3,6 +3,7 @@ package com.dumaru.pawprint.client.placement;
 import com.dumaru.pawprint.format.Blueprint;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -85,6 +86,41 @@ public final class MaterialList {
         return new Result(lines, blocks, correct, withoutItem);
     }
 
+    /** Items for a whole blueprint that is not placed anywhere: everything counts as still to place. */
+    public static Result forBlueprint(Blueprint blueprint, @Nullable Player player) {
+        int[] perPaletteEntry = new int[blueprint.palette().size()];
+        for (int index : blueprint.blocks().values()) {
+            perPaletteEntry[index]++;
+        }
+        Map<Item, int[]> counts = new LinkedHashMap<>();
+        int blocks = 0;
+        int withoutItem = 0;
+        for (int i = 0; i < perPaletteEntry.length; i++) {
+            BlockState state = blueprint.state(i);
+            if (state == null || perPaletteEntry[i] == 0) {
+                continue;
+            }
+            blocks += perPaletteEntry[i];
+            int amount = itemsFor(state) * perPaletteEntry[i];
+            if (amount == 0) {
+                continue;
+            }
+            Item item = state.getBlock().asItem();
+            if (item == Items.AIR) {
+                withoutItem += perPaletteEntry[i];
+                continue;
+            }
+            counts.computeIfAbsent(item, key -> new int[1])[0] += amount;
+        }
+        List<Line> lines = new ArrayList<>();
+        for (Map.Entry<Item, int[]> entry : counts.entrySet()) {
+            int have = player == null ? 0 : player.getInventory().countItem(entry.getKey());
+            lines.add(new Line(entry.getKey(), entry.getValue()[0], entry.getValue()[0], have));
+        }
+        lines.sort(Comparator.comparingInt(Line::total).reversed());
+        return new Result(lines, blocks, 0, withoutItem);
+    }
+
     /** How many items one block state takes: 0 for the upper half of doors and the head of beds, 2 for double slabs. */
     static int itemsFor(BlockState state) {
         if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
@@ -100,14 +136,48 @@ public final class MaterialList {
         return 1;
     }
 
-    /** Tab-separated text for spreadsheets or chat: item ID, name, remaining, have, total. */
-    public static String toText(Result result) {
-        StringBuilder text = new StringBuilder("item\tname\tremaining\thave\ttotal\n");
-        for (Line line : result.lines()) {
-            text.append(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(line.item())).append('\t')
-                    .append(line.item().getDescription().getString()).append('\t')
-                    .append(line.remaining()).append('\t').append(line.have()).append('\t').append(line.total()).append('\n');
+    /**
+     * A shopping list in the game's language, one block per line, for reading in a text editor:
+     * how many are needed (with full stacks spelled out), how many the player has and how many are missing.
+     *
+     * @param placed true for a placement in the world, where only what is still missing counts
+     */
+    public static String toText(String name, Result result, boolean placed) {
+        List<Line> needed = result.lines().stream().filter(line -> (placed ? line.remaining() : line.total()) > 0).toList();
+        int totalItems = needed.stream().mapToInt(line -> placed ? line.remaining() : line.total()).sum();
+        StringBuilder text = new StringBuilder(Component.translatable(
+                placed ? "pawprint.materials.text.header_placed" : "pawprint.materials.text.header",
+                name, needed.size(), totalItems).getString()).append('\n');
+        if (placed) {
+            text.append(Component.translatable("pawprint.placements.progress", result.percent(), result.correct(),
+                    result.blocks()).getString()).append('\n');
+        }
+        text.append('\n');
+        for (Line line : needed) {
+            int count = placed ? line.remaining() : line.total();
+            int missing = Math.max(0, count - line.have());
+            Component status = missing == 0
+                    ? Component.translatable("pawprint.materials.text.enough", line.have())
+                    : Component.translatable("pawprint.materials.text.missing", line.have(), missing);
+            text.append(Component.translatable("pawprint.materials.text.line", line.item().getDescription(),
+                    amount(count, line.item().getDefaultMaxStackSize()), status).getString()).append('\n');
+        }
+        if (needed.isEmpty()) {
+            text.append(Component.translatable(placed ? "pawprint.materials.text.done" : "pawprint.materials.none").getString())
+                    .append('\n');
+        }
+        if (result.withoutItem() > 0) {
+            text.append('\n').append(Component.translatable("pawprint.placements.without_item", result.withoutItem()).getString())
+                    .append('\n');
         }
         return text.toString();
+    }
+
+    /** "150" becomes "150 (2 stacks + 22)" for items that stack. */
+    private static String amount(int count, int stackSize) {
+        if (stackSize <= 1 || count < stackSize) {
+            return Component.translatable("pawprint.materials.text.count", count).getString();
+        }
+        return Component.translatable("pawprint.materials.text.count_stacks", count, count / stackSize, count % stackSize).getString();
     }
 }

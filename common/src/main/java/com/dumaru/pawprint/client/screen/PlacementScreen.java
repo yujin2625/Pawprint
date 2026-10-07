@@ -11,7 +11,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -24,10 +23,10 @@ public class PlacementScreen extends Screen {
     private static final int MARGIN = 8;
     private static final int LIST_WIDTH = 170;
     private static final int ROW = 22;
-    private static final int MATERIAL_ROW = 18;
 
     private @Nullable MaterialList.Result materials;
     private int materialScroll;
+    private long copiedAt;
     private Button remove;
     private Button moveHere;
     private Button copy;
@@ -39,10 +38,15 @@ public class PlacementScreen extends Screen {
     @Override
     protected void init() {
         int bottom = height - 28;
+        // Five buttons spread evenly over the width, so nothing overlaps on small screens.
+        int gap = 4;
+        int buttonWidth = (width - MARGIN * 2 - gap * 4) / 5;
+        int x = MARGIN;
         remove = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.remove_placement"), b -> {
             PlacementManager.removeActive();
             recompute();
-        }).bounds(MARGIN, bottom, 82, 20).build());
+        }).bounds(x, bottom, buttonWidth, 20).build());
+        x += buttonWidth + gap;
         moveHere = addRenderableWidget(Button.builder(Component.translatable("pawprint.placements.move_here"), b -> {
             Placement active = PlacementManager.active();
             if (active != null) {
@@ -50,19 +54,25 @@ public class PlacementScreen extends Screen {
                 PlacementManager.changed();
                 recompute();
             }
-        }).bounds(MARGIN + 86, bottom, 84, 20).build());
+        }).bounds(x, bottom, buttonWidth, 20).build());
+        x += buttonWidth + gap;
         copy = addRenderableWidget(Button.builder(Component.translatable("pawprint.placements.copy_materials"), b -> {
             if (materials != null) {
-                minecraft.keyboardHandler.setClipboard(MaterialList.toText(materials));
+                Placement active = PlacementManager.active();
+                minecraft.keyboardHandler.setClipboard(MaterialList.toText(
+                        active == null ? "" : active.blueprint().meta().name, materials, true));
+                copiedAt = net.minecraft.Util.getMillis();
             }
-        }).bounds(materialLeft(), bottom, 120, 20).build());
+        }).bounds(x, bottom, buttonWidth, 20).build());
+        x += buttonWidth + gap;
         addRenderableWidget(Button.builder(Component.translatable(PlacementManager.layer() != null ? "pawprint.layer.all" : "pawprint.layer.on"),
                 b -> {
                     PawprintClient.toggleLayer(minecraft);
                     b.setMessage(Component.translatable(PlacementManager.layer() != null ? "pawprint.layer.all" : "pawprint.layer.on"));
-                }).bounds(materialLeft() + 124, bottom, 90, 20).build());
+                }).bounds(x, bottom, buttonWidth, 20).build());
+        x += buttonWidth + gap;
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
-                .bounds(width - MARGIN - 80, bottom, 80, 20).build());
+                .bounds(x, bottom, buttonWidth, 20).build());
         recompute();
     }
 
@@ -82,7 +92,7 @@ public class PlacementScreen extends Screen {
     }
 
     private int listTop() {
-        return 30;
+        return 40;
     }
 
     @Override
@@ -102,7 +112,7 @@ public class PlacementScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (materials != null && mouseX >= materialLeft()) {
-            int visible = (height - 40 - listTop() - 24) / MATERIAL_ROW;
+            int visible = MaterialTable.visibleRows(listTop(), height - 46);
             materialScroll = Mth.clamp(materialScroll - (int) Math.signum(scrollY), 0,
                     Math.max(0, materials.lines().size() - visible));
             return true;
@@ -113,9 +123,12 @@ public class PlacementScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
         renderPlacements(graphics, mouseX, mouseY);
         renderMaterials(graphics);
+        if (net.minecraft.Util.getMillis() - copiedAt < 2500) {
+            graphics.drawCenteredString(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0x55FF55);
+        }
     }
 
     private void renderPlacements(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -154,31 +167,7 @@ public class PlacementScreen extends Screen {
         }
         graphics.drawString(font, Component.translatable("pawprint.placements.progress", materials.percent(),
                 materials.correct(), materials.blocks()), left, top - 11, 0xFFFF80);
-        int columnRemaining = right - 120;
-        int columnHave = right - 80;
-        int columnTotal = right - 40;
-        graphics.drawString(font, Component.translatable("pawprint.placements.col.block"), left + 20, top, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.placements.col.remaining"), columnRemaining, top, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.placements.col.have"), columnHave, top, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.placements.col.total"), columnTotal, top, 0xA0A0A0);
-
-        int y = top + 12;
-        List<MaterialList.Line> lines = materials.lines();
-        for (int i = materialScroll; i < lines.size() && y + MATERIAL_ROW < height - 34; i++) {
-            MaterialList.Line line = lines.get(i);
-            graphics.renderItem(new ItemStack(line.item()), left, y);
-            String name = font.plainSubstrByWidth(line.item().getDescription().getString(), columnRemaining - left - 26);
-            graphics.drawString(font, name, left + 20, y + 4, 0xFFFFFF);
-            int remainingColor = line.remaining() == 0 ? 0x55FF55 : line.have() >= line.remaining() ? 0xFFFF55 : 0xFF5555;
-            graphics.drawString(font, String.valueOf(line.remaining()), columnRemaining, y + 4, remainingColor);
-            graphics.drawString(font, String.valueOf(line.have()), columnHave, y + 4, 0xC0C0C0);
-            graphics.drawString(font, String.valueOf(line.total()), columnTotal, y + 4, 0xC0C0C0);
-            y += MATERIAL_ROW;
-        }
-        if (materials.withoutItem() > 0) {
-            graphics.drawString(font, Component.translatable("pawprint.placements.without_item", materials.withoutItem()),
-                    left, height - 44, 0x909090);
-        }
+        MaterialTable.render(graphics, font, materials, left, top, right, height - 46, materialScroll, true);
     }
 
     @Override
