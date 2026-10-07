@@ -4,6 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.ClientContext;
 import com.dumaru.pawprint.client.edit.Draft;
 import com.dumaru.pawprint.client.edit.EditMode;
+import com.dumaru.pawprint.client.studio.Studio;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.google.gson.Gson;
@@ -73,6 +74,7 @@ public final class PlacementManager {
             Draft.switchContext(newServer, newDimension);
             rebuildPlacements();
             rebuildDraft();
+            Studio.onWorldChanged(minecraft, newServer, newDimension);
         }
         if (minecraft.level != null && minecraft.player != null) {
             Vec3 center = minecraft.gameRenderer.getMainCamera().getPosition();

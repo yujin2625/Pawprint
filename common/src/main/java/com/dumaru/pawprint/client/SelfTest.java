@@ -6,24 +6,37 @@ import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
 import com.dumaru.pawprint.format.text.TextBlueprintWriter;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
-import com.dumaru.pawprint.client.render.GhostRenderer;
+import com.dumaru.pawprint.client.studio.Studio;
+import com.dumaru.pawprint.client.studio.StudioSession;
 import com.dumaru.pawprint.client.studio.StudioWorld;
+import com.dumaru.pawprint.client.studio.TerrainSnapshot;
+import com.dumaru.pawprint.format.BlueprintMeta;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.LevelSettings;
+import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.Mirror;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.nio.file.Path;
 
 /**
  * Development check, enabled with {@code -Dpawprint.selftest=true}: once the main menu is up, reads the sample
- * text blueprint, writes it back as text, reads that again, and renders a thumbnail to {@code pawprint/selftest.png}.
- * Results go to the log. Does nothing in normal play.
+ * text blueprint, writes it back as text, reads that again, renders a thumbnail to {@code pawprint/selftest.png},
+ * audits mixins, then runs a studio round trip in a fresh superflat world. Results go to the log.
+ * Does nothing in normal play.
  */
 public final class SelfTest {
     private static final boolean ENABLED = Boolean.getBoolean("pawprint.selftest");
@@ -83,6 +96,7 @@ public final class SelfTest {
             return;
         }
         done = true;
+        minecraft.options.pauseOnLostFocus = false; // The test window usually is not focused.
         try {
             Blueprint blueprint = TextBlueprintReader.read("Here you go:\n```json\n" + SAMPLE + "```", "test").blueprint();
             Pawprint.LOG.info("SELFTEST read: size {}x{}x{}, {} blocks, {} removals, blocks {}",
@@ -111,48 +125,111 @@ public final class SelfTest {
             // Loads every mixin target now, so injection errors show up without joining a world.
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
             Pawprint.LOG.info("SELFTEST mixin audit finished");
-            StudioWorld.open(minecraft);
+            openOriginWorld(minecraft);
         } catch (Exception e) {
             Pawprint.LOG.error("SELFTEST failed", e);
         }
     }
 
-    private static int worldTicks;
+    private static final String ORIGIN_FOLDER = "pawprint_selftest_origin";
+    private static int stage;
+    private static int stageTicks;
+
+    /** A plain superflat world to start the studio round trip from. */
+    private static void openOriginWorld(Minecraft minecraft) {
+        LevelSettings settings = new LevelSettings("Pawprint Selftest", GameType.CREATIVE, false, Difficulty.PEACEFUL,
+                true, new GameRules(), WorldDataConfiguration.DEFAULT);
+        minecraft.createWorldOpenFlows().createFreshLevel(ORIGIN_FOLDER, settings, new WorldOptions(0L, false, false),
+                registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(WorldPresets.FLAT)
+                        .value().createWorldDimensions(), new TitleScreen());
+    }
 
     /**
-     * In the studio world: places a large blueprint in front of the player, then reports frame rate and
-     * renderer timings and saves a screenshot, so the cached section renderer can be checked without a person.
+     * Studio round trip: snapshot the origin world, open the studio, build a pillar and dig one block,
+     * save the difference, return, and check that the blueprint was placed back.
      */
     private static void worldTick(Minecraft minecraft) {
+        if (minecraft.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
+            minecraft.setScreen(null);
+        }
         if (minecraft.level == null || minecraft.player == null || minecraft.screen != null) {
             return;
         }
-        worldTicks++;
-        if (worldTicks == 100) {
-            Blueprint.Builder builder = Blueprint.builder();
-            BlockState stone = Blocks.STONE_BRICKS.defaultBlockState();
-            BlockState glass = Blocks.GLASS.defaultBlockState();
-            BlockState stairs = Blocks.OAK_STAIRS.defaultBlockState();
-            for (int y = 0; y < 48; y++) {
-                for (int z = 0; z < 64; z++) {
-                    for (int x = 0; x < 64; x++) {
-                        builder.put(x, y, z, y % 8 == 7 ? glass : (x + z) % 16 == 0 ? stairs : stone);
+        stageTicks++;
+        String context = ClientContext.server();
+        try {
+            switch (stage) {
+                case 0 -> {
+                    if (("local/" + ORIGIN_FOLDER).equals(context) && stageTicks > 60) {
+                        BlueprintMeta.Origin origin = new BlueprintMeta.Origin(context, ClientContext.dimension(), 0, 0, 0);
+                        TerrainSnapshot.Result snapshot = TerrainSnapshot.surface(minecraft.level,
+                                minecraft.player.blockPosition(), 2, 4, origin);
+                        Pawprint.LOG.info("SELFTEST snapshot: {} blocks in {}", snapshot.blueprint().meta().blockCount,
+                                snapshot.bounds());
+                        next();
+                        Studio.open(minecraft, snapshot);
                     }
                 }
+                case 1 -> {
+                    StudioSession session = Studio.session();
+                    if (StudioWorld.isCurrent(minecraft) && session != null && session.pasted && stageTicks > 20) {
+                        BoundingBox box = session.box();
+                        int x = (box.minX() + box.maxX()) / 2;
+                        int z = (box.minZ() + box.maxZ()) / 2;
+                        IntegratedServer server = minecraft.getSingleplayerServer();
+                        server.execute(() -> {
+                            ServerLevel level = server.overworld();
+                            int top = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                            for (int i = 0; i < 5; i++) {
+                                level.setBlock(new BlockPos(x, top + i, z), Blocks.STONE_BRICKS.defaultBlockState(), 3);
+                            }
+                            level.setBlock(new BlockPos(x + 3, top - 1, z), Blocks.AIR.defaultBlockState(), 3);
+                            Pawprint.LOG.info("SELFTEST studio: terrain top at {}, built 5 blocks and dug 1", top);
+                        });
+                        next();
+                    }
+                }
+                case 2 -> {
+                    if (stageTicks > 20) {
+                        Blueprint changes = Studio.diff(minecraft, "Selftest Pillar");
+                        Pawprint.LOG.info("SELFTEST diff: {}", changes == null ? "none"
+                                : changes.meta().blockCount + " blocks, " + changes.meta().removalCount + " removals, origin "
+                                + java.util.Arrays.toString(changes.meta().origin.pos));
+                        if (changes != null) {
+                            Studio.saveForReturn(changes);
+                        }
+                        next();
+                        Studio.returnToOrigin(minecraft);
+                    }
+                }
+                case 3 -> {
+                    if (("local/" + ORIGIN_FOLDER).equals(context) && stageTicks > 60) {
+                        Pawprint.LOG.info("SELFTEST back in origin: {} placement(s){}", PlacementManager.placements().size(),
+                                PlacementManager.placements().isEmpty() ? ""
+                                        : ", first at " + PlacementManager.placements().get(0).origin().toShortString());
+                        minecraft.player.setXRot(60f);
+                        next();
+                    }
+                }
+                case 4 -> {
+                    if (stageTicks > 40) {
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest.png", minecraft.getMainRenderTarget(),
+                                message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
+                        Pawprint.LOG.info("SELFTEST studio round trip finished");
+                        next();
+                    }
+                }
+                default -> {
+                }
             }
-            Blueprint big = builder.build("Selftest Fortress", "test", null);
-            BlockPos origin = minecraft.player.blockPosition().offset(-32, -20, 12);
-            long start = System.nanoTime();
-            PlacementManager.add(new Placement("selftest.pawprint", big, origin, Rotation.NONE, Mirror.NONE));
-            PlacementManager.setViewing(true);
-            Pawprint.LOG.info("SELFTEST placed {} blocks in {} ms", big.meta().blockCount, (System.nanoTime() - start) / 1_000_000);
-            minecraft.player.setYRot(0f); // Face south, toward the blueprint.
-            minecraft.player.setXRot(20f);
-            GhostRenderer.resetStats();
-        } else if (worldTicks == 300) {
-            Pawprint.LOG.info("SELFTEST fps {}, {}", minecraft.getFps(), GhostRenderer.stats());
-            Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest.png", minecraft.getMainRenderTarget(),
-                    message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
+        } catch (Exception e) {
+            Pawprint.LOG.error("SELFTEST failed in stage {}", stage, e);
+            stage = 99;
         }
+    }
+
+    private static void next() {
+        stage++;
+        stageTicks = 0;
     }
 }

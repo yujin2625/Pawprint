@@ -7,6 +7,8 @@ import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.screen.EditMenuScreen;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
 import com.dumaru.pawprint.client.screen.PlacementScreen;
+import com.dumaru.pawprint.client.screen.StudioScreen;
+import com.dumaru.pawprint.client.studio.Studio;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -38,6 +40,7 @@ public final class PawprintClient {
         SelfTest.tick(minecraft);
         Freecam.tick(minecraft);
         PlacementManager.tick(minecraft);
+        Studio.tick(minecraft);
         EditMode.tick(minecraft);
         if (minecraft.player == null) {
             return;
@@ -52,6 +55,11 @@ public final class PawprintClient {
         }
         while (PawprintKeys.TOGGLE_FREECAM.consumeClick()) {
             Freecam.toggle(minecraft);
+        }
+        while (PawprintKeys.STUDIO.consumeClick()) {
+            if (minecraft.screen == null) {
+                minecraft.setScreen(new StudioScreen());
+            }
         }
         while (PawprintKeys.PLACEMENT_PANEL.consumeClick()) {
             if (minecraft.screen == null) {
