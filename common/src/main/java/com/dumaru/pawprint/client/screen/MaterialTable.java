@@ -19,6 +19,15 @@ final class MaterialTable {
     private MaterialTable() {
     }
 
+    /** Index into the result's lines of the row under the mouse, or -1. */
+    static int rowAt(double mouseX, double mouseY, int left, int top, int right, int bottom, int scroll, int size) {
+        if (mouseX < left || mouseX >= right || mouseY < top + 12 || mouseY >= bottom) {
+            return -1;
+        }
+        int index = scroll + (int) ((mouseY - top - 12) / ROW);
+        return index < size ? index : -1;
+    }
+
     static int visibleRows(int top, int bottom) {
         return Math.max(1, (bottom - top - 12) / ROW);
     }
@@ -27,7 +36,7 @@ final class MaterialTable {
      * @param showRemaining false for a blueprint that is not placed, where "left" would just repeat the total
      */
     static void render(GuiGraphics graphics, Font font, MaterialList.Result result, int left, int top, int right,
-                       int bottom, int scroll, boolean showRemaining) {
+                       int bottom, int scroll, boolean showRemaining, int selected) {
         int columnTotal = right - 40;
         int columnHave = right - 80;
         int columnRemaining = right - 120;
@@ -46,6 +55,9 @@ final class MaterialTable {
         int y = top + 12;
         for (int i = scroll; i < lines.size() && y + ROW <= bottom; i++) {
             MaterialList.Line line = lines.get(i);
+            if (i == selected) {
+                graphics.fill(left - 2, y, right, y + ROW, 0x804080FF);
+            }
             graphics.renderItem(new ItemStack(line.item()), left, y + 2);
             String name = font.plainSubstrByWidth(line.item().getDescription().getString(), nameRight - left - 26);
             graphics.drawString(font, name, left + 20, y + 1, 0xFFFFFF);

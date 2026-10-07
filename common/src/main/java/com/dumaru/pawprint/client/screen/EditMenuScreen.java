@@ -2,7 +2,6 @@ package com.dumaru.pawprint.client.screen;
 
 import com.dumaru.pawprint.client.edit.Draft;
 import com.dumaru.pawprint.client.edit.EditMode;
-import com.dumaru.pawprint.client.palette.BlockSearchIndex;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.shape.Shape;
@@ -14,9 +13,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
-import net.minecraft.world.level.block.state.BlockState;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,15 +22,13 @@ import java.util.List;
  */
 public class EditMenuScreen extends Screen {
     private static final int SIDE_WIDTH = 110;
-    private static final int CELL = 20;
     private static final int MARGIN = 10;
 
     private static String lastQuery = "";
 
     private final List<Button> toolButtons = new ArrayList<>();
     private EditBox search;
-    private List<BlockSearchIndex.Entry> results = List.of();
-    private int scrollRow;
+    private BlockGrid grid;
     private Button undo;
     private Button redo;
     private Button editPlacement;
@@ -67,7 +61,14 @@ public class EditMenuScreen extends Screen {
             updateButtons();
         }).bounds(MARGIN + SIDE_WIDTH / 2 + 1, y, SIDE_WIDTH / 2 - 1, 20).build());
 
-        search = addRenderableWidget(new EditBox(font, gridLeft(), 30, gridWidth(), 18,
+        int gridLeft = MARGIN * 2 + SIDE_WIDTH;
+        int gridWidth = width - gridLeft - MARGIN;
+        grid = addRenderableWidget(new BlockGrid(font, gridLeft, 54, gridWidth, height - 40 - 54,
+                block -> EditMode.brush() != null && EditMode.brush().getBlock() == block, block -> {
+                    EditMode.setBrush(block.defaultBlockState(), false);
+                    onClose();
+                }));
+        search = addRenderableWidget(new EditBox(font, gridLeft, 30, gridWidth, 18,
                 Component.translatable("pawprint.screen.edit.search")));
         search.setHint(Component.translatable("pawprint.screen.edit.search_hint").withStyle(ChatFormatting.DARK_GRAY));
         search.setValue(lastQuery);
@@ -104,8 +105,7 @@ public class EditMenuScreen extends Screen {
 
     private void runSearch(String query) {
         lastQuery = query;
-        results = BlockSearchIndex.search(query);
-        scrollRow = 0;
+        grid.search(query);
     }
 
     private void editActivePlacement() {
@@ -129,99 +129,12 @@ public class EditMenuScreen extends Screen {
         updateButtons();
     }
 
-    // Palette grid
-
-    private int gridLeft() {
-        return MARGIN * 2 + SIDE_WIDTH;
-    }
-
-    private int gridWidth() {
-        return width - gridLeft() - MARGIN;
-    }
-
-    private int gridTop() {
-        return 54;
-    }
-
-    private int columns() {
-        return Math.max(1, gridWidth() / CELL);
-    }
-
-    private int visibleRows() {
-        return Math.max(1, (height - 40 - gridTop()) / CELL);
-    }
-
-    private int maxScroll() {
-        int rows = (results.size() + columns() - 1) / columns();
-        return Math.max(0, rows - visibleRows());
-    }
-
-    private @Nullable BlockSearchIndex.Entry entryAt(double mouseX, double mouseY) {
-        int column = (int) Math.floor((mouseX - gridLeft()) / CELL);
-        int row = (int) Math.floor((mouseY - gridTop()) / CELL);
-        if (mouseX < gridLeft() || column >= columns() || mouseY < gridTop() || row >= visibleRows()) {
-            return null;
-        }
-        int index = (scrollRow + row) * columns() + column;
-        return index >= 0 && index < results.size() ? results.get(index) : null;
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        BlockSearchIndex.Entry entry = entryAt(mouseX, mouseY);
-        if (entry != null && button == 0) {
-            EditMode.setBrush(entry.block().defaultBlockState(), false);
-            onClose();
-            return true;
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (mouseX >= gridLeft()) {
-            scrollRow = Mth.clamp(scrollRow - (int) Math.signum(scrollY), 0, maxScroll());
-            return true;
-        }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-    }
-
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         graphics.drawString(font, Component.translatable("pawprint.screen.edit.tools"), MARGIN, 20, 0xA0A0A0);
-
-        BlockState brush = EditMode.brush();
-        int columns = columns();
-        int first = scrollRow * columns;
-        int last = Math.min(results.size(), first + visibleRows() * columns);
-        for (int i = first; i < last; i++) {
-            BlockSearchIndex.Entry entry = results.get(i);
-            int x = gridLeft() + (i - first) % columns * CELL;
-            int y = gridTop() + (i - first) / columns * CELL;
-            if (brush != null && brush.getBlock() == entry.block()) {
-                graphics.fill(x, y, x + CELL, y + CELL, 0x8040A0FF);
-            }
-            if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
-                graphics.fill(x, y, x + CELL, y + CELL, 0x40FFFFFF);
-            }
-            graphics.renderItem(entry.icon(), x + 2, y + 2);
-        }
-        if (results.isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.screen.edit.no_results"),
-                    gridLeft() + gridWidth() / 2, gridTop() + 20, 0xA0A0A0);
-        }
-
-        BlockSearchIndex.Entry hovered = entryAt(mouseX, mouseY);
-        if (hovered != null) {
-            List<Component> tooltip = new ArrayList<>();
-            for (String name : hovered.names()) {
-                tooltip.add(Component.literal(name));
-            }
-            tooltip.add(Component.literal(hovered.id().toString()).withStyle(ChatFormatting.DARK_GRAY));
-            graphics.renderComponentTooltip(font, tooltip, mouseX, mouseY);
-        }
+        grid.renderTooltip(graphics, mouseX, mouseY);
     }
 
     @Override

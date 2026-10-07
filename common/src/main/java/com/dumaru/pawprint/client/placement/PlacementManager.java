@@ -226,6 +226,34 @@ public final class PlacementManager {
         }
     }
 
+    /** Reloads placements of a file whose blocks changed (e.g. after replacing a block type). */
+    public static void contentChanged(String file) {
+        boolean changed = false;
+        for (Placement placement : placements) {
+            if (placement.file().equals(file)) {
+                try {
+                    placement.setBlueprint(BlueprintLibrary.load(file));
+                    changed = true;
+                } catch (IOException e) {
+                    Pawprint.LOG.warn("Could not reload {}", file, e);
+                }
+            }
+        }
+        if (changed) {
+            changed();
+        }
+    }
+
+    /** Points the active placement at another file, e.g. a modified copy, keeping its position. */
+    public static void switchActiveTo(String file) throws IOException {
+        Placement placement = active();
+        if (placement != null) {
+            placement.setFile(file);
+            placement.setBlueprint(BlueprintLibrary.load(file));
+            changed();
+        }
+    }
+
     /**
      * Follows a blueprint file that was renamed, moved ({@code newPath} set) or deleted ({@code newPath} null),
      * both in the current placements and in the saved placements of every other server and dimension.

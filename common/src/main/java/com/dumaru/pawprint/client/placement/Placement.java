@@ -14,7 +14,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  */
 public final class Placement {
     private String file;
-    private final Blueprint blueprint;
+    private Blueprint blueprint;
     private BlockPos origin;
     private Rotation rotation;
     private Mirror mirror;
@@ -34,6 +34,10 @@ public final class Placement {
 
     void setFile(String file) {
         this.file = file;
+    }
+
+    void setBlueprint(Blueprint blueprint) {
+        this.blueprint = blueprint;
     }
 
     public Blueprint blueprint() {

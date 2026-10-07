@@ -333,9 +333,7 @@ public class LibraryScreen extends Screen {
             return;
         }
         try {
-            Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
-            minecraft.setScreen(new MaterialsScreen(this, selected.meta().name,
-                    MaterialList.forBlueprint(blueprint, minecraft.player)));
+            minecraft.setScreen(new MaterialsScreen(this, selected, BlueprintLibrary.load(selected.relativePath())));
         } catch (IOException e) {
             setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
         }
@@ -344,7 +342,7 @@ public class LibraryScreen extends Screen {
     /** The materials screen for any blueprint; used by the self-test. */
     public static Screen materialsFor(Blueprint blueprint) {
         Minecraft minecraft = Minecraft.getInstance();
-        return new MaterialsScreen(null, blueprint.meta().name, MaterialList.forBlueprint(blueprint, minecraft.player));
+        return new MaterialsScreen(null, null, blueprint);
     }
 
     private void openManage() {
