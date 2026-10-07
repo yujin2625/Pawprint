@@ -141,12 +141,13 @@ public class RadialMenuScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics) {
         graphics.fill(0, 0, width, height, 0x50000000); // Light dimming; the world stays visible.
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         Integer pointed = pointed(mouseX, mouseY);
         for (int i = 0; i < OPTIONS.size(); i++) {

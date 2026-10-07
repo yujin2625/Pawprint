@@ -26,7 +26,7 @@ Everything is reached from **one key, `B`**: hold it, point toward an item of th
 
 Every feature also has its own key in the controls menu, unbound by default so Pawprint does not take keys other mods use. English and Korean.
 
-> Status: early development, Minecraft 1.21.1 (NeoForge, Fabric). See [docs/DESIGN.md](docs/DESIGN.md) (Korean).
+> Status: early development. This branch (`mc/1.20.1`) targets Minecraft 1.20.1 (Forge, Fabric); `main` targets 1.21.1 (NeoForge, Fabric). See [docs/DESIGN.md](docs/DESIGN.md) (Korean).
 
 ## Building
 

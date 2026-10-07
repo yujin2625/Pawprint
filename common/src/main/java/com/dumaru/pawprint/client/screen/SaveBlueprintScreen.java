@@ -84,6 +84,7 @@ public class SaveBlueprintScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
         graphics.drawCenteredString(font, Component.translatable("pawprint.screen.library.selection",

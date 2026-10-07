@@ -160,7 +160,7 @@ public final class MaterialList {
                     ? Component.translatable("pawprint.materials.text.enough", line.have())
                     : Component.translatable("pawprint.materials.text.missing", line.have(), missing);
             text.append(Component.translatable("pawprint.materials.text.line", line.item().getDescription(), id(line),
-                    amount(count, line.item().getDefaultMaxStackSize()), status).getString()).append('\n');
+                    amount(count, line.item().getMaxStackSize()), status).getString()).append('\n');
         }
         if (needed.isEmpty()) {
             text.append(Component.translatable(placed ? "pawprint.materials.text.done" : "pawprint.materials.none").getString())

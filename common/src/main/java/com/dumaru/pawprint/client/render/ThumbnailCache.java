@@ -91,7 +91,7 @@ public final class ThumbnailCache {
     }
 
     private static ResourceLocation register(String key, NativeImage image) {
-        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Pawprint.MOD_ID, "thumbnail/" + hash(key));
+        ResourceLocation id = new ResourceLocation(Pawprint.MOD_ID, "thumbnail/" + hash(key));
         Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
         textures.put(key, id);
         return id;

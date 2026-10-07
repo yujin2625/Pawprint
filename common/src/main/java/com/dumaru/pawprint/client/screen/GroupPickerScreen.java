@@ -71,6 +71,7 @@ final class GroupPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
     }
@@ -82,7 +83,7 @@ final class GroupPickerScreen extends Screen {
 
     private final class GroupList extends ObjectSelectionList<GroupList.Entry> {
         GroupList(Minecraft minecraft, int width, int height, int y) {
-            super(minecraft, width, height, y, 18);
+            super(minecraft, width, GroupPickerScreen.this.height, y, y + height, 18);
         }
 
         Entry add(String group) {

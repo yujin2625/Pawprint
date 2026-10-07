@@ -4,6 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+import net.minecraft.util.Mth;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -77,12 +78,12 @@ public final class PawprintConfig {
     }
 
     private void sanitize() {
-        ghostRenderDistance = Math.clamp(ghostRenderDistance, 8, 512);
-        ghostOpacity = Math.clamp(ghostOpacity, 0.2f, 1f);
-        editReach = Math.clamp(editReach, 5, 256);
-        freecamSpeed = Math.clamp(freecamSpeed, 0.05, 5.0);
-        snapshotRadiusChunks = Math.clamp(snapshotRadiusChunks, 1, 32);
-        snapshotSurfaceDepth = Math.clamp(snapshotSurfaceDepth, 0, 64);
+        ghostRenderDistance = Mth.clamp(ghostRenderDistance, 8, 512);
+        ghostOpacity = Mth.clamp(ghostOpacity, 0.2f, 1f);
+        editReach = Mth.clamp(editReach, 5, 256);
+        freecamSpeed = Mth.clamp(freecamSpeed, 0.05, 5.0);
+        snapshotRadiusChunks = Mth.clamp(snapshotRadiusChunks, 1, 32);
+        snapshotSurfaceDepth = Mth.clamp(snapshotSurfaceDepth, 0, 64);
         if (searchLanguages == null || searchLanguages.isEmpty()) {
             searchLanguages = new ArrayList<>(List.of("en_us", "ko_kr"));
         }

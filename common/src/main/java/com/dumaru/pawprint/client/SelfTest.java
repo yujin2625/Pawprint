@@ -182,7 +182,7 @@ public final class SelfTest {
                 true, new GameRules(), WorldDataConfiguration.DEFAULT);
         minecraft.createWorldOpenFlows().createFreshLevel(ORIGIN_FOLDER, settings, new WorldOptions(0L, false, false),
                 registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(WorldPresets.FLAT)
-                        .value().createWorldDimensions(), new TitleScreen());
+                        .value().createWorldDimensions());
     }
 
     /**
@@ -267,7 +267,18 @@ public final class SelfTest {
                     }
                 }
                 case 4 -> {
-                    if (stageTicks == 20) {
+                    if (stageTicks == 5) {
+                        // Look at the placement so the screenshot shows it, wherever the world spawned us.
+                        var bounds = PlacementManager.active().worldBounds();
+                        var target = net.minecraft.world.phys.Vec3.atCenterOf(bounds.getCenter());
+                        var eye = minecraft.player.getEyePosition();
+                        double dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
+                        minecraft.player.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
+                        minecraft.player.setXRot((float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))));
+                    } else if (stageTicks == 10) {
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_world.png", minecraft.getMainRenderTarget(),
+                                message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
+                    } else if (stageTicks == 20) {
                         minecraft.setScreen(new com.dumaru.pawprint.client.screen.PlacementScreen());
                     } else if (stageTicks == 40) {
                         Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_panel.png", minecraft.getMainRenderTarget(),

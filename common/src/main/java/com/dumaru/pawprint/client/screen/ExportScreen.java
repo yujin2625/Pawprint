@@ -47,7 +47,7 @@ final class ExportScreen extends Screen {
     private void export(Formats format) {
         try {
             Path file = BlueprintLibrary.export(entry, format);
-            Util.getPlatform().openPath(file.getParent());
+            Util.getPlatform().openFile((file.getParent()).toFile());
             library.refresh(entry.relativePath(), Component.translatable("pawprint.library.exported", file.getFileName().toString()), false);
         } catch (IOException | RuntimeException e) {
             Pawprint.LOG.warn("Export of {} failed", entry.file(), e);
@@ -58,6 +58,7 @@ final class ExportScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
     }

@@ -26,42 +26,57 @@ final class TintingConsumer implements VertexConsumer {
     }
 
     @Override
-    public VertexConsumer addVertex(float x, float y, float z) {
-        delegate.addVertex(x, y, z);
+    public VertexConsumer vertex(double x, double y, double z) {
+        delegate.vertex(x, y, z);
         return this;
     }
 
     @Override
-    public VertexConsumer setColor(int r, int g, int b, int a) {
-        delegate.setColor((int) (r * red), (int) (g * green), (int) (b * blue), (int) (a * alpha));
+    public VertexConsumer color(int r, int g, int b, int a) {
+        delegate.color((int) (r * red), (int) (g * green), (int) (b * blue), (int) (a * alpha));
         return this;
     }
 
     @Override
-    public VertexConsumer setUv(float u, float v) {
-        delegate.setUv(u, v);
+    public VertexConsumer uv(float u, float v) {
+        delegate.uv(u, v);
         return this;
     }
 
     @Override
-    public VertexConsumer setUv1(int u, int v) {
-        delegate.setUv1(u, v);
+    public VertexConsumer overlayCoords(int u, int v) {
+        delegate.overlayCoords(u, v);
         return this;
     }
 
     @Override
-    public VertexConsumer setUv2(int u, int v) {
+    public VertexConsumer uv2(int u, int v) {
         if (fullBright) {
-            delegate.setUv2(LightTexture.FULL_BRIGHT & 0xFFFF, LightTexture.FULL_BRIGHT >> 16 & 0xFFFF);
+            delegate.uv2(LightTexture.FULL_BRIGHT & 0xFFFF, LightTexture.FULL_BRIGHT >> 16 & 0xFFFF);
         } else {
-            delegate.setUv2(u, v);
+            delegate.uv2(u, v);
         }
         return this;
     }
 
     @Override
-    public VertexConsumer setNormal(float x, float y, float z) {
-        delegate.setNormal(x, y, z);
+    public VertexConsumer normal(float x, float y, float z) {
+        delegate.normal(x, y, z);
         return this;
+    }
+
+    @Override
+    public void endVertex() {
+        delegate.endVertex();
+    }
+
+    @Override
+    public void defaultColor(int r, int g, int b, int a) {
+        delegate.defaultColor(r, g, b, a);
+    }
+
+    @Override
+    public void unsetDefaultColor() {
+        delegate.unsetDefaultColor();
     }
 }

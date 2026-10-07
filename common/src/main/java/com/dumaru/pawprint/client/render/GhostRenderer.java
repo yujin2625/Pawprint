@@ -9,7 +9,7 @@ import com.dumaru.pawprint.client.placement.GhostStore;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -45,7 +45,7 @@ import java.util.List;
  * which keeps very large blueprints smooth. Small, fast-changing things (preview, outlines) are drawn directly.
  */
 public final class GhostRenderer {
-    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new ByteBufferBuilder(1 << 18));
+    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new BufferBuilder(1 << 18));
     private static final TintingConsumer TINT = new TintingConsumer();
     private static final RandomSource RANDOM = RandomSource.create();
 
@@ -60,6 +60,7 @@ public final class GhostRenderer {
     private static final int MAX_ERASE_OUTLINES = 4096;
 
     private static int frame;
+    private static PoseStack viewStack = new PoseStack();
     // Timing counters for the self-test and debugging.
     private static long statFrames;
     private static long statNanos;
@@ -91,8 +92,13 @@ public final class GhostRenderer {
                 statFrames, statFrames == 0 ? 0 : statNanos / 1e6 / statFrames, statMaxNanos / 1e6, statMeshesBuilt);
     }
 
-    public static void render(Camera camera, @Nullable Frustum frustum) {
+    /**
+     * @param view the level renderer's pose stack; in 1.20.1 it carries the camera rotation, which later versions
+     *             put into the model-view matrix instead
+     */
+    public static void render(Camera camera, @Nullable Frustum frustum, PoseStack view) {
         long start = System.nanoTime();
+        viewStack = view;
         renderTimed(camera, frustum);
         long took = System.nanoTime() - start;
         statFrames++;
@@ -161,7 +167,7 @@ public final class GhostRenderer {
             if (shader.CHUNK_OFFSET != null) {
                 shader.CHUNK_OFFSET.set(0f, 0f, 0f); // Offsets go into the model-view matrix instead.
             }
-            Matrix4f modelView = RenderSystem.getModelViewMatrix();
+            Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix()).mul(viewStack.last().pose());
             Matrix4f projection = RenderSystem.getProjectionMatrix();
             for (GhostStore.Section section : sections) {
                 if (!(section.mesh instanceof GhostMesh mesh)) {
@@ -201,7 +207,16 @@ public final class GhostRenderer {
     // Immediate: preview, outlines, selection
 
     private static void renderImmediate(Minecraft minecraft, ClientLevel level, Vec3 cam) {
-        PoseStack poseStack = new PoseStack();
+        PoseStack poseStack = viewStack;
+        poseStack.pushPose();
+        try {
+            renderImmediate(minecraft, level, cam, poseStack);
+        } finally {
+            poseStack.popPose();
+        }
+    }
+
+    private static void renderImmediate(Minecraft minecraft, ClientLevel level, Vec3 cam, PoseStack poseStack) {
         Preview preview = Preview.current();
         if (preview != null && !preview.erase() && preview.state() != null
                 && preview.state().getRenderShape() == RenderShape.MODEL && preview.cells().size() <= MAX_PREVIEW_MODELS) {

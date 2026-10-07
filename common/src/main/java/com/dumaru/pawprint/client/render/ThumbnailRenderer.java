@@ -6,7 +6,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
@@ -26,7 +26,6 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 
 import java.util.List;
 
@@ -43,7 +42,7 @@ public final class ThumbnailRenderer {
 
     private static final List<RenderType> LAYERS = List.of(
             RenderType.solid(), RenderType.cutoutMipped(), RenderType.cutout(), RenderType.translucent());
-    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new ByteBufferBuilder(1 << 18));
+    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new BufferBuilder(1 << 18));
     private static final TintingConsumer TINT = new TintingConsumer();
     private static final RandomSource RANDOM = RandomSource.create();
     private static @Nullable TextureTarget target;
@@ -75,9 +74,9 @@ public final class ThumbnailRenderer {
         RenderSystem.backupProjectionMatrix();
         RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(-radius, radius, -radius, radius, -1000f, 1000f),
                 VertexSorting.ORTHOGRAPHIC_Z);
-        Matrix4fStack modelView = RenderSystem.getModelViewStack();
-        modelView.pushMatrix();
-        modelView.identity();
+        PoseStack modelView = RenderSystem.getModelViewStack();
+        modelView.pushPose();
+        modelView.setIdentity();
         RenderSystem.applyModelViewMatrix();
         float fogStart = RenderSystem.getShaderFogStart();
         RenderSystem.setShaderFogStart(Float.MAX_VALUE);
@@ -90,7 +89,7 @@ public final class ThumbnailRenderer {
             drawBlocks(minecraft, blueprint, poseStack, only);
         } finally {
             RenderSystem.setShaderFogStart(fogStart);
-            modelView.popMatrix();
+            modelView.popPose();
             RenderSystem.applyModelViewMatrix();
             RenderSystem.restoreProjectionMatrix();
             minecraft.getMainRenderTarget().bindWrite(true);

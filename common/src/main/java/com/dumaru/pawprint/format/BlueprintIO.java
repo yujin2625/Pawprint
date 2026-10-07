@@ -107,7 +107,7 @@ public final class BlueprintIO {
         try (ZipFile zip = new ZipFile(file.toFile())) {
             BlueprintMeta meta = parseMeta(readEntry(zip, META_ENTRY, MAX_META_BYTES));
             byte[] data = readEntry(zip, DATA_ENTRY, MAX_DATA_BYTES);
-            CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.create(MAX_NBT_HEAP));
+            CompoundTag tag = NbtLimits.readCompressed(new ByteArrayInputStream(data), MAX_NBT_HEAP);
             return fromNbt(meta, tag);
         }
     }
@@ -148,7 +148,7 @@ public final class BlueprintIO {
         } catch (IllegalArgumentException e) {
             throw new IOException("Share string is damaged (incomplete copy?)", e);
         }
-        CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(bytes), NbtAccounter.create(MAX_NBT_HEAP));
+        CompoundTag tag = NbtLimits.readCompressed(new ByteArrayInputStream(bytes), MAX_NBT_HEAP);
         BlueprintMeta meta = new BlueprintMeta();
         meta.id = java.util.UUID.randomUUID().toString();
         meta.name = tag.getString("Name").isBlank() ? "Shared Blueprint" : tag.getString("Name");

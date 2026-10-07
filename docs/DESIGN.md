@@ -338,7 +338,7 @@ example.pawprint (zip)
 | 4. 라이브러리 | 완료 | 썸네일, 검색/정렬/그룹/즐겨찾기/최근, 관리, 공유 문자열, 드래그 앤 드롭 |
 | 5. 호환 | 완료 | `.litematic`/`.schem`(v2·v3 읽기, v2 쓰기)/`.nbt` 읽기·쓰기, `.schematic` 읽기 |
 | 6. 마무리 | 대부분 완료 | 층 보기, 진행률, 구역 단위 메시 캐시. 웨이포인트 연동은 미구현 |
-| 7. 포팅 | 남음 | 1.20.1 Forge/Fabric, 최신 버전 |
+| 7. 포팅 | 진행 중 | 1.20.1 Forge/Fabric 완료(`mc/1.20.1` 브랜치). 최신 버전 남음 |
 
 ### 구현 메모
 - **렌더링**: 가짜 블럭을 16×16×16 구역별로 GPU 버퍼에 캐시한다(`GhostMesh`). 상태가 바뀐 구역만 프레임당 4ms 예산 안에서
@@ -349,6 +349,19 @@ example.pawprint (zip)
   "제거할 블럭"은 다른 포맷을 거치면 사라진다.
 - **썸네일**: 화면 밖 렌더 타깃에 남동쪽 위에서 본 모습을 그려 `pawprint/cache/thumbnails`에 캐시한다. 2만 블럭이 넘으면 겉면만 그린다.
 - **자체 테스트**: `-Dpawprint.selftest=true`. 텍스트 형식, 포맷 왕복, 공유 문자열, 썸네일, mixin audit, 스튜디오 왕복을 자동 확인한다.
+
+## 8.6 버전별 브랜치 (2026-10-08)
+- Stonecutter 대신 MC 버전마다 브랜치를 둔다. 1.20.1과 1.21.x는 렌더링(정점 API, 버퍼 업로드, 카메라 회전 위치),
+  GUI(배경, 휠 이벤트, 목록 위젯), 월드 생성·접속 API가 크게 달라 한 소스에 분기 주석을 넣으면 거의 모든 파일이 갈라지기 때문이다.
+- `main`: 1.21.1 (NeoForge, Fabric, Java 21). `mc/1.20.1`: 1.20.1 (Forge, Fabric, Java 17).
+- 기능은 `main`에서 만들고 `git merge main`으로 버전 브랜치에 가져온 뒤, 컴파일 오류를 고친다.
+- 1.20.1에서 바뀐 주요 지점:
+  - 정점: `vertex()…endVertex()` 체인, `BufferBuilder.begin/end` + `RenderedBuffer`
+  - 렌더 이벤트의 `PoseStack`에 카메라 회전이 있으므로 `GhostRenderer.render`가 그것을 받아 쓴다
+  - 화면 배경을 `render`에서 직접 그린다(`renderBackground`), 휠 이벤트 인자가 하나
+  - 월드 열기 `loadLevel`, 생성 `createFreshLevel`(돌아갈 화면 인자 없음), 접속 `startConnecting`(TransferState 없음), `clearLevel`
+  - 압축 NBT 읽기에 메모리 제한을 거는 `NbtLimits`, mixin 호환 수준 `JAVA_17`
+  - 설치 스크립트는 BMC5(1.21.1)에 잘못 설치하지 않도록 `PAWPRINT_MODS_DIR`을 반드시 지정해야 한다
 
 ## 9. 위험 요소
 - **렌더링 호환성**: Sodium/Iris, 버전별 렌더링 변경. 0~1단계에서 프로토타입으로 먼저 검증한다.

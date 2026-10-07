@@ -16,7 +16,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ConnectScreen;
-import net.minecraft.client.gui.screens.GenericMessageScreen;
+import net.minecraft.client.gui.screens.GenericDirtMessageScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.multiplayer.ServerData;
@@ -86,7 +86,7 @@ public final class Studio {
             next.localFolder = next.server.substring("local/".length());
         } else {
             ServerData data = minecraft.getCurrentServer();
-            if (data == null || data.isRealm()) {
+            if (data == null || minecraft.isConnectedToRealms()) {
                 throw new IOException("Realms and unknown servers are not supported");
             }
             next.returnType = "server";
@@ -108,7 +108,7 @@ public final class Studio {
         if (minecraft.level != null) {
             minecraft.level.disconnect();
         }
-        minecraft.disconnect(new GenericMessageScreen(Component.translatable(local ? "menu.savingLevel" : "pawprint.studio.leaving")));
+        minecraft.clearLevel(new GenericDirtMessageScreen(Component.translatable(local ? "menu.savingLevel" : "pawprint.studio.leaving")));
     }
 
     // In the studio
@@ -361,11 +361,11 @@ public final class Studio {
         }
         leaveWorld(minecraft);
         if (current.returnType.equals("local")) {
-            minecraft.createWorldOpenFlows().openWorld(current.localFolder, () -> minecraft.setScreen(new TitleScreen()));
+            minecraft.createWorldOpenFlows().loadLevel(new TitleScreen(), current.localFolder);
         } else {
-            ServerData data = new ServerData(current.serverName, current.serverIp, ServerData.Type.OTHER);
+            ServerData data = new ServerData(current.serverName, current.serverIp, false);
             ConnectScreen.startConnecting(new JoinMultiplayerScreen(new TitleScreen()), minecraft,
-                    ServerAddress.parseString(current.serverIp), data, false, null);
+                    ServerAddress.parseString(current.serverIp), data, false);
         }
     }
 

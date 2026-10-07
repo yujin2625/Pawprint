@@ -91,7 +91,7 @@ final class MaterialsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         int visible = MaterialTable.visibleRows(TOP, height - 44);
         scroll = Mth.clamp(scroll - (int) Math.signum(scrollY), 0, Math.max(0, result.lines().size() - visible));
         return true;
@@ -107,6 +107,7 @@ final class MaterialsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, Component.translatable("pawprint.materials.title", blueprint.meta().name), width / 2, 10, 0xFFFFFF);
         int totalItems = result.lines().stream().mapToInt(MaterialList.Line::total).sum();

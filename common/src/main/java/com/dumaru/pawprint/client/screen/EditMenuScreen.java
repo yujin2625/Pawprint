@@ -131,6 +131,7 @@ public class EditMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
         graphics.drawString(font, Component.translatable("pawprint.screen.edit.tools"), MARGIN, 20, 0xA0A0A0);

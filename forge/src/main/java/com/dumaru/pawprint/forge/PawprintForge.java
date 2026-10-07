@@ -42,7 +42,7 @@ public class PawprintForge {
         // Same point in the frame as Fabric's AFTER_TRANSLUCENT: after translucent terrain and particles.
         MinecraftForge.EVENT_BUS.addListener((RenderLevelStageEvent event) -> {
             if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
-                GhostRenderer.render(event.getCamera(), event.getFrustum());
+                GhostRenderer.render(event.getCamera(), event.getFrustum(), event.getPoseStack());
             }
         });
         MinecraftForge.EVENT_BUS.addListener((RenderGuiEvent.Post event) -> EditHud.render(event.getGuiGraphics()));

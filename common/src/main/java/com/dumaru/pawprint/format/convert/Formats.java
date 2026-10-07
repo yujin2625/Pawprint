@@ -1,6 +1,7 @@
 package com.dumaru.pawprint.format.convert;
 
 import com.dumaru.pawprint.format.Blueprint;
+import com.dumaru.pawprint.format.NbtLimits;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
@@ -53,7 +54,7 @@ public enum Formats {
         }
         CompoundTag root;
         try (InputStream in = Files.newInputStream(file)) {
-            root = NbtIo.readCompressed(in, NbtAccounter.create(MAX_NBT_HEAP));
+            root = NbtLimits.readCompressed(in, MAX_NBT_HEAP);
         }
         String fallbackName = baseName(file);
         try {

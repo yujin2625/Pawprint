@@ -375,7 +375,7 @@ public class LibraryScreen extends Screen {
     private void openFolder() {
         try {
             Files.createDirectories(BlueprintLibrary.root());
-            Util.getPlatform().openPath(BlueprintLibrary.root());
+            Util.getPlatform().openFile((BlueprintLibrary.root()).toFile());
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not open the blueprint folder", e);
         }
@@ -436,7 +436,7 @@ public class LibraryScreen extends Screen {
     private void exportBlockList() {
         try {
             Path file = AiTools.exportBlockList();
-            Util.getPlatform().openPath(file);
+            Util.getPlatform().openFile((file).toFile());
             setStatus(Component.translatable("pawprint.ai.blocks_exported", file.toString()), SUCCESS_COLOR);
         } catch (IOException e) {
             setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), ERROR_COLOR);

@@ -5,9 +5,7 @@ import com.dumaru.pawprint.client.placement.BlockStatus;
 import com.dumaru.pawprint.client.placement.GhostStore;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -34,10 +32,9 @@ final class GhostMesh implements AutoCloseable {
     static final int BOXES = 1;
     static final int LINES = 2;
 
-    private static final ByteBufferBuilder MODEL_BYTES = new ByteBufferBuilder(1 << 20);
-    private static final ByteBufferBuilder BOX_BYTES = new ByteBufferBuilder(1 << 16);
-    private static final ByteBufferBuilder LINE_BYTES = new ByteBufferBuilder(1 << 16);
-    private static final ByteBufferBuilder SORT_BYTES = new ByteBufferBuilder(1 << 16);
+    private static final BufferBuilder MODEL_BUILDER = new BufferBuilder(1 << 20);
+    private static final BufferBuilder BOX_BUILDER = new BufferBuilder(1 << 16);
+    private static final BufferBuilder LINE_BUILDER = new BufferBuilder(1 << 16);
     private static final TintingConsumer TINT = new TintingConsumer();
     private static final RandomSource RANDOM = RandomSource.create();
     private static final float WRONG_STATE_SCALE = 1.01f;
@@ -55,9 +52,12 @@ final class GhostMesh implements AutoCloseable {
         float opacity = Pawprint.config().ghostOpacity;
         boolean fullBright = Pawprint.config().ghostFullBright;
         BlockRenderDispatcher blocks = Minecraft.getInstance().getBlockRenderer();
-        BufferBuilder models = new BufferBuilder(MODEL_BYTES, VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
-        BufferBuilder boxes = new BufferBuilder(BOX_BYTES, VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
-        BufferBuilder lines = new BufferBuilder(LINE_BYTES, VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
+        BufferBuilder models = MODEL_BUILDER;
+        BufferBuilder boxes = BOX_BUILDER;
+        BufferBuilder lines = LINE_BUILDER;
+        models.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
+        boxes.begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
+        lines.begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
         PoseStack poseStack = new PoseStack();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
@@ -101,15 +101,12 @@ final class GhostMesh implements AutoCloseable {
         }
 
         GhostMesh mesh = new GhostMesh();
-        MeshData modelData = models.build();
-        if (modelData != null) {
-            // Sorted once for the camera at build time; close enough for see-through ghosts.
-            modelData.sortQuads(SORT_BYTES, VertexSorting.byDistance(
-                    (float) (camera.x - section.originX), (float) (camera.y - section.originY), (float) (camera.z - section.originZ)));
-        }
-        mesh.buffers[MODELS] = upload(modelData);
-        mesh.buffers[BOXES] = upload(boxes.build());
-        mesh.buffers[LINES] = upload(lines.build());
+        // Sorted once for the camera at build time; close enough for see-through ghosts.
+        models.setQuadSorting(VertexSorting.byDistance(
+                (float) (camera.x - section.originX), (float) (camera.y - section.originY), (float) (camera.z - section.originZ)));
+        mesh.buffers[MODELS] = upload(models.end());
+        mesh.buffers[BOXES] = upload(boxes.end());
+        mesh.buffers[LINES] = upload(lines.end());
         return mesh;
     }
 
@@ -136,8 +133,9 @@ final class GhostMesh implements AutoCloseable {
         LevelRenderer.renderLineBox(new PoseStack(), lines, new AABB(x, y, z, x + 1, y + 1, z + 1).inflate(grow), r, g, b, 1f);
     }
 
-    private static @Nullable VertexBuffer upload(@Nullable MeshData data) {
-        if (data == null) {
+    private static @Nullable VertexBuffer upload(BufferBuilder.RenderedBuffer data) {
+        if (data.isEmpty()) {
+            data.release();
             return null;
         }
         VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);

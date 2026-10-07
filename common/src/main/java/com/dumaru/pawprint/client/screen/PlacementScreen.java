@@ -152,18 +152,19 @@ public class PlacementScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (materials != null && mouseX >= materialLeft()) {
             int visible = MaterialTable.visibleRows(listTop(), height - 46);
             materialScroll = Mth.clamp(materialScroll - (int) Math.signum(scrollY), 0,
                     Math.max(0, materials.lines().size() - visible));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
         renderPlacements(graphics, mouseX, mouseY);

@@ -35,7 +35,7 @@ public final class StudioWorld {
     public static void open(Minecraft minecraft) {
         Screen fallback = new TitleScreen();
         if (minecraft.getLevelSource().levelExists(FOLDER)) {
-            minecraft.createWorldOpenFlows().openWorld(FOLDER, () -> minecraft.setScreen(fallback));
+            minecraft.createWorldOpenFlows().loadLevel(fallback, FOLDER);
             return;
         }
         GameRules rules = new GameRules();
@@ -56,6 +56,6 @@ public final class StudioWorld {
                             .getHolderOrThrow(FlatLevelGeneratorPresets.THE_VOID).value().settings();
                     return WorldPresets.createNormalWorldDimensions(registries)
                             .replaceOverworldGenerator(registries, new FlatLevelSource(voidSettings));
-                }, fallback);
+                });
     }
 }

@@ -115,7 +115,7 @@ final class BlockGrid extends AbstractWidget {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (!isMouseOver(mouseX, mouseY)) {
             return false;
         }
