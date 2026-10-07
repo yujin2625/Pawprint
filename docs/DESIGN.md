@@ -1,7 +1,7 @@
 # Pawprint 설계 문서
 
-> 상태: 설계 단계 (구현 전)
-> 최종 수정: 2026-10-07
+> 상태: 0단계(빌드 기반) 완료, 1단계 준비
+> 최종 수정: 2026-10-07 (0단계 완료)
 
 ## 1. 개요
 
@@ -36,10 +36,18 @@ Pawprint는 **클라이언트 전용** 건축 계획 모드다.
 | 3차 | 최신 버전 | NeoForge, Fabric | 렌더링 구조 변경 대응 필요 |
 
 ### 빌드 구조
-- **Stonecutter**로 MC 버전별 분기를 관리한다 (한 소스, 버전별 주석 분기).
-- 로더 공통 코드와 로더별 코드를 분리한다.
+- [MultiLoader-Template](https://github.com/jaredlll08/MultiLoader-Template) 구조를 따른다.
+  - `common`: ModDevGradle의 NeoForm(바닐라) 모드로 컴파일한다. 매핑은 Mojang 공식 + Parchment.
+  - `fabric`: Fabric Loom. `neoforge`: ModDevGradle.
+  - 로더 모듈은 빌드할 때 `common` 소스를 함께 컴파일해서 jar 하나로 낸다.
+- **Stonecutter**(MC 버전별 분기)는 두 번째 MC 버전(1.20.1)을 붙이는 시점에 도입한다.
+  버전이 하나뿐인 지금은 빌드를 단순하게 둔다.
 - 런타임 의존 모드(Architectury API 등)는 두지 않는다. 사용자가 이 모드 하나만 넣으면 되게 한다.
-  플랫폼 차이는 자체 `Platform` 인터페이스로 추상화한다.
+  플랫폼 차이는 자체 `Platform` 인터페이스(`ServiceLoader`)로 추상화한다. Fabric 쪽은 Fabric API만 필요하다.
+- 클라이언트 전용 선언: Fabric `"environment": "client"`, NeoForge `@Mod(dist = Dist.CLIENT)` + `displayTest = "IGNORE_ALL_VERSION"`.
+- 패키지: `com.dumaru.pawprint`.
+- 개발 빌드: `build-and-install.bat`가 빌드 후 NeoForge jar를 BMC5 인스턴스 `mods`에 복사한다.
+- CI: GitHub Actions가 푸시마다 빌드하고 jar를 아티팩트로 올린다.
 
 ```
 Pawprint/
@@ -264,8 +272,8 @@ example.pawprint (zip)
 ├─ index.json                # 라이브러리 메타데이터 캐시
 ├─ placements/<서버키>/<차원>.json   # 배치 상태
 ├─ snapshots/<id>.nbt        # 지형 스냅샷
-└─ config.json               # 설정 (또는 로더별 설정 시스템)
 ```
+- 설정 파일은 로더 표준 위치인 `<게임 폴더>/config/pawprint.json`에 둔다 (자체 JSON, 설정 라이브러리 없음).
 - `서버키`: 서버 주소를 파일명에 안전한 문자열로 바꾼 것. 싱글은 월드 폴더명을 쓴다.
 
 ### 5.3 버전 호환
@@ -315,8 +323,11 @@ example.pawprint (zip)
 - **외부 포맷 명세 변경**: 포맷별 버전 필드를 확인하고, 모르는 버전은 거부하고 안내한다.
 - **서버 규칙**: 프리캠, 맵 다운로드 금지 서버. 기능별 끄기로 대응한다.
 
-## 10. 미정 사항
-- 라이선스 (MIT 등)
-- 설정 시스템: 자체 JSON으로 할지, 로더별 설정 라이브러리를 쓸지 (런타임 의존성을 피하려면 자체 구현)
-- 기본 단축키 배치
+## 10. 결정 사항
+- 라이선스: MIT
+- 설정: 자체 JSON (`config/pawprint.json`). 설정 라이브러리를 런타임 의존성으로 두지 않는다.
+- 이름: Pawprint (CurseForge의 1.12.2 동물 모드 "Pawprints"와는 다른 이름으로 본다)
+
+## 11. 미정 사항
+- 기본 단축키 배치 (현재 라이브러리 열기만 `B`)
 - `.bp`(Axiom) 지원 여부

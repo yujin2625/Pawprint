@@ -9,9 +9,24 @@ A client-side building planner for Minecraft.
 
 Works on multiplayer servers without any server-side install. No auto-placing.
 
-> Status: design phase. See [docs/DESIGN.md](docs/DESIGN.md) (Korean).
+> Status: early development. Only the build setup and a placeholder library screen exist so far.
+> See [docs/DESIGN.md](docs/DESIGN.md) (Korean) for the full plan.
 
 ## Planned support
 - Minecraft 1.21.1 (NeoForge, Fabric) first, then 1.20.1 (Forge, Fabric) and the latest version
 - Import/export: `.litematic`, `.schem`, `.nbt`, `.schematic` (import only)
 - English and Korean
+
+## Building
+
+Requires JDK 21.
+
+```
+./gradlew build
+```
+
+Jars are written to `fabric/build/libs` and `neoforge/build/libs`.
+
+## License
+
+[MIT](LICENSE)

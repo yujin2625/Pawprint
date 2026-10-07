@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${description}",
+  "authors": [
+    "${mod_author}"
+  ],
+  "contact": {
+    "homepage": "https://github.com/yujin2625/Pawprint",
+    "sources": "https://github.com/yujin2625/Pawprint",
+    "issues": "https://github.com/yujin2625/Pawprint/issues"
+  },
+  "license": "${license}",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.dumaru.pawprint.fabric.PawprintFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
+  }
+}
