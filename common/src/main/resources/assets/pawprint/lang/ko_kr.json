@@ -218,5 +218,16 @@
   "pawprint.materials.text.enough": "보유 %s, 충분",
   "pawprint.materials.text.missing": "보유 %s, 부족 %s",
   "pawprint.materials.text.done": "모두 지었습니다.",
-  "pawprint.materials.copied": "클립보드에 복사했습니다."
+  "pawprint.materials.copied": "클립보드에 복사했습니다.",
+  "pawprint.replace.button": "블럭 바꾸기",
+  "pawprint.replace.hint": "줄을 클릭하고 '블럭 바꾸기'를 누르면 그 블럭을 전부 다른 블럭으로 바꿀 수 있습니다.",
+  "pawprint.replace.title": "블럭 바꾸기",
+  "pawprint.replace.pick": "%s 대신 쓸 블럭을 고르세요",
+  "pawprint.replace.summary": "\"%4$s\"의 %1$s %2$s개를 모두 %3$s(으)로 바꿉니다. 계단·반블럭·원목은 바꿀 블럭에도 같은 속성이 있으면 방향이 유지됩니다.",
+  "pawprint.replace.overwrite": "원본 덮어쓰기",
+  "pawprint.replace.copy": "사본으로 저장",
+  "pawprint.replace.text_file": "AI 텍스트 청사진은 덮어쓸 수 없어서 사본으로 저장됩니다.",
+  "pawprint.replace.done": "\"%s\"에서 바꿨습니다.",
+  "pawprint.replace.done_copy": "바꾼 사본 \"%s\"을(를) 저장했습니다.",
+  "pawprint.replace.missing_file": "이 배치의 청사진 파일이 없습니다."
 }

@@ -152,6 +152,11 @@ public final class SelfTest {
         Blueprint shared = com.dumaru.pawprint.format.BlueprintIO.fromShareString("Look: " + share + " (my house)", "test");
         Pawprint.LOG.info("SELFTEST share string: {} chars, {} blocks, {} removals, name {}", share.length(),
                 shared.meta().blockCount, shared.meta().removalCount, shared.meta().name);
+        Blueprint replaced = com.dumaru.pawprint.format.BlockReplace.replace(
+                com.dumaru.pawprint.format.BlockReplace.replace(blueprint, state -> state.is(Blocks.OAK_PLANKS), Blocks.STONE),
+                state -> state.is(Blocks.OAK_STAIRS), Blocks.STONE_STAIRS);
+        Pawprint.LOG.info("SELFTEST replace: {} blocks, palette {}", replaced.meta().blockCount,
+                replaced.palette().stream().filter(entry -> entry.contains("stone")).toList());
         CompoundTag legacy = new CompoundTag();
         legacy.putShort("Width", (short) 3);
         legacy.putShort("Height", (short) 1);

@@ -39,6 +39,8 @@ public final class BlueprintLibrary {
 
     /** Told about every move (old, new) and delete (old, null), so references elsewhere can follow. */
     private static final List<BiConsumer<String, @Nullable String>> pathListeners = new ArrayList<>();
+    /** Told when a file's blocks were rewritten in place, so placements of it can reload. */
+    private static final List<Consumer<String>> contentListeners = new ArrayList<>();
 
     private BlueprintLibrary() {
     }
@@ -59,6 +61,10 @@ public final class BlueprintLibrary {
 
     public static void addPathListener(BiConsumer<String, @Nullable String> listener) {
         pathListeners.add(listener);
+    }
+
+    public static void addContentListener(Consumer<String> listener) {
+        contentListeners.add(listener);
     }
 
     // Listing
@@ -88,6 +94,16 @@ public final class BlueprintLibrary {
     private static Entry entry(Path file) throws IOException, TextBlueprintReader.FormatException {
         String relative = relativize(file);
         return new Entry(file, relative, groupOf(relative), readMeta(file), Files.getLastModifiedTime(file).toMillis());
+    }
+
+    /** The entry for a library file, or null when it is missing or unreadable. */
+    public static @Nullable Entry find(String relativePath) {
+        try {
+            Path file = resolve(relativePath);
+            return Files.isRegularFile(file) ? entry(file) : null;
+        } catch (IOException | TextBlueprintReader.FormatException e) {
+            return null;
+        }
     }
 
     /** Every group folder, including empty ones, sorted by path. */
@@ -174,6 +190,29 @@ public final class BlueprintLibrary {
             file = moveFile(entry, entry.file().getParent(), fileName(meta.name));
         }
         return refreshed(file);
+    }
+
+    /**
+     * Replaces every block matching {@code match} with {@code replacement}, keeping shared properties.
+     * Overwrites the file, or writes a copy next to it; text blueprints always get a copy.
+     */
+    public static Entry replaceBlocks(Entry entry, java.util.function.Predicate<net.minecraft.world.level.block.state.BlockState> match,
+                                      net.minecraft.world.level.block.Block replacement, boolean asCopy, String copySuffix)
+            throws IOException {
+        Blueprint changed = com.dumaru.pawprint.format.BlockReplace.replace(read(entry.file()), match, replacement);
+        BlueprintMeta meta = changed.meta();
+        meta.modified = Instant.now().toString();
+        if (asCopy || entry.isText()) {
+            meta.id = UUID.randomUUID().toString();
+            meta.name = meta.name + copySuffix;
+            meta.created = meta.modified;
+            Path file = uniqueFile(entry.file().getParent(), fileName(meta.name), BlueprintIO.EXTENSION);
+            BlueprintIO.write(changed, file);
+            return refreshed(file);
+        }
+        BlueprintIO.write(changed, entry.file());
+        contentListeners.forEach(listener -> listener.accept(entry.relativePath()));
+        return refreshed(entry.file());
     }
 
     /** Moves a blueprint into another group, creating the folder if needed. */

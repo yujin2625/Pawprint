@@ -1,10 +1,12 @@
 package com.dumaru.pawprint.client.screen;
 
+import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.ViewRay;
 import com.dumaru.pawprint.client.placement.MaterialList;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
+import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -13,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -30,6 +33,9 @@ public class PlacementScreen extends Screen {
     private Button remove;
     private Button moveHere;
     private Button copy;
+    private Button replace;
+    private int selectedMaterial = -1;
+    private @Nullable Component message;
 
     public PlacementScreen() {
         super(Component.translatable("pawprint.placements.title"));
@@ -38,9 +44,9 @@ public class PlacementScreen extends Screen {
     @Override
     protected void init() {
         int bottom = height - 28;
-        // Five buttons spread evenly over the width, so nothing overlaps on small screens.
+        // Six buttons spread evenly over the width, so nothing overlaps on small screens.
         int gap = 4;
-        int buttonWidth = (width - MARGIN * 2 - gap * 4) / 5;
+        int buttonWidth = (width - MARGIN * 2 - gap * 5) / 6;
         int x = MARGIN;
         remove = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.remove_placement"), b -> {
             PlacementManager.removeActive();
@@ -65,6 +71,9 @@ public class PlacementScreen extends Screen {
             }
         }).bounds(x, bottom, buttonWidth, 20).build());
         x += buttonWidth + gap;
+        replace = addRenderableWidget(Button.builder(Component.translatable("pawprint.replace.button"), b -> startReplace())
+                .bounds(x, bottom, buttonWidth, 20).build());
+        x += buttonWidth + gap;
         addRenderableWidget(Button.builder(Component.translatable(PlacementManager.layer() != null ? "pawprint.layer.all" : "pawprint.layer.on"),
                 b -> {
                     PawprintClient.toggleLayer(minecraft);
@@ -82,6 +91,8 @@ public class PlacementScreen extends Screen {
                 ? MaterialList.compute(active, minecraft.level, minecraft.player)
                 : null;
         materialScroll = 0;
+        selectedMaterial = -1;
+        replace.active = false;
         remove.active = active != null;
         moveHere.active = active != null;
         copy.active = materials != null && !materials.lines().isEmpty();
@@ -95,8 +106,39 @@ public class PlacementScreen extends Screen {
         return 40;
     }
 
+    private void startReplace() {
+        Placement active = PlacementManager.active();
+        if (active == null || materials == null || selectedMaterial < 0 || selectedMaterial >= materials.lines().size()) {
+            return;
+        }
+        BlueprintLibrary.Entry entry = BlueprintLibrary.find(active.file());
+        if (entry == null) {
+            message = Component.translatable("pawprint.replace.missing_file");
+            return;
+        }
+        ReplaceBlockScreen.start(this, entry, materials.lines().get(selectedMaterial).item(), (changed, asCopy) -> {
+            if (asCopy) {
+                try {
+                    PlacementManager.switchActiveTo(changed.relativePath());
+                } catch (IOException e) {
+                    Pawprint.LOG.warn("Could not switch to {}", changed.file(), e);
+                }
+            }
+            message = Component.translatable(asCopy ? "pawprint.replace.done_copy" : "pawprint.replace.done", changed.meta().name);
+        });
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (materials != null && button == 0) {
+            int row = MaterialTable.rowAt(mouseX, mouseY, materialLeft(), listTop(), width - MARGIN, height - 46,
+                    materialScroll, materials.lines().size());
+            if (row >= 0) {
+                selectedMaterial = row;
+                replace.active = true;
+                return true;
+            }
+        }
         List<Placement> placements = PlacementManager.placements();
         if (mouseX >= MARGIN && mouseX < MARGIN + LIST_WIDTH && mouseY >= listTop()) {
             int index = (int) ((mouseY - listTop()) / ROW);
@@ -128,6 +170,8 @@ public class PlacementScreen extends Screen {
         renderMaterials(graphics);
         if (net.minecraft.Util.getMillis() - copiedAt < 2500) {
             graphics.drawCenteredString(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0x55FF55);
+        } else if (message != null) {
+            graphics.drawCenteredString(font, message, width / 2, height - 40, 0x55FF55);
         }
     }
 
@@ -167,7 +211,7 @@ public class PlacementScreen extends Screen {
         }
         graphics.drawString(font, Component.translatable("pawprint.placements.progress", materials.percent(),
                 materials.correct(), materials.blocks()), left, top - 11, 0xFFFF80);
-        MaterialTable.render(graphics, font, materials, left, top, right, height - 46, materialScroll, true);
+        MaterialTable.render(graphics, font, materials, left, top, right, height - 46, materialScroll, true, selectedMaterial);
     }
 
     @Override

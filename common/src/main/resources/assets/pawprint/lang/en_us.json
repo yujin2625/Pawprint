@@ -218,5 +218,16 @@
   "pawprint.materials.text.enough": "have %s, enough",
   "pawprint.materials.text.missing": "have %s, missing %s",
   "pawprint.materials.text.done": "Everything is built.",
-  "pawprint.materials.copied": "Copied to the clipboard."
+  "pawprint.materials.copied": "Copied to the clipboard.",
+  "pawprint.replace.button": "Replace Block",
+  "pawprint.replace.hint": "Click a row, then Replace Block to swap it for another block everywhere.",
+  "pawprint.replace.title": "Replace Block",
+  "pawprint.replace.pick": "Choose a block to use instead of %s",
+  "pawprint.replace.summary": "Replace all %2$s %1$s with %3$s in \"%4$s\". Stairs, slabs and logs keep their direction where the new block has it.",
+  "pawprint.replace.overwrite": "Overwrite Original",
+  "pawprint.replace.copy": "Save as a Copy",
+  "pawprint.replace.text_file": "AI text blueprints cannot be overwritten; a copy is saved.",
+  "pawprint.replace.done": "Replaced in \"%s\".",
+  "pawprint.replace.done_copy": "Saved the changed copy \"%s\".",
+  "pawprint.replace.missing_file": "The blueprint file of this placement is missing."
 }

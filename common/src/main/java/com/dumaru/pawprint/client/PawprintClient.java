@@ -35,6 +35,7 @@ public final class PawprintClient {
     public static void init() {
         BlueprintLibrary.addPathListener(PlacementManager::pathChanged);
         BlueprintLibrary.addPathListener(Draft::pathChanged);
+        BlueprintLibrary.addContentListener(PlacementManager::contentChanged);
     }
 
     public static void onClientTick(Minecraft minecraft) {
