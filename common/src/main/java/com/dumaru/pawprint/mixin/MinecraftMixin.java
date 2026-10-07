@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.mixin;
 
+import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.edit.EditMode;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,6 +25,8 @@ public abstract class MinecraftMixin {
             rightClickDelay = 4; // Same repeat rate as vanilla while the button is held.
             EditMode.onUse((Minecraft) (Object) this);
             ci.cancel();
+        } else if (Freecam.isActive()) {
+            ci.cancel(); // The player cannot see what it would use while the camera is elsewhere.
         }
     }
 
@@ -32,12 +35,14 @@ public abstract class MinecraftMixin {
         if (EditMode.isActive()) {
             EditMode.onAttack((Minecraft) (Object) this);
             cir.setReturnValue(false);
+        } else if (Freecam.isActive()) {
+            cir.setReturnValue(false);
         }
     }
 
     @Inject(method = "continueAttack", at = @At("HEAD"), cancellable = true)
     private void pawprint$continueAttack(boolean leftClick, CallbackInfo ci) {
-        if (EditMode.isActive()) {
+        if (EditMode.isActive() || Freecam.isActive()) {
             ci.cancel(); // Holding the attack button must not start breaking real blocks.
         }
     }

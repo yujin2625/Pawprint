@@ -6,6 +6,9 @@
   "compatibilityLevel": "JAVA_18",
   "mixins": [],
   "client": [
+    "CameraMixin",
+    "EntityMixin",
+    "KeyboardInputMixin",
     "MinecraftMixin"
   ],
   "injectors": {

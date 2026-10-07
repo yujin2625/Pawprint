@@ -6,6 +6,7 @@ import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.screen.EditMenuScreen;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
+import com.dumaru.pawprint.client.screen.PlacementScreen;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -15,7 +16,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -36,6 +36,7 @@ public final class PawprintClient {
 
     public static void onClientTick(Minecraft minecraft) {
         SelfTest.tick(minecraft);
+        Freecam.tick(minecraft);
         PlacementManager.tick(minecraft);
         EditMode.tick(minecraft);
         if (minecraft.player == null) {
@@ -48,6 +49,14 @@ public final class PawprintClient {
         }
         while (PawprintKeys.TOGGLE_EDIT.consumeClick()) {
             EditMode.toggle(minecraft);
+        }
+        while (PawprintKeys.TOGGLE_FREECAM.consumeClick()) {
+            Freecam.toggle(minecraft);
+        }
+        while (PawprintKeys.PLACEMENT_PANEL.consumeClick()) {
+            if (minecraft.screen == null) {
+                minecraft.setScreen(new PlacementScreen());
+            }
         }
         while (PawprintKeys.TOGGLE_PLACEMENT_VIEW.consumeClick()) {
             togglePlacementView(minecraft);
@@ -79,7 +88,7 @@ public final class PawprintClient {
     private static void markCorner(Minecraft minecraft) {
         BlockPos pos = targetedBlock(minecraft);
         if (pos == null) {
-            pos = minecraft.player.blockPosition();
+            pos = BlockPos.containing(ViewRay.eye(minecraft)).below();
         }
         int corner = Selection.mark(pos);
         BoundingBox box = Selection.box();
@@ -93,7 +102,7 @@ public final class PawprintClient {
 
     private static void handlePlacementKeys(Minecraft minecraft) {
         Placement placement = PlacementManager.isVisible() ? PlacementManager.active() : null;
-        Direction facing = minecraft.player.getDirection();
+        Direction facing = ViewRay.facing(minecraft);
         int step = Screen.hasShiftDown() ? FAST_MOVE : 1;
         boolean changed = false;
 
@@ -131,13 +140,10 @@ public final class PawprintClient {
         return moved;
     }
 
-    /** The block the crosshair points at, or null when it points at air or an entity. */
+    /** The block looked at (from the freecam when it is on), or null. */
     public static @Nullable BlockPos targetedBlock(Minecraft minecraft) {
-        HitResult hit = minecraft.hitResult;
-        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
-            return blockHit.getBlockPos();
-        }
-        return null;
+        BlockHitResult hit = ViewRay.pick(minecraft, ViewRay.PICK_REACH);
+        return hit != null ? hit.getBlockPos() : null;
     }
 
     public static void notify(Minecraft minecraft, Component message) {

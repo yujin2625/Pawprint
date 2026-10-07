@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.client.edit;
 
+import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.shape.Shape;
 import net.minecraft.ChatFormatting;
@@ -23,10 +24,18 @@ public final class EditHud {
 
     public static void render(GuiGraphics graphics) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!EditMode.isActive() || minecraft.options.hideGui || minecraft.player == null) {
+        if (minecraft.options.hideGui || minecraft.player == null) {
             return;
         }
         List<Component> lines = new ArrayList<>();
+        if (Freecam.isActive()) {
+            lines.add(Component.translatable("pawprint.hud.freecam", PawprintKeys.TOGGLE_FREECAM.getTranslatedKeyMessage())
+                    .withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
+        if (!EditMode.isActive()) {
+            draw(graphics, minecraft, lines);
+            return;
+        }
         lines.add(Component.translatable("pawprint.hud.title").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
         lines.add(Component.translatable("pawprint.hud.tool", Component.translatable(EditMode.tool().translationKey())));
         lines.add(Component.translatable("pawprint.hud.block", brushName(minecraft)));
@@ -49,6 +58,10 @@ public final class EditHud {
                 PawprintKeys.EDIT_MENU.getTranslatedKeyMessage(),
                 PawprintKeys.TOGGLE_EDIT.getTranslatedKeyMessage()).withStyle(ChatFormatting.GRAY));
 
+        draw(graphics, minecraft, lines);
+    }
+
+    private static void draw(GuiGraphics graphics, Minecraft minecraft, List<Component> lines) {
         Font font = minecraft.font;
         int y = 4;
         for (Component line : lines) {

@@ -24,6 +24,8 @@ public final class PawprintConfig {
     // Feature switches, so players can follow a server's rules.
     public boolean enableFreecam = true;
     public boolean enableTerrainSnapshot = true;
+    /** Freecam speed in blocks per tick; sprinting triples it. */
+    public double freecamSpeed = 0.5;
 
     /** Ghost blocks farther than this many blocks from the camera are not drawn. */
     public int ghostRenderDistance = 64;
@@ -81,6 +83,7 @@ public final class PawprintConfig {
         ghostOpacity = Math.clamp(ghostOpacity, 0.2f, 1f);
         maxGhostBlocks = Math.clamp(maxGhostBlocks, 1_000, 1_000_000);
         editReach = Math.clamp(editReach, 5, 256);
+        freecamSpeed = Math.clamp(freecamSpeed, 0.05, 5.0);
         snapshotRadiusChunks = Math.clamp(snapshotRadiusChunks, 1, 32);
         snapshotSurfaceDepth = Math.clamp(snapshotSurfaceDepth, 0, 64);
         if (searchLanguages == null || searchLanguages.isEmpty()) {

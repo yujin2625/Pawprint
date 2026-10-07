@@ -6,6 +6,7 @@ import com.dumaru.pawprint.client.ClientContext;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.client.Selection;
+import com.dumaru.pawprint.client.ViewRay;
 import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
@@ -28,8 +29,6 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -260,11 +259,7 @@ public class LibraryScreen extends Screen {
     }
 
     private void placeHereFor(BlueprintLibrary.Entry entry) {
-        HitResult hit = minecraft.hitResult;
-        BlockPos origin = hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK
-                ? blockHit.getBlockPos().relative(blockHit.getDirection()) // Like placing a block against a face.
-                : minecraft.player.blockPosition();
-        place(entry, origin);
+        place(entry, ViewRay.placeHere(minecraft));
     }
 
     private void placeAtOrigin() {

@@ -91,6 +91,9 @@ public final class SelfTest {
                 image.close();
             }
             Pawprint.LOG.info("SELFTEST thumbnail: {}", image != null ? file.toAbsolutePath() : "none");
+            // Loads every mixin target now, so injection errors show up without joining a world.
+            org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
+            Pawprint.LOG.info("SELFTEST mixin audit finished");
         } catch (Exception e) {
             Pawprint.LOG.error("SELFTEST failed", e);
         }

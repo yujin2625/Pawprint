@@ -100,6 +100,14 @@ public final class PlacementManager {
         viewing = value;
     }
 
+    /** Chooses which placement the move, rotate and mirror keys act on. */
+    public static void setActive(int index) {
+        if (index >= 0 && index < placements.size()) {
+            active = index;
+            changed();
+        }
+    }
+
     public static void add(Placement placement) {
         placements.add(placement);
         active = placements.size() - 1;

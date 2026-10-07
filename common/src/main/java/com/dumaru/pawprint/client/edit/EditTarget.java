@@ -1,5 +1,6 @@
 package com.dumaru.pawprint.client.edit;
 
+import com.dumaru.pawprint.client.ViewRay;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -28,8 +29,8 @@ public record EditTarget(@Nullable BlockPos hovered, boolean ghost, Direction fa
         if (player == null || minecraft.level == null) {
             return null;
         }
-        Vec3 eye = player.getEyePosition(1f);
-        Vec3 look = player.getViewVector(1f);
+        Vec3 eye = ViewRay.eye(minecraft);
+        Vec3 look = ViewRay.look(minecraft);
         Vec3 end = eye.add(look.scale(reach));
 
         BlockHitResult real = minecraft.level.clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
