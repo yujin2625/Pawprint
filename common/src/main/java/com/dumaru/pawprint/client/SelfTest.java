@@ -12,6 +12,8 @@ import com.dumaru.pawprint.client.studio.StudioSession;
 import com.dumaru.pawprint.client.studio.StudioWorld;
 import com.dumaru.pawprint.client.studio.TerrainSnapshot;
 import com.dumaru.pawprint.format.BlueprintMeta;
+import com.dumaru.pawprint.format.convert.Formats;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -122,6 +124,7 @@ public final class SelfTest {
                 image.close();
             }
             Pawprint.LOG.info("SELFTEST thumbnail: {}", image != null ? file.toAbsolutePath() : "none");
+            formatRoundTrips(blueprint);
             // Loads every mixin target now, so injection errors show up without joining a world.
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
             Pawprint.LOG.info("SELFTEST mixin audit finished");
@@ -129,6 +132,35 @@ public final class SelfTest {
         } catch (Exception e) {
             Pawprint.LOG.error("SELFTEST failed", e);
         }
+    }
+
+    /** Writes the sample in every format, reads it back, and reads a hand-made legacy schematic. */
+    private static void formatRoundTrips(Blueprint blueprint) throws Exception {
+        Path folder = Pawprint.dataDir().resolve("selftest-formats");
+        for (Formats format : Formats.values()) {
+            if (!format.canWrite) {
+                continue;
+            }
+            Path file = folder.resolve("sample" + format.extension);
+            format.write(blueprint, file);
+            Blueprint back = format.read(file);
+            Pawprint.LOG.info("SELFTEST format {}: wrote {} blocks, read {} blocks{}", format.extension,
+                    blueprint.meta().blockCount, back.meta().blockCount,
+                    back.meta().blockCount == blueprint.meta().blockCount ? " OK" : " MISMATCH");
+        }
+        CompoundTag legacy = new CompoundTag();
+        legacy.putShort("Width", (short) 3);
+        legacy.putShort("Height", (short) 1);
+        legacy.putShort("Length", (short) 1);
+        legacy.putByteArray("Blocks", new byte[]{1, 17, 53});
+        legacy.putByteArray("Data", new byte[]{0, 0, 2});
+        legacy.putString("Materials", "Alpha");
+        Path file = folder.resolve("legacy.schematic");
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        net.minecraft.nbt.NbtIo.writeCompressed(legacy, bytes);
+        java.nio.file.Files.write(file, bytes.toByteArray());
+        Blueprint old = Formats.MCEDIT_SCHEMATIC.read(file);
+        Pawprint.LOG.info("SELFTEST legacy schematic palette: {}", old.palette());
     }
 
     private static final String ORIGIN_FOLDER = "pawprint_selftest_origin";

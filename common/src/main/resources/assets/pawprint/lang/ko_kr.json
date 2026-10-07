@@ -168,5 +168,13 @@
   "pawprint.studio.leaving": "스튜디오로 이동하는 중…",
   "pawprint.studio.pasting": "스튜디오: 지형 복사 중 %s%%",
   "pawprint.studio.ready": "스튜디오 준비 완료. 다 지으면 P 키로 스튜디오 메뉴를 여세요.",
-  "pawprint.studio.placed_back": "스튜디오에서 만든 \"%s\"을(를) 원래 자리에 배치했습니다."
+  "pawprint.studio.placed_back": "스튜디오에서 만든 \"%s\"을(를) 원래 자리에 배치했습니다.",
+  "pawprint.library.manage.export": "내보내기…",
+  "pawprint.library.export.title": "\"%s\" 내보내기",
+  "pawprint.library.export.litematic": "Litematica (.litematic)",
+  "pawprint.library.export.sponge_schematic": "WorldEdit / FAWE (.schem)",
+  "pawprint.library.export.structure": "구조 블럭 / Create (.nbt)",
+  "pawprint.library.exported": "%s을(를) pawprint/exports 폴더에 내보냈습니다.",
+  "pawprint.library.imported_files": "파일 %s개를 가져왔습니다. 원본은 pawprint/imported 폴더로 옮겼습니다.",
+  "pawprint.library.import_failed": "파일 %s개를 가져오지 못했습니다. 예: %s"
 }

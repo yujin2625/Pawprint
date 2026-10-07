@@ -51,6 +51,7 @@ final class ManageBlueprintScreen extends Screen {
         y = add("pawprint.library.manage.duplicate", left, y, () -> apply(() -> BlueprintLibrary.duplicate(entry,
                 Component.translatable("pawprint.library.copy_suffix").getString()), "pawprint.library.duplicated"));
         y = add("pawprint.screen.library.copy_text", left, y, this::copyAsText);
+        y = add("pawprint.library.manage.export", left, y, () -> minecraft.setScreen(new ExportScreen(this, parent, entry)));
         y = add("pawprint.library.manage.delete", left, y, () -> minecraft.setScreen(new ConfirmScreen(confirmed -> {
             if (confirmed) {
                 try {

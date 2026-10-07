@@ -4,6 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
+import com.dumaru.pawprint.format.convert.Formats;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -201,6 +202,80 @@ public final class BlueprintLibrary {
         String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
         Files.move(entry.file(), trash.resolve(stamp + " " + entry.file().getFileName()));
         notifyPath(entry.relativePath(), null);
+    }
+
+    /** Result of converting files from other mods' formats. */
+    public record ImportResult(int imported, List<String> failures) {
+    }
+
+    /**
+     * Converts files in other formats (.litematic, .schem, .nbt, .schematic) found anywhere in the library into
+     * blueprints next to them, and moves the originals to {@code pawprint/imported}.
+     */
+    public static ImportResult importForeignFiles() {
+        Path root = root();
+        List<Path> files = new ArrayList<>();
+        if (Files.isDirectory(root)) {
+            try (Stream<Path> walk = Files.walk(root)) {
+                walk.filter(Files::isRegularFile).filter(file -> Formats.forFile(file) != null).forEach(files::add);
+            } catch (IOException e) {
+                Pawprint.LOG.warn("Could not scan {} for files to import", root, e);
+            }
+        }
+        int imported = 0;
+        List<String> failures = new ArrayList<>();
+        for (Path file : files) {
+            try {
+                Blueprint blueprint = Formats.forFile(file).read(file);
+                saveNew(blueprint, groupOf(relativize(file)));
+                Path keep = Pawprint.dataDir().resolve("imported");
+                Files.createDirectories(keep);
+                Files.move(file, uniqueFile(keep, Formats.baseName(file),
+                        file.getFileName().toString().substring(Formats.baseName(file).length())));
+                imported++;
+            } catch (IOException | RuntimeException e) {
+                Pawprint.LOG.warn("Could not import {}", file, e);
+                failures.add(file.getFileName() + ": " + e.getMessage());
+            }
+        }
+        return new ImportResult(imported, failures);
+    }
+
+    /** Copies dropped files into a group of the library, then converts any that are in other formats. */
+    public static ImportResult importDropped(List<Path> dropped, String group) {
+        List<String> failures = new ArrayList<>();
+        int copied = 0;
+        for (Path file : dropped) {
+            String name = file.getFileName().toString();
+            boolean isNative = name.endsWith(BlueprintIO.EXTENSION) || name.endsWith(TEXT_EXTENSION);
+            if (!isNative && Formats.forFile(file) == null) {
+                failures.add(name + ": unsupported file type");
+                continue;
+            }
+            try {
+                Path folder = folder(group);
+                Files.createDirectories(folder);
+                Files.copy(file, uniqueFile(folder, Formats.baseName(file), name.substring(Formats.baseName(file).length())));
+                if (isNative) {
+                    copied++;
+                }
+            } catch (IOException e) {
+                failures.add(name + ": " + e.getMessage());
+            }
+        }
+        ImportResult converted = importForeignFiles();
+        failures.addAll(converted.failures());
+        return new ImportResult(copied + converted.imported(), failures);
+    }
+
+    /** Writes a blueprint in another format to {@code pawprint/exports} and returns the file. */
+    public static Path export(Entry entry, Formats format) throws IOException {
+        Blueprint blueprint = read(entry.file());
+        Path folder = Pawprint.dataDir().resolve("exports");
+        Files.createDirectories(folder);
+        Path file = uniqueFile(folder, fileName(blueprint.meta().name), format.extension);
+        format.write(blueprint, file);
+        return file;
     }
 
     public static void createGroup(String group) throws IOException {

@@ -168,5 +168,13 @@
   "pawprint.studio.leaving": "Leaving for the studio…",
   "pawprint.studio.pasting": "Studio: copying terrain %s%%",
   "pawprint.studio.ready": "Studio ready. Press P for the studio menu when you are done.",
-  "pawprint.studio.placed_back": "Placed \"%s\" from the studio at its original position."
+  "pawprint.studio.placed_back": "Placed \"%s\" from the studio at its original position.",
+  "pawprint.library.manage.export": "Export…",
+  "pawprint.library.export.title": "Export \"%s\"",
+  "pawprint.library.export.litematic": "Litematica (.litematic)",
+  "pawprint.library.export.sponge_schematic": "WorldEdit / FAWE (.schem)",
+  "pawprint.library.export.structure": "Structure Block / Create (.nbt)",
+  "pawprint.library.exported": "Exported %s to the pawprint/exports folder.",
+  "pawprint.library.imported_files": "Imported %s file(s). Originals were moved to pawprint/imported.",
+  "pawprint.library.import_failed": "%s file(s) could not be imported, e.g. %s"
 }

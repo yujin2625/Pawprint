@@ -77,6 +77,8 @@ public class LibraryScreen extends Screen {
     private @Nullable Component status;
     private int statusColor;
     private @Nullable String pendingSelection;
+    /** Files from other mods are converted once per opening of the library. */
+    private boolean importedOnOpen;
 
     public LibraryScreen(@Nullable Screen parent) {
         super(Component.translatable("pawprint.screen.library.title"));
@@ -149,10 +151,31 @@ public class LibraryScreen extends Screen {
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
                 .bounds(rowLeft + (buttonWidth + GAP) * 3, row2, buttonWidth, 20).build());
 
+        if (!importedOnOpen) {
+            importedOnOpen = true;
+            showImportResult(BlueprintLibrary.importForeignFiles(), false);
+        }
         all = BlueprintLibrary.list();
         applyFilter();
         browser.select(keepSelection);
         updateButtons();
+    }
+
+    /** Dropping files on the game window adds them to the shown group, converting other formats. */
+    @Override
+    public void onFilesDrop(List<Path> files) {
+        String group = groupFilter().startsWith("*") ? "" : groupFilter();
+        showImportResult(BlueprintLibrary.importDropped(files, group), true);
+        refresh();
+    }
+
+    private void showImportResult(BlueprintLibrary.ImportResult result, boolean always) {
+        if (!result.failures().isEmpty()) {
+            setStatus(Component.translatable("pawprint.library.import_failed", result.failures().size(),
+                    result.failures().get(0)), ERROR_COLOR);
+        } else if (result.imported() > 0 || always) {
+            setStatus(Component.translatable("pawprint.library.imported_files", result.imported()), SUCCESS_COLOR);
+        }
     }
 
     private Button button(String key, Runnable action, int x, int y, int buttonWidth) {
