@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "${neoforge_loader_version_range}"
+loaderVersion = "${forge_loader_version_range}"
 license = "${license}"
 issueTrackerURL = "https://github.com/yujin2625/Pawprint/issues"
 
@@ -13,19 +13,16 @@ description = '''${description}'''
 # Client-only: servers do not need this mod, and its presence is not checked when connecting.
 displayTest = "IGNORE_ALL_VERSION"
 
-[[mixins]]
-config = "${mod_id}.mixins.json"
-
 [[dependencies.${mod_id}]]
-modId = "neoforge"
-type = "required"
-versionRange = "[${neoforge_version},)"
+modId = "forge"
+mandatory = true
+versionRange = "[${forge_version},)"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.${mod_id}]]
 modId = "minecraft"
-type = "required"
+mandatory = true
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "CLIENT"

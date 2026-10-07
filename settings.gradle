@@ -35,4 +35,4 @@ plugins {
 rootProject.name = 'Pawprint'
 include('common')
 include('fabric')
-include('neoforge')
+include('forge')
