@@ -40,6 +40,9 @@ public final class PawprintClient {
         while (PawprintKeys.TOGGLE_EDIT.consumeClick()) {
             EditMode.toggle(minecraft);
         }
+        while (PawprintKeys.TOGGLE_PLACEMENT_VIEW.consumeClick()) {
+            togglePlacementView(minecraft);
+        }
         while (PawprintKeys.EDIT_MENU.consumeClick()) {
             if (minecraft.screen == null) {
                 if (!EditMode.isActive()) {
@@ -52,6 +55,16 @@ public final class PawprintClient {
             markCorner(minecraft);
         }
         handlePlacementKeys(minecraft);
+    }
+
+    private static void togglePlacementView(Minecraft minecraft) {
+        if (EditMode.isActive()) {
+            EditMode.toggle(minecraft); // Edit mode already shows everything; switch over to placement mode.
+        }
+        boolean viewing = !PlacementManager.isViewing();
+        PlacementManager.setViewing(viewing);
+        notify(minecraft, Component.translatable(viewing ? "pawprint.placement.view_on" : "pawprint.placement.view_off",
+                PlacementManager.placements().size()));
     }
 
     private static void markCorner(Minecraft minecraft) {
@@ -70,7 +83,7 @@ public final class PawprintClient {
     }
 
     private static void handlePlacementKeys(Minecraft minecraft) {
-        Placement placement = PlacementManager.active();
+        Placement placement = PlacementManager.isVisible() ? PlacementManager.active() : null;
         Direction facing = minecraft.player.getDirection();
         int step = Screen.hasShiftDown() ? FAST_MOVE : 1;
         boolean changed = false;

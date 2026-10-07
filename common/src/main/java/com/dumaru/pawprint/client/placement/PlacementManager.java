@@ -3,6 +3,7 @@ package com.dumaru.pawprint.client.placement;
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.ClientContext;
 import com.dumaru.pawprint.client.edit.Draft;
+import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.google.gson.Gson;
@@ -40,6 +41,8 @@ public final class PlacementManager {
 
     private static final List<Placement> placements = new ArrayList<>();
     private static int active = -1;
+    /** Placement mode: placements are shown while clicks still go to the server, for building them for real. */
+    private static boolean viewing;
     private static @Nullable String server;
     private static @Nullable String dimension;
 
@@ -82,6 +85,19 @@ public final class PlacementManager {
 
     public static @Nullable Placement active() {
         return active >= 0 && active < placements.size() ? placements.get(active) : null;
+    }
+
+    /** Ghosts are drawn only in placement mode or edit mode; otherwise the world looks untouched. */
+    public static boolean isVisible() {
+        return viewing || EditMode.isActive();
+    }
+
+    public static boolean isViewing() {
+        return viewing;
+    }
+
+    public static void setViewing(boolean value) {
+        viewing = value;
     }
 
     public static void add(Placement placement) {
@@ -140,8 +156,11 @@ public final class PlacementManager {
                 }
             }
         }
-        // The draft being edited is drawn like a placement; it wins where both cover the same block.
-        for (Long2ObjectMap.Entry<BlockState> entry : Draft.cells().long2ObjectEntrySet()) {
+        // The draft being edited is drawn like a placement, but only in edit mode; it wins where both overlap.
+        Iterable<Long2ObjectMap.Entry<BlockState>> draftCells = EditMode.isActive()
+                ? Draft.cells().long2ObjectEntrySet()
+                : List.of();
+        for (Long2ObjectMap.Entry<BlockState> entry : draftCells) {
             BlockPos pos = BlockPos.of(entry.getLongKey());
             BlockState target = entry.getValue();
             BlockState actual = level.getBlockState(pos);

@@ -61,9 +61,12 @@ public final class EditMode {
     public static void toggle(Minecraft minecraft) {
         active = !active;
         cancelShape();
+        // Leaving edit mode returns to the plain world, not to placement mode.
+        PlacementManager.setViewing(false);
         if (!active) {
             Draft.save();
         }
+        PlacementManager.changed(); // Show or hide the draft right away.
         PawprintClient.notify(minecraft, Component.translatable(active ? "pawprint.edit.on" : "pawprint.edit.off"));
     }
 

@@ -4,6 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
+import com.dumaru.pawprint.format.text.TextBlueprintReader;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,6 +19,9 @@ import java.util.stream.Stream;
  * Files are addressed by their path relative to the library root, with forward slashes.
  */
 public final class BlueprintLibrary {
+    public static final String TEXT_EXTENSION = ".pawprint.json";
+    private static final long MAX_TEXT_BYTES = 32L << 20;
+
     private BlueprintLibrary() {
     }
 
@@ -41,8 +45,8 @@ public final class BlueprintLibrary {
                     String relative = relativize(file);
                     int slash = relative.lastIndexOf('/');
                     String group = slash < 0 ? "" : relative.substring(0, slash);
-                    entries.add(new Entry(file, relative, group, BlueprintIO.readMeta(file)));
-                } catch (IOException e) {
+                    entries.add(new Entry(file, relative, group, readMeta(file)));
+                } catch (IOException | TextBlueprintReader.FormatException e) {
                     Pawprint.LOG.warn("Skipping unreadable blueprint {}", file, e);
                 }
             }
@@ -67,7 +71,35 @@ public final class BlueprintLibrary {
     }
 
     public static Blueprint load(String relativePath) throws IOException {
-        return BlueprintIO.read(resolve(relativePath));
+        return read(resolve(relativePath));
+    }
+
+    /** Reads either format: binary {@code .pawprint} or text {@code .pawprint.json}. */
+    public static Blueprint read(Path file) throws IOException {
+        if (!isTextFile(file)) {
+            return BlueprintIO.read(file);
+        }
+        try {
+            return TextBlueprintReader.read(Files.readString(file), "").blueprint();
+        } catch (TextBlueprintReader.FormatException e) {
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+
+    private static BlueprintMeta readMeta(Path file) throws IOException, TextBlueprintReader.FormatException {
+        if (!isTextFile(file)) {
+            return BlueprintIO.readMeta(file);
+        }
+        // Text files have no separate metadata; read them fully. They are small by nature.
+        if (Files.size(file) > MAX_TEXT_BYTES) {
+            throw new IOException("Text blueprint larger than " + MAX_TEXT_BYTES + " bytes");
+        }
+        return TextBlueprintReader.read(Files.readString(file), "").blueprint().meta();
+    }
+
+    /** Text blueprints can only be replaced by saving as a new binary file. */
+    public static boolean isTextFile(Path file) {
+        return file.getFileName().toString().endsWith(TEXT_EXTENSION);
     }
 
     public static Path resolve(String relativePath) throws IOException {
@@ -85,7 +117,8 @@ public final class BlueprintLibrary {
     }
 
     private static boolean isBlueprintFile(Path file) {
-        return Files.isRegularFile(file) && file.getFileName().toString().endsWith(BlueprintIO.EXTENSION);
+        String name = file.getFileName().toString();
+        return Files.isRegularFile(file) && (name.endsWith(BlueprintIO.EXTENSION) || name.endsWith(TEXT_EXTENSION));
     }
 
     /** Keeps letters (any script), digits, spaces, '-' and '_' so names like "참나무 오두막" stay readable. */

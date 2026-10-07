@@ -27,6 +27,10 @@ public final class PawprintConfig {
 
     /** Ghost blocks farther than this many blocks from the camera are not drawn. */
     public int ghostRenderDistance = 64;
+    /** Opacity of ghost blocks, from 0.2 (faint) to 1.0 (looks solid). */
+    public float ghostOpacity = 0.65f;
+    /** Draw ghost blocks at full brightness instead of the light level where they stand (easier to see at night). */
+    public boolean ghostFullBright = false;
     /** Upper bound on ghost blocks drawn per frame. */
     public int maxGhostBlocks = 50_000;
 
@@ -74,6 +78,7 @@ public final class PawprintConfig {
 
     private void sanitize() {
         ghostRenderDistance = Math.clamp(ghostRenderDistance, 8, 512);
+        ghostOpacity = Math.clamp(ghostOpacity, 0.2f, 1f);
         maxGhostBlocks = Math.clamp(maxGhostBlocks, 1_000, 1_000_000);
         editReach = Math.clamp(editReach, 5, 256);
         snapshotRadiusChunks = Math.clamp(snapshotRadiusChunks, 1, 32);

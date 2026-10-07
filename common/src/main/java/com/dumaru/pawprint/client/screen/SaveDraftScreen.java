@@ -48,6 +48,9 @@ public class SaveDraftScreen extends Screen {
         String source = Draft.sourceFile();
         if (source != null) {
             name.setValue(sourceName(source));
+            if (source.endsWith(BlueprintLibrary.TEXT_EXTENSION)) {
+                source = null; // Text blueprints are not overwritten with the binary format.
+            }
         }
         name.setResponder(value -> updateButtons());
 
@@ -67,7 +70,7 @@ public class SaveDraftScreen extends Screen {
 
     private static String sourceName(String source) {
         try {
-            return BlueprintIO.readMeta(BlueprintLibrary.resolve(source)).name;
+            return BlueprintLibrary.load(source).meta().name;
         } catch (IOException e) {
             return "";
         }

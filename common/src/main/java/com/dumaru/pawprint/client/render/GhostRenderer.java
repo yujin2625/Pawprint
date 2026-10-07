@@ -16,6 +16,7 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -48,10 +49,11 @@ public final class GhostRenderer {
             Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null};
     private static final RandomSource RANDOM = RandomSource.create();
 
-    private static final float MISSING_ALPHA = 0.5f;
-    private static final float WRONG_STATE_ALPHA = 0.7f;
+    private static final TintingConsumer TINT = new TintingConsumer();
+
     private static final float WRONG_STATE_SCALE = 1.01f;
-    private static final float PREVIEW_ALPHA = 0.35f;
+    /** The shape preview is drawn fainter than placed ghosts, relative to the configured opacity. */
+    private static final float PREVIEW_OPACITY = 0.55f;
     /** Erasing only affects draft blocks, so only those are outlined, up to this many. */
     private static final int MAX_ERASE_OUTLINES = 4096;
 
@@ -68,27 +70,32 @@ public final class GhostRenderer {
         List<GhostBlock> visible = visibleGhosts(cam);
         PoseStack poseStack = new PoseStack();
 
-        // Pass 1: block models for missing blocks and blocks in the wrong state.
-        VertexConsumer models = BUFFERS.getBuffer(RenderType.translucent());
-        BlockColors colors = minecraft.getBlockColors();
+        // Pass 1: block models for missing blocks, blocks in the wrong state, and the shape preview. They go
+        // through the vanilla block renderer against a world view that includes the ghosts, so lighting, corner
+        // shading and hidden faces match real blocks.
+        float opacity = Pawprint.config().ghostOpacity;
+        boolean fullBright = Pawprint.config().ghostFullBright;
+        GhostWorld world = new GhostWorld(level);
+        VertexConsumer buffer = BUFFERS.getBuffer(RenderType.translucent());
         for (GhostBlock ghost : visible) {
             BlockState target = ghost.target();
             if (target == null || target.getRenderShape() != RenderShape.MODEL) {
                 continue;
             }
             if (ghost.status() == BlockStatus.MISSING) {
-                renderModel(minecraft, level, colors, poseStack, models, cam, ghost, 1f, 1f, 1f, MISSING_ALPHA, 1f);
+                drawBlock(minecraft, world, poseStack, TINT.set(buffer, 1f, 1f, 1f, opacity, fullBright),
+                        cam, target, ghost.pos(), true, 1f);
             } else if (ghost.status() == BlockStatus.WRONG_STATE) {
-                renderModel(minecraft, level, colors, poseStack, models, cam, ghost, 1f, 0.85f, 0.2f, WRONG_STATE_ALPHA,
-                        WRONG_STATE_SCALE);
+                drawBlock(minecraft, world, poseStack, TINT.set(buffer, 1f, 0.85f, 0.2f, Math.min(1f, opacity + 0.1f), fullBright),
+                        cam, target, ghost.pos(), false, WRONG_STATE_SCALE);
             }
         }
         Preview preview = Preview.current();
         if (preview != null && !preview.erase() && preview.state() != null
                 && preview.state().getRenderShape() == RenderShape.MODEL) {
+            TINT.set(buffer, 0.8f, 0.9f, 1f, opacity * PREVIEW_OPACITY, fullBright);
             for (long packed : preview.cells()) {
-                renderModel(minecraft, level, colors, poseStack, models, cam, preview.state(), BlockPos.of(packed), null,
-                        0.8f, 0.9f, 1f, PREVIEW_ALPHA, 1f);
+                drawBlock(minecraft, world, poseStack, TINT, cam, preview.state(), BlockPos.of(packed), false, 1f);
             }
         }
         BUFFERS.endBatch(RenderType.translucent());
@@ -118,7 +125,7 @@ public final class GhostRenderer {
             }
         }
         Placement active = PlacementManager.active();
-        if (active != null) {
+        if (active != null && PlacementManager.isVisible()) {
             boundsBox(poseStack, lines, cam, active.worldBounds(), 0.3f, 0.9f, 1f, 1f);
         }
         renderSelection(poseStack, lines, cam);
@@ -131,6 +138,9 @@ public final class GhostRenderer {
         double maxDistanceSq = (double) distance * distance;
         int limit = Pawprint.config().maxGhostBlocks;
         List<GhostBlock> visible = new ArrayList<>();
+        if (!PlacementManager.isVisible()) {
+            return visible;
+        }
         for (GhostBlock ghost : PlacementManager.ghosts()) {
             if (ghost.status() != BlockStatus.CORRECT && ghost.pos().distToCenterSqr(cam) <= maxDistanceSq) {
                 visible.add(ghost);
@@ -142,20 +152,10 @@ public final class GhostRenderer {
         return visible;
     }
 
-    private static void renderModel(Minecraft minecraft, ClientLevel level, BlockColors colors, PoseStack poseStack,
-                                    VertexConsumer consumer, Vec3 cam, GhostBlock ghost,
-                                    float red, float green, float blue, float alpha, float scale) {
-        renderModel(minecraft, level, colors, poseStack, consumer, cam, ghost.target(), ghost.pos(),
-                ghost.status() == BlockStatus.MISSING ? ghost : null, red, green, blue, alpha, scale);
-    }
-
-    /** {@code cullFor} enables hiding faces shared with neighboring missing ghosts. */
-    private static void renderModel(Minecraft minecraft, ClientLevel level, BlockColors colors, PoseStack poseStack,
-                                    VertexConsumer consumer, Vec3 cam, BlockState state, BlockPos pos,
-                                    @Nullable GhostBlock cullFor,
-                                    float red, float green, float blue, float alpha, float scale) {
-        BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
-
+    private static void drawBlock(Minecraft minecraft, GhostWorld world, PoseStack poseStack, VertexConsumer consumer,
+                                  Vec3 cam, BlockState state, BlockPos pos, boolean cullHiddenFaces, float scale) {
+        BlockRenderDispatcher blocks = minecraft.getBlockRenderer();
+        BakedModel model = blocks.getBlockModel(state);
         poseStack.pushPose();
         poseStack.translate(pos.getX() - cam.x, pos.getY() - cam.y, pos.getZ() - cam.z);
         if (scale != 1f) {
@@ -163,38 +163,29 @@ public final class GhostRenderer {
             poseStack.scale(scale, scale, scale);
             poseStack.translate(-0.5, -0.5, -0.5);
         }
-        PoseStack.Pose pose = poseStack.last();
-        for (Direction face : FACES_AND_GENERAL) {
-            if (face != null && cullFor != null && isHiddenByNeighbor(cullFor, face)) {
-                continue;
-            }
-            RANDOM.setSeed(42L);
-            for (BakedQuad quad : model.getQuads(state, face, RANDOM)) {
-                float shade = level.getShade(quad.getDirection(), quad.isShade());
-                float r = red * shade;
-                float g = green * shade;
-                float b = blue * shade;
-                if (quad.isTinted()) {
-                    int tint = colors.getColor(state, level, pos, quad.getTintIndex());
-                    r *= ((tint >> 16) & 0xFF) / 255f;
-                    g *= ((tint >> 8) & 0xFF) / 255f;
-                    b *= (tint & 0xFF) / 255f;
-                }
-                consumer.putBulkData(pose, quad, r, g, b, alpha, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
-            }
+        try {
+            blocks.getModelRenderer().tesselateBlock(world, model, state, pos, poseStack, consumer, cullHiddenFaces,
+                    RANDOM, state.getSeed(pos), OverlayTexture.NO_OVERLAY);
+        } catch (RuntimeException e) {
+            // A model that cannot handle being rendered outside a chunk: fall back to its plain quads.
+            Pawprint.LOG.debug("Falling back to plain quads for {}", state, e);
+            drawQuads(world, model, state, pos, poseStack.last(), consumer);
         }
         poseStack.popPose();
     }
 
-    /** Skips faces between two missing full blocks, so a ghost wall reads as one surface instead of a grid. */
-    private static boolean isHiddenByNeighbor(GhostBlock ghost, Direction face) {
-        if (ghost.status() != BlockStatus.MISSING) {
-            return false;
+    private static void drawQuads(GhostWorld world, BakedModel model, BlockState state, BlockPos pos,
+                                  PoseStack.Pose pose, VertexConsumer consumer) {
+        BlockColors colors = Minecraft.getInstance().getBlockColors();
+        for (Direction face : FACES_AND_GENERAL) {
+            RANDOM.setSeed(42L);
+            for (BakedQuad quad : model.getQuads(state, face, RANDOM)) {
+                float shade = world.getShade(quad.getDirection(), quad.isShade());
+                int tint = quad.isTinted() ? colors.getColor(state, world, pos, quad.getTintIndex()) : -1;
+                consumer.putBulkData(pose, quad, ((tint >> 16) & 0xFF) / 255f * shade, ((tint >> 8) & 0xFF) / 255f * shade,
+                        (tint & 0xFF) / 255f * shade, 1f, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
+            }
         }
-        GhostBlock neighbor = PlacementManager.ghostAt(ghost.pos().relative(face).asLong());
-        return neighbor != null && neighbor.status() == BlockStatus.MISSING
-                && neighbor.target() != null && neighbor.target().canOcclude()
-                && ghost.target() != null && ghost.target().canOcclude();
     }
 
     private static void renderEditTarget(PoseStack poseStack, VertexConsumer lines, Vec3 cam, @Nullable Preview preview) {

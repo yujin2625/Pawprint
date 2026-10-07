@@ -1,14 +1,18 @@
 package com.dumaru.pawprint.client.screen;
 
 import com.dumaru.pawprint.Pawprint;
+import com.dumaru.pawprint.client.AiTools;
 import com.dumaru.pawprint.client.ClientContext;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.client.Selection;
+import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintMeta;
+import com.dumaru.pawprint.format.text.TextBlueprintReader;
+import com.dumaru.pawprint.format.text.TextBlueprintWriter;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
@@ -20,6 +24,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -29,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,6 +44,13 @@ import java.util.Objects;
 public class LibraryScreen extends Screen {
     private static final int BUTTON_WIDTH = 120;
     private static final int BUTTON_GAP = 4;
+    /** Room below the list for the status lines and three rows of buttons. */
+    private static final int LIST_BOTTOM_MARGIN = 112;
+    /** Above this many blocks the text form gets long for an AI chat; copying still works. */
+    private static final int LARGE_FOR_AI = 20_000;
+    private static final int SUCCESS_COLOR = 0x55FF55;
+    private static final int WARNING_COLOR = 0xFFFF55;
+    private static final int ERROR_COLOR = 0xFF5555;
 
     private final @Nullable Screen parent;
     private BlueprintList list;
@@ -45,7 +58,10 @@ public class LibraryScreen extends Screen {
     private Button placeAtOrigin;
     private Button removePlacement;
     private Button captureSelection;
-    private @Nullable Component error;
+    private Button copyAsText;
+    /** Result of the last action, shown above the buttons; red for errors. */
+    private @Nullable Component status;
+    private int statusColor;
 
     public LibraryScreen(@Nullable Screen parent) {
         super(Component.translatable("pawprint.screen.library.title"));
@@ -54,11 +70,24 @@ public class LibraryScreen extends Screen {
 
     @Override
     protected void init() {
-        list = addRenderableWidget(new BlueprintList(minecraft, width, height - 32 - 64, 32));
+        list = addRenderableWidget(new BlueprintList(minecraft, width, height - 32 - LIST_BOTTOM_MARGIN, 32));
         list.setEntries(BlueprintLibrary.list());
 
         int rowWidth = BUTTON_WIDTH * 3 + BUTTON_GAP * 2;
         int left = (width - rowWidth) / 2;
+
+        // AI row: four narrower buttons spanning the same width as the rows below.
+        int aiWidth = (rowWidth - BUTTON_GAP * 3) / 4;
+        int row0 = height - 82;
+        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.copy_prompt"), b -> copyPrompt())
+                .bounds(left, row0, aiWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.import_clipboard"), b -> importClipboard())
+                .bounds(left + (aiWidth + BUTTON_GAP), row0, aiWidth, 20).build());
+        copyAsText = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.copy_text"), b -> copyAsText())
+                .bounds(left + (aiWidth + BUTTON_GAP) * 2, row0, aiWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.export_blocks"), b -> exportBlockList())
+                .bounds(left + (aiWidth + BUTTON_GAP) * 3, row0, aiWidth, 20).build());
+
         int row1 = height - 56;
         int row2 = height - 30;
         placeHere = addRenderableWidget(button("pawprint.screen.library.place_here", this::placeHere, left, row1));
@@ -87,6 +116,7 @@ public class LibraryScreen extends Screen {
         placeAtOrigin.active = selected != null && isFromHere(selected.meta().origin);
         removePlacement.active = PlacementManager.active() != null;
         captureSelection.active = Selection.box() != null;
+        copyAsText.active = selected != null;
     }
 
     private @Nullable BlueprintLibrary.Entry selected() {
@@ -129,12 +159,15 @@ public class LibraryScreen extends Screen {
         try {
             Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
             PlacementManager.add(new Placement(selected.relativePath(), blueprint, origin, Rotation.NONE, Mirror.NONE));
+            if (!EditMode.isActive()) {
+                PlacementManager.setViewing(true); // Otherwise the new placement would be invisible.
+            }
             onClose();
             PawprintClient.notify(minecraft, Component.translatable("pawprint.placement.placed", selected.meta().name,
                     PawprintKeys.ROTATE.getTranslatedKeyMessage(), PawprintKeys.MIRROR.getTranslatedKeyMessage()));
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not load blueprint {}", selected.file(), e);
-            error = Component.translatable("pawprint.screen.library.load_failed", e.getMessage());
+            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
         }
     }
 
@@ -159,6 +192,72 @@ public class LibraryScreen extends Screen {
         }
     }
 
+    private void setStatus(Component message, int color) {
+        status = message;
+        statusColor = color;
+    }
+
+    // AI blueprints (docs/AI_BLUEPRINT_FORMAT.md)
+
+    private void copyPrompt() {
+        minecraft.keyboardHandler.setClipboard(AiTools.prompt());
+        setStatus(Component.translatable("pawprint.ai.prompt_copied"), SUCCESS_COLOR);
+    }
+
+    private void importClipboard() {
+        String text = minecraft.keyboardHandler.getClipboard();
+        try {
+            TextBlueprintReader.Result result = TextBlueprintReader.read(text, minecraft.getUser().getName());
+            Path file = BlueprintLibrary.saveNew(result.blueprint());
+            refresh();
+            String relative = BlueprintLibrary.relativize(file);
+            list.children().stream().filter(entry -> entry.entry.relativePath().equals(relative))
+                    .findFirst().ifPresent(list::setSelected);
+            if (result.warnings().isEmpty()) {
+                setStatus(Component.translatable("pawprint.ai.imported", result.blueprint().meta().name,
+                        result.blueprint().meta().blockCount), SUCCESS_COLOR);
+            } else {
+                result.warnings().forEach(warning -> Pawprint.LOG.info("Import warning: {}", warning));
+                setStatus(Component.translatable("pawprint.ai.imported_with_warnings", result.blueprint().meta().name,
+                        result.warnings().size(), result.warnings().get(0)), WARNING_COLOR);
+            }
+        } catch (TextBlueprintReader.FormatException e) {
+            // Put the error on the clipboard so it can be pasted straight back to the AI.
+            minecraft.keyboardHandler.setClipboard("The Pawprint importer rejected the JSON: " + e.getMessage()
+                    + "\nPlease fix it and reply with the corrected JSON only.");
+            setStatus(Component.translatable("pawprint.ai.import_failed", e.getMessage()), ERROR_COLOR);
+        } catch (IOException e) {
+            Pawprint.LOG.warn("Could not save the imported blueprint", e);
+            setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
+    private void copyAsText() {
+        BlueprintLibrary.Entry selected = selected();
+        if (selected == null) {
+            return;
+        }
+        try {
+            Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
+            minecraft.keyboardHandler.setClipboard(TextBlueprintWriter.write(blueprint));
+            boolean large = blueprint.meta().blockCount > LARGE_FOR_AI;
+            setStatus(Component.translatable(large ? "pawprint.ai.text_copied_large" : "pawprint.ai.text_copied",
+                    blueprint.meta().blockCount), large ? WARNING_COLOR : SUCCESS_COLOR);
+        } catch (IOException | IllegalStateException e) {
+            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
+    private void exportBlockList() {
+        try {
+            Path file = AiTools.exportBlockList();
+            Util.getPlatform().openPath(file);
+            setStatus(Component.translatable("pawprint.ai.blocks_exported", file.toString()), SUCCESS_COLOR);
+        } catch (IOException e) {
+            setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
     /** Called when returning from the save screen so a new blueprint shows up. */
     void refresh() {
         list.setEntries(BlueprintLibrary.list());
@@ -179,8 +278,12 @@ public class LibraryScreen extends Screen {
             graphics.drawCenteredString(font, Component.translatable("pawprint.screen.library.empty"),
                     width / 2, height / 2 - 20, 0xA0A0A0);
         }
-        if (error != null) {
-            graphics.drawCenteredString(font, error, width / 2, height - 68, 0xFF5555);
+        if (status != null) {
+            List<FormattedCharSequence> lines = font.split(status, Math.min(width - 20, 400));
+            int y = height - LIST_BOTTOM_MARGIN + 6;
+            for (int i = 0; i < Math.min(lines.size(), 2); i++) {
+                graphics.drawCenteredString(font, lines.get(i), width / 2, y + i * 10, statusColor);
+            }
         }
     }
 
@@ -219,7 +322,7 @@ public class LibraryScreen extends Screen {
         @Override
         public void setSelected(@Nullable Entry entry) {
             super.setSelected(entry);
-            error = null;
+            status = null;
             updateButtons();
         }
 
