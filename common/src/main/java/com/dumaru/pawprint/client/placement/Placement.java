@@ -72,6 +72,32 @@ public final class Placement {
         };
     }
 
+    /** Same as {@link #toWorld(long)} but packed and without allocating, for transforming whole blueprints. */
+    public long toWorldPacked(long packedRelative) {
+        int x = BlockPos.getX(packedRelative);
+        int y = BlockPos.getY(packedRelative);
+        int z = BlockPos.getZ(packedRelative);
+        switch (mirror) {
+            case LEFT_RIGHT -> z = -z;
+            case FRONT_BACK -> x = -x;
+            default -> {
+            }
+        }
+        int rx = switch (rotation) {
+            case NONE -> x;
+            case CLOCKWISE_90 -> -z;
+            case CLOCKWISE_180 -> -x;
+            case COUNTERCLOCKWISE_90 -> z;
+        };
+        int rz = switch (rotation) {
+            case NONE -> z;
+            case CLOCKWISE_90 -> x;
+            case CLOCKWISE_180 -> -z;
+            case COUNTERCLOCKWISE_90 -> -x;
+        };
+        return BlockPos.asLong(rx + origin.getX(), y + origin.getY(), rz + origin.getZ());
+    }
+
     public BlockPos toWorld(long packedRelative) {
         return StructureTemplate.transform(BlockPos.of(packedRelative), mirror, rotation, BlockPos.ZERO).offset(origin);
     }

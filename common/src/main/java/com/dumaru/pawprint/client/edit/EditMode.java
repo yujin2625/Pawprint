@@ -66,7 +66,7 @@ public final class EditMode {
         if (!active) {
             Draft.save();
         }
-        PlacementManager.changed(); // Show or hide the draft right away.
+        PlacementManager.draftChanged(); // Show or hide the draft right away.
         PawprintClient.notify(minecraft, Component.translatable(active ? "pawprint.edit.on" : "pawprint.edit.off"));
     }
 
@@ -138,13 +138,13 @@ public final class EditMode {
     public static void undo(Minecraft minecraft) {
         cancelShape();
         PawprintClient.notify(minecraft, Component.translatable(Draft.undo() ? "pawprint.edit.undone" : "pawprint.edit.nothing_to_undo"));
-        PlacementManager.changed();
+        PlacementManager.draftChanged();
     }
 
     public static void redo(Minecraft minecraft) {
         cancelShape();
         PawprintClient.notify(minecraft, Component.translatable(Draft.redo() ? "pawprint.edit.redone" : "pawprint.edit.nothing_to_redo"));
-        PlacementManager.changed();
+        PlacementManager.draftChanged();
     }
 
     public static void cancelShape() {
@@ -249,7 +249,7 @@ public final class EditMode {
         } finally {
             Draft.end();
         }
-        PlacementManager.changed();
+        PlacementManager.draftChanged();
     }
 
     /** The state to place at the target: the brush (oriented unless exact), or the block in the main hand. */

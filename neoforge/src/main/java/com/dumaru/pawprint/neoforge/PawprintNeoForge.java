@@ -20,13 +20,14 @@ public class PawprintNeoForge {
     public PawprintNeoForge(IEventBus modBus) {
         Pawprint.init();
         PawprintClient.init();
+        GhostRenderer.init();
         modBus.addListener(RegisterKeyMappingsEvent.class, event -> PawprintKeys.ALL.forEach(event::register));
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
                 event -> PawprintClient.onClientTick(Minecraft.getInstance()));
         // Same point in the frame as Fabric's AFTER_TRANSLUCENT: after translucent terrain and particles.
         NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class, event -> {
             if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
-                GhostRenderer.render(event.getCamera());
+                GhostRenderer.render(event.getCamera(), event.getFrustum());
             }
         });
         NeoForge.EVENT_BUS.addListener(RenderGuiEvent.Post.class, event -> EditHud.render(event.getGuiGraphics()));

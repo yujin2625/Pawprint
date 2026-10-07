@@ -1,7 +1,5 @@
 package com.dumaru.pawprint.client.render;
 
-import com.dumaru.pawprint.client.placement.BlockStatus;
-import com.dumaru.pawprint.client.placement.GhostBlock;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -28,11 +26,8 @@ final class GhostWorld implements BlockAndTintGetter {
 
     @Override
     public BlockState getBlockState(BlockPos pos) {
-        GhostBlock ghost = PlacementManager.ghostAt(pos.asLong());
-        if (ghost != null && ghost.status() == BlockStatus.MISSING && ghost.target() != null) {
-            return ghost.target();
-        }
-        return level.getBlockState(pos);
+        BlockState ghost = PlacementManager.missingTarget(pos.getX(), pos.getY(), pos.getZ());
+        return ghost != null ? ghost : level.getBlockState(pos);
     }
 
     @Override

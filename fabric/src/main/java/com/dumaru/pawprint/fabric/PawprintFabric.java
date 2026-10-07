@@ -16,9 +16,10 @@ public class PawprintFabric implements ClientModInitializer {
     public void onInitializeClient() {
         Pawprint.init();
         PawprintClient.init();
+        GhostRenderer.init();
         PawprintKeys.ALL.forEach(KeyBindingHelper::registerKeyBinding);
         ClientTickEvents.END_CLIENT_TICK.register(PawprintClient::onClientTick);
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> GhostRenderer.render(context.camera()));
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> GhostRenderer.render(context.camera(), context.frustum()));
         HudRenderCallback.EVENT.register((graphics, tickCounter) -> EditHud.render(graphics));
     }
 }

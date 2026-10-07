@@ -103,6 +103,7 @@ public class SaveDraftScreen extends Screen {
             }
             String relative = BlueprintLibrary.relativize(file);
             Draft.clear();
+            PlacementManager.draftChanged();
             PlacementManager.add(new Placement(relative, blueprint, min, Rotation.NONE, Mirror.NONE));
             minecraft.setScreen(null);
             PawprintClient.notify(minecraft, Component.translatable("pawprint.capture.saved",

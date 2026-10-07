@@ -6,7 +6,17 @@ import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
 import com.dumaru.pawprint.format.text.TextBlueprintWriter;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.dumaru.pawprint.client.placement.Placement;
+import com.dumaru.pawprint.client.placement.PlacementManager;
+import com.dumaru.pawprint.client.render.GhostRenderer;
+import com.dumaru.pawprint.client.studio.StudioWorld;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.nio.file.Path;
 
@@ -61,8 +71,15 @@ public final class SelfTest {
     }
 
     public static void tick(Minecraft minecraft) {
+        if (!ENABLED) {
+            return;
+        }
+        if (done) {
+            worldTick(minecraft);
+            return;
+        }
         // Any menu screen after resource loading will do; a first launch shows an onboarding screen, not the title.
-        if (!ENABLED || done || minecraft.getOverlay() != null || minecraft.screen == null || minecraft.level != null) {
+        if (minecraft.getOverlay() != null || minecraft.screen == null || minecraft.level != null) {
             return;
         }
         done = true;
@@ -94,8 +111,48 @@ public final class SelfTest {
             // Loads every mixin target now, so injection errors show up without joining a world.
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
             Pawprint.LOG.info("SELFTEST mixin audit finished");
+            StudioWorld.open(minecraft);
         } catch (Exception e) {
             Pawprint.LOG.error("SELFTEST failed", e);
+        }
+    }
+
+    private static int worldTicks;
+
+    /**
+     * In the studio world: places a large blueprint in front of the player, then reports frame rate and
+     * renderer timings and saves a screenshot, so the cached section renderer can be checked without a person.
+     */
+    private static void worldTick(Minecraft minecraft) {
+        if (minecraft.level == null || minecraft.player == null || minecraft.screen != null) {
+            return;
+        }
+        worldTicks++;
+        if (worldTicks == 100) {
+            Blueprint.Builder builder = Blueprint.builder();
+            BlockState stone = Blocks.STONE_BRICKS.defaultBlockState();
+            BlockState glass = Blocks.GLASS.defaultBlockState();
+            BlockState stairs = Blocks.OAK_STAIRS.defaultBlockState();
+            for (int y = 0; y < 48; y++) {
+                for (int z = 0; z < 64; z++) {
+                    for (int x = 0; x < 64; x++) {
+                        builder.put(x, y, z, y % 8 == 7 ? glass : (x + z) % 16 == 0 ? stairs : stone);
+                    }
+                }
+            }
+            Blueprint big = builder.build("Selftest Fortress", "test", null);
+            BlockPos origin = minecraft.player.blockPosition().offset(-32, -20, 12);
+            long start = System.nanoTime();
+            PlacementManager.add(new Placement("selftest.pawprint", big, origin, Rotation.NONE, Mirror.NONE));
+            PlacementManager.setViewing(true);
+            Pawprint.LOG.info("SELFTEST placed {} blocks in {} ms", big.meta().blockCount, (System.nanoTime() - start) / 1_000_000);
+            minecraft.player.setYRot(0f); // Face south, toward the blueprint.
+            minecraft.player.setXRot(20f);
+            GhostRenderer.resetStats();
+        } else if (worldTicks == 300) {
+            Pawprint.LOG.info("SELFTEST fps {}, {}", minecraft.getFps(), GhostRenderer.stats());
+            Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest.png", minecraft.getMainRenderTarget(),
+                    message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
         }
     }
 }

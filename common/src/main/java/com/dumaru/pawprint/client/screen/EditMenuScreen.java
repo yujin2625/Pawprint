@@ -113,6 +113,7 @@ public class EditMenuScreen extends Screen {
         if (placement != null) {
             Draft.loadFrom(placement);
             PlacementManager.removeActive();
+            PlacementManager.draftChanged();
             onClose();
         }
     }
@@ -124,7 +125,7 @@ public class EditMenuScreen extends Screen {
         positions.forEach(pos -> Draft.set(pos, null));
         Draft.end();
         EditMode.cancelShape();
-        PlacementManager.changed();
+        PlacementManager.draftChanged();
         updateButtons();
     }
 

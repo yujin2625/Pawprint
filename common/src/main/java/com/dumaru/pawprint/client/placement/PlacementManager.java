@@ -11,13 +11,13 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Placements for the current server and dimension, and the ghost blocks derived from them.
@@ -37,7 +38,10 @@ import java.util.Objects;
  */
 public final class PlacementManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final int REFRESH_INTERVAL_TICKS = 10;
+    /** Blocks compared with the world per tick, spread over the nearest sections first. */
+    private static final int STATUS_BUDGET_PER_TICK = 40_000;
+    /** Checked right after a change, so the nearby overlay updates without waiting. */
+    private static final int STATUS_BUDGET_ON_CHANGE = 200_000;
 
     private static final List<Placement> placements = new ArrayList<>();
     private static int active = -1;
@@ -46,9 +50,12 @@ public final class PlacementManager {
     private static @Nullable String server;
     private static @Nullable String dimension;
 
-    private static List<GhostBlock> ghosts = List.of();
-    private static Long2ObjectMap<GhostBlock> ghostsByPos = new Long2ObjectOpenHashMap<>();
-    private static int ticksUntilRefresh;
+    /** Ghosts of all placements, and separately of the draft, so editing the draft never rebuilds big placements. */
+    private static final GhostStore placementGhosts = new GhostStore();
+    private static final GhostStore draftGhosts = new GhostStore();
+    /** Frees a section's GPU mesh; set by the renderer. */
+    private static Consumer<GhostStore.Section> meshRelease = section -> {
+    };
 
     private PlacementManager() {
     }
@@ -64,19 +71,33 @@ public final class PlacementManager {
             dimension = newDimension;
             load();
             Draft.switchContext(newServer, newDimension);
-            refreshNow();
+            rebuildPlacements();
+            rebuildDraft();
         }
-        if (minecraft.level != null && --ticksUntilRefresh <= 0) {
-            refresh(minecraft.level);
+        if (minecraft.level != null && minecraft.player != null) {
+            Vec3 center = minecraft.gameRenderer.getMainCamera().getPosition();
+            double range = Pawprint.config().ghostRenderDistance;
+            placementGhosts.updateStatus(minecraft.level, center, range, STATUS_BUDGET_PER_TICK);
+            draftGhosts.updateStatus(minecraft.level, center, range, STATUS_BUDGET_PER_TICK);
         }
     }
 
-    public static List<GhostBlock> ghosts() {
-        return ghosts;
+    public static GhostStore placementGhosts() {
+        return placementGhosts;
     }
 
-    public static @Nullable GhostBlock ghostAt(long packedPos) {
-        return ghostsByPos.get(packedPos);
+    public static GhostStore draftGhosts() {
+        return draftGhosts;
+    }
+
+    public static void setMeshRelease(Consumer<GhostStore.Section> release) {
+        meshRelease = release;
+    }
+
+    /** The planned block at a position when it is still missing (draft first), for culling between ghosts. */
+    public static @Nullable BlockState missingTarget(int x, int y, int z) {
+        BlockState draft = draftGhosts.missingTarget(x, y, z);
+        return draft != null ? draft : placementGhosts.missingTarget(x, y, z);
     }
 
     public static List<Placement> placements() {
@@ -104,7 +125,7 @@ public final class PlacementManager {
     public static void setActive(int index) {
         if (index >= 0 && index < placements.size()) {
             active = index;
-            changed();
+            save();
         }
     }
 
@@ -122,69 +143,69 @@ public final class PlacementManager {
         }
     }
 
-    /** Call after changing a placement so the overlay and the saved file update right away. */
+    /** Call after adding, removing, moving, rotating or mirroring a placement. */
     public static void changed() {
         save();
-        refreshNow();
+        rebuildPlacements();
     }
 
-    private static void refreshNow() {
-        ticksUntilRefresh = 0;
-        Level level = Minecraft.getInstance().level;
-        if (level != null) {
-            refresh(level);
-        } else {
-            ghosts = List.of();
-            ghostsByPos = new Long2ObjectOpenHashMap<>();
+    /** Call after the draft changed, or edit mode was toggled (the draft is only shown in edit mode). */
+    public static void draftChanged() {
+        rebuildDraft();
+    }
+
+    private static void rebuildPlacements() {
+        int total = 0;
+        for (Placement placement : placements) {
+            total += placement.blueprint().blocks().size() + placement.blueprint().removals().size();
         }
-    }
-
-    private static void refresh(Level level) {
-        ticksUntilRefresh = REFRESH_INTERVAL_TICKS;
-        Long2ObjectMap<GhostBlock> newByPos = new Long2ObjectOpenHashMap<>();
+        long[] positions = new long[total];
+        BlockState[] targets = new BlockState[total];
+        int n = 0;
         for (Placement placement : placements) {
             Blueprint blueprint = placement.blueprint();
+            // Rotate and mirror each palette entry once, not once per block.
+            BlockState[] palette = new BlockState[blueprint.palette().size()];
+            for (int i = 0; i < palette.length; i++) {
+                BlockState state = blueprint.state(i);
+                palette[i] = state == null ? null : placement.toWorld(state);
+            }
             for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
-                BlockPos pos = placement.toWorld(entry.getLongKey());
-                BlockState state = blueprint.state(entry.getIntValue());
-                GhostBlock ghost;
-                if (state == null) {
-                    ghost = new GhostBlock(pos, null, BlockStatus.MISSING);
-                } else {
-                    BlockState target = placement.toWorld(state);
-                    ghost = new GhostBlock(pos, target, BlockStatus.compare(target, level.getBlockState(pos)));
-                }
-                newByPos.put(pos.asLong(), ghost);
+                positions[n] = placement.toWorldPacked(entry.getLongKey());
+                targets[n++] = palette[entry.getIntValue()];
             }
             for (long removal : blueprint.removals()) {
-                BlockPos pos = placement.toWorld(removal);
-                if (!level.getBlockState(pos).isAir()) {
-                    GhostBlock ghost = new GhostBlock(pos, null, BlockStatus.REMOVE);
-                    newByPos.put(pos.asLong(), ghost);
-                }
+                positions[n] = placement.toWorldPacked(removal);
+                targets[n++] = Blocks.AIR.defaultBlockState();
             }
         }
-        // The draft being edited is drawn like a placement, but only in edit mode; it wins where both overlap.
-        Iterable<Long2ObjectMap.Entry<BlockState>> draftCells = EditMode.isActive()
-                ? Draft.cells().long2ObjectEntrySet()
-                : List.of();
-        for (Long2ObjectMap.Entry<BlockState> entry : draftCells) {
-            BlockPos pos = BlockPos.of(entry.getLongKey());
-            BlockState target = entry.getValue();
-            BlockState actual = level.getBlockState(pos);
-            GhostBlock ghost;
-            if (target.isAir()) {
-                if (actual.isAir()) {
-                    continue;
-                }
-                ghost = new GhostBlock(pos, null, BlockStatus.REMOVE);
-            } else {
-                ghost = new GhostBlock(pos, target, BlockStatus.compare(target, actual));
-            }
-            newByPos.put(pos.asLong(), ghost);
+        placementGhosts.build(positions, targets, n, meshRelease);
+        checkNearby(placementGhosts);
+    }
+
+    private static void rebuildDraft() {
+        if (!EditMode.isActive()) {
+            draftGhosts.clear(meshRelease);
+            return;
         }
-        ghosts = new ArrayList<>(newByPos.values());
-        ghostsByPos = newByPos;
+        Long2ObjectMap<BlockState> cells = Draft.cells();
+        long[] positions = new long[cells.size()];
+        BlockState[] targets = new BlockState[cells.size()];
+        int n = 0;
+        for (Long2ObjectMap.Entry<BlockState> entry : cells.long2ObjectEntrySet()) {
+            positions[n] = entry.getLongKey();
+            targets[n++] = entry.getValue();
+        }
+        draftGhosts.build(positions, targets, n, meshRelease);
+        checkNearby(draftGhosts);
+    }
+
+    private static void checkNearby(GhostStore store) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level != null) {
+            store.updateStatus(minecraft.level, minecraft.gameRenderer.getMainCamera().getPosition(),
+                    Pawprint.config().ghostRenderDistance, STATUS_BUDGET_ON_CHANGE);
+        }
     }
 
     /**

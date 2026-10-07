@@ -33,8 +33,6 @@ public final class PawprintConfig {
     public float ghostOpacity = 0.65f;
     /** Draw ghost blocks at full brightness instead of the light level where they stand (easier to see at night). */
     public boolean ghostFullBright = false;
-    /** Upper bound on ghost blocks drawn per frame. */
-    public int maxGhostBlocks = 50_000;
 
     /** How far the edit-mode crosshair reaches. Purely client-side, so it may exceed the normal reach. */
     public int editReach = 48;
@@ -81,7 +79,6 @@ public final class PawprintConfig {
     private void sanitize() {
         ghostRenderDistance = Math.clamp(ghostRenderDistance, 8, 512);
         ghostOpacity = Math.clamp(ghostOpacity, 0.2f, 1f);
-        maxGhostBlocks = Math.clamp(maxGhostBlocks, 1_000, 1_000_000);
         editReach = Math.clamp(editReach, 5, 256);
         freecamSpeed = Math.clamp(freecamSpeed, 0.05, 5.0);
         snapshotRadiusChunks = Math.clamp(snapshotRadiusChunks, 1, 32);
