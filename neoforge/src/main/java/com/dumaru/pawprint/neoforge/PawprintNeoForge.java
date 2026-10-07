@@ -3,6 +3,7 @@ package com.dumaru.pawprint.neoforge;
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.PawprintKeys;
+import com.dumaru.pawprint.client.edit.EditHud;
 import com.dumaru.pawprint.client.render.GhostRenderer;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -10,6 +11,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -26,5 +28,6 @@ public class PawprintNeoForge {
                 GhostRenderer.render(event.getCamera());
             }
         });
+        NeoForge.EVENT_BUS.addListener(RenderGuiEvent.Post.class, event -> EditHud.render(event.getGuiGraphics()));
     }
 }

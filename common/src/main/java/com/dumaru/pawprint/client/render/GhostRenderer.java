@@ -2,6 +2,9 @@ package com.dumaru.pawprint.client.render;
 
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.Selection;
+import com.dumaru.pawprint.client.edit.Draft;
+import com.dumaru.pawprint.client.edit.EditMode;
+import com.dumaru.pawprint.client.edit.EditTarget;
 import com.dumaru.pawprint.client.placement.BlockStatus;
 import com.dumaru.pawprint.client.placement.GhostBlock;
 import com.dumaru.pawprint.client.placement.Placement;
@@ -28,6 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +51,9 @@ public final class GhostRenderer {
     private static final float MISSING_ALPHA = 0.5f;
     private static final float WRONG_STATE_ALPHA = 0.7f;
     private static final float WRONG_STATE_SCALE = 1.01f;
+    private static final float PREVIEW_ALPHA = 0.35f;
+    /** Erasing only affects draft blocks, so only those are outlined, up to this many. */
+    private static final int MAX_ERASE_OUTLINES = 4096;
 
     private GhostRenderer() {
     }
@@ -74,6 +81,14 @@ public final class GhostRenderer {
             } else if (ghost.status() == BlockStatus.WRONG_STATE) {
                 renderModel(minecraft, level, colors, poseStack, models, cam, ghost, 1f, 0.85f, 0.2f, WRONG_STATE_ALPHA,
                         WRONG_STATE_SCALE);
+            }
+        }
+        Preview preview = Preview.current();
+        if (preview != null && !preview.erase() && preview.state() != null
+                && preview.state().getRenderShape() == RenderShape.MODEL) {
+            for (long packed : preview.cells()) {
+                renderModel(minecraft, level, colors, poseStack, models, cam, preview.state(), BlockPos.of(packed), null,
+                        0.8f, 0.9f, 1f, PREVIEW_ALPHA, 1f);
             }
         }
         BUFFERS.endBatch(RenderType.translucent());
@@ -107,6 +122,7 @@ public final class GhostRenderer {
             boundsBox(poseStack, lines, cam, active.worldBounds(), 0.3f, 0.9f, 1f, 1f);
         }
         renderSelection(poseStack, lines, cam);
+        renderEditTarget(poseStack, lines, cam, preview);
         BUFFERS.endBatch(RenderType.lines());
     }
 
@@ -129,8 +145,15 @@ public final class GhostRenderer {
     private static void renderModel(Minecraft minecraft, ClientLevel level, BlockColors colors, PoseStack poseStack,
                                     VertexConsumer consumer, Vec3 cam, GhostBlock ghost,
                                     float red, float green, float blue, float alpha, float scale) {
-        BlockState state = ghost.target();
-        BlockPos pos = ghost.pos();
+        renderModel(minecraft, level, colors, poseStack, consumer, cam, ghost.target(), ghost.pos(),
+                ghost.status() == BlockStatus.MISSING ? ghost : null, red, green, blue, alpha, scale);
+    }
+
+    /** {@code cullFor} enables hiding faces shared with neighboring missing ghosts. */
+    private static void renderModel(Minecraft minecraft, ClientLevel level, BlockColors colors, PoseStack poseStack,
+                                    VertexConsumer consumer, Vec3 cam, BlockState state, BlockPos pos,
+                                    @Nullable GhostBlock cullFor,
+                                    float red, float green, float blue, float alpha, float scale) {
         BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
 
         poseStack.pushPose();
@@ -142,7 +165,7 @@ public final class GhostRenderer {
         }
         PoseStack.Pose pose = poseStack.last();
         for (Direction face : FACES_AND_GENERAL) {
-            if (face != null && isHiddenByNeighbor(ghost, face)) {
+            if (face != null && cullFor != null && isHiddenByNeighbor(cullFor, face)) {
                 continue;
             }
             RANDOM.setSeed(42L);
@@ -172,6 +195,30 @@ public final class GhostRenderer {
         return neighbor != null && neighbor.status() == BlockStatus.MISSING
                 && neighbor.target() != null && neighbor.target().canOcclude()
                 && ghost.target() != null && ghost.target().canOcclude();
+    }
+
+    private static void renderEditTarget(PoseStack poseStack, VertexConsumer lines, Vec3 cam, @Nullable Preview preview) {
+        if (!EditMode.isActive()) {
+            return;
+        }
+        if (preview != null) {
+            boundsBox(poseStack, lines, cam, preview.bounds(), 1f, 0.85f, 0.2f, 1f);
+            if (preview.erase()) {
+                int drawn = 0;
+                for (long packed : preview.cells()) {
+                    if (Draft.get(packed) != null && drawn++ < MAX_ERASE_OUTLINES) {
+                        lineBox(poseStack, lines, cam, BlockPos.of(packed), -0.1, 1f, 0.3f, 0.3f, 1f);
+                    }
+                }
+            }
+        }
+        EditTarget target = EditMode.target();
+        if (target != null) {
+            lineBox(poseStack, lines, cam, target.placePos(), 0.003, 1f, 1f, 1f, 0.8f);
+            if (target.hovered() != null) {
+                lineBox(poseStack, lines, cam, target.hovered(), 0.006, 1f, 0.4f, 0.4f, 0.6f);
+            }
+        }
     }
 
     private static void renderSelection(PoseStack poseStack, VertexConsumer lines, Vec3 cam) {

@@ -2,6 +2,7 @@ package com.dumaru.pawprint.client.placement;
 
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.ClientContext;
+import com.dumaru.pawprint.client.edit.Draft;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.google.gson.Gson;
@@ -59,6 +60,7 @@ public final class PlacementManager {
             server = newServer;
             dimension = newDimension;
             load();
+            Draft.switchContext(newServer, newDimension);
             refreshNow();
         }
         if (minecraft.level != null && --ticksUntilRefresh <= 0) {
@@ -115,7 +117,6 @@ public final class PlacementManager {
 
     private static void refresh(Level level) {
         ticksUntilRefresh = REFRESH_INTERVAL_TICKS;
-        List<GhostBlock> newGhosts = new ArrayList<>();
         Long2ObjectMap<GhostBlock> newByPos = new Long2ObjectOpenHashMap<>();
         for (Placement placement : placements) {
             Blueprint blueprint = placement.blueprint();
@@ -129,19 +130,33 @@ public final class PlacementManager {
                     BlockState target = placement.toWorld(state);
                     ghost = new GhostBlock(pos, target, BlockStatus.compare(target, level.getBlockState(pos)));
                 }
-                newGhosts.add(ghost);
                 newByPos.put(pos.asLong(), ghost);
             }
             for (long removal : blueprint.removals()) {
                 BlockPos pos = placement.toWorld(removal);
                 if (!level.getBlockState(pos).isAir()) {
                     GhostBlock ghost = new GhostBlock(pos, null, BlockStatus.REMOVE);
-                    newGhosts.add(ghost);
                     newByPos.put(pos.asLong(), ghost);
                 }
             }
         }
-        ghosts = newGhosts;
+        // The draft being edited is drawn like a placement; it wins where both cover the same block.
+        for (Long2ObjectMap.Entry<BlockState> entry : Draft.cells().long2ObjectEntrySet()) {
+            BlockPos pos = BlockPos.of(entry.getLongKey());
+            BlockState target = entry.getValue();
+            BlockState actual = level.getBlockState(pos);
+            GhostBlock ghost;
+            if (target.isAir()) {
+                if (actual.isAir()) {
+                    continue;
+                }
+                ghost = new GhostBlock(pos, null, BlockStatus.REMOVE);
+            } else {
+                ghost = new GhostBlock(pos, target, BlockStatus.compare(target, actual));
+            }
+            newByPos.put(pos.asLong(), ghost);
+        }
+        ghosts = new ArrayList<>(newByPos.values());
         ghostsByPos = newByPos;
     }
 

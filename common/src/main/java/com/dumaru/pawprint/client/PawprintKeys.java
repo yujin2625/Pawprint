@@ -14,6 +14,8 @@ public final class PawprintKeys {
 
     public static final KeyMapping OPEN_LIBRARY = key("open_library", GLFW.GLFW_KEY_B);
     public static final KeyMapping MARK_CORNER = key("mark_corner", GLFW.GLFW_KEY_N);
+    public static final KeyMapping TOGGLE_EDIT = key("toggle_edit", GLFW.GLFW_KEY_G);
+    public static final KeyMapping EDIT_MENU = key("edit_menu", GLFW.GLFW_KEY_H);
 
     // Moves are relative to the direction the player faces.
     public static final KeyMapping MOVE_FORWARD = key("move_forward", GLFW.GLFW_KEY_UP);
@@ -26,7 +28,7 @@ public final class PawprintKeys {
     public static final KeyMapping MIRROR = key("mirror", GLFW.GLFW_KEY_LEFT_BRACKET);
 
     public static final List<KeyMapping> ALL = List.of(
-            OPEN_LIBRARY, MARK_CORNER,
+            OPEN_LIBRARY, MARK_CORNER, TOGGLE_EDIT, EDIT_MENU,
             MOVE_FORWARD, MOVE_BACK, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, ROTATE, MIRROR);
 
     private PawprintKeys() {

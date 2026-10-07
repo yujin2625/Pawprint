@@ -1,7 +1,9 @@
 package com.dumaru.pawprint.client;
 
+import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
+import com.dumaru.pawprint.client.screen.EditMenuScreen;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -26,12 +28,24 @@ public final class PawprintClient {
 
     public static void onClientTick(Minecraft minecraft) {
         PlacementManager.tick(minecraft);
+        EditMode.tick(minecraft);
         if (minecraft.player == null) {
             return;
         }
         while (PawprintKeys.OPEN_LIBRARY.consumeClick()) {
             if (minecraft.screen == null) {
                 minecraft.setScreen(new LibraryScreen(null));
+            }
+        }
+        while (PawprintKeys.TOGGLE_EDIT.consumeClick()) {
+            EditMode.toggle(minecraft);
+        }
+        while (PawprintKeys.EDIT_MENU.consumeClick()) {
+            if (minecraft.screen == null) {
+                if (!EditMode.isActive()) {
+                    EditMode.toggle(minecraft);
+                }
+                minecraft.setScreen(new EditMenuScreen());
             }
         }
         while (PawprintKeys.MARK_CORNER.consumeClick()) {

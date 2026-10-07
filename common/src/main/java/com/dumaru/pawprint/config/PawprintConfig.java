@@ -30,6 +30,9 @@ public final class PawprintConfig {
     /** Upper bound on ghost blocks drawn per frame. */
     public int maxGhostBlocks = 50_000;
 
+    /** How far the edit-mode crosshair reaches. Purely client-side, so it may exceed the normal reach. */
+    public int editReach = 48;
+
     public int snapshotRadiusChunks = 8;
     /** Surface mode copies this many blocks below the surface. */
     public int snapshotSurfaceDepth = 4;
@@ -72,6 +75,7 @@ public final class PawprintConfig {
     private void sanitize() {
         ghostRenderDistance = Math.clamp(ghostRenderDistance, 8, 512);
         maxGhostBlocks = Math.clamp(maxGhostBlocks, 1_000, 1_000_000);
+        editReach = Math.clamp(editReach, 5, 256);
         snapshotRadiusChunks = Math.clamp(snapshotRadiusChunks, 1, 32);
         snapshotSurfaceDepth = Math.clamp(snapshotSurfaceDepth, 0, 64);
         if (searchLanguages == null || searchLanguages.isEmpty()) {

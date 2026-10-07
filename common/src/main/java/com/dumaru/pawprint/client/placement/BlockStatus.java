@@ -20,10 +20,11 @@ public enum BlockStatus {
     CORRECT;
 
     /**
-     * Properties the world changes by itself or that depend on how the block was placed.
-     * Comparing them would mark finished blocks as wrong.
+     * Properties the world changes by itself: leaf decay counters, and connections that follow the neighbors
+     * (fences, walls, panes, stair corners). Comparing them would mark finished blocks as wrong.
      */
-    private static final Set<String> IGNORED_PROPERTIES = Set.of("distance", "persistent");
+    private static final Set<String> IGNORED_PROPERTIES = Set.of(
+            "distance", "persistent", "shape", "north", "south", "east", "west", "up", "down");
 
     public static BlockStatus compare(BlockState target, BlockState actual) {
         if (actual == target) {

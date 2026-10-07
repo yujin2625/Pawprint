@@ -13,6 +13,9 @@ description = '''${description}'''
 # Client-only: servers do not need this mod, and its presence is not checked when connecting.
 displayTest = "IGNORE_ALL_VERSION"
 
+[[mixins]]
+config = "${mod_id}.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
