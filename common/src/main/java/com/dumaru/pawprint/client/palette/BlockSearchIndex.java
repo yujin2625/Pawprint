@@ -11,8 +11,10 @@ import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Every placeable block with its names in all search languages, so a search finds blocks by their Korean name,
@@ -20,6 +22,7 @@ import java.util.Locale;
  */
 public final class BlockSearchIndex {
     private static @Nullable List<Entry> entries;
+    private static @Nullable Map<String, Entry> byId;
 
     private BlockSearchIndex() {
     }
@@ -39,9 +42,23 @@ public final class BlockSearchIndex {
         return entries;
     }
 
+    /** The searchable text (ID and names, lower-cased) for a block ID, or the ID itself when unknown. */
+    public static String searchTextFor(String blockId) {
+        if (byId == null) {
+            Map<String, Entry> map = new HashMap<>();
+            for (Entry entry : entries()) {
+                map.put(entry.id().toString(), entry);
+            }
+            byId = map;
+        }
+        Entry entry = byId.get(blockId);
+        return entry != null ? entry.searchText() : blockId;
+    }
+
     /** Drops the index so it is rebuilt with the current resource packs and language files. */
     public static void invalidate() {
         entries = null;
+        byId = null;
     }
 
     public static List<Entry> search(String query) {

@@ -25,6 +25,8 @@ public final class BlueprintMeta {
     public int blockCount;
     public int removalCount;
     public List<String> mods = new ArrayList<>();
+    /** Distinct block IDs used (without states), so the library can search by block without loading the file. */
+    public List<String> blocks = new ArrayList<>();
     public @Nullable Origin origin;
 
     /** Where the blueprint was made, so it can be placed back at the same spot. */

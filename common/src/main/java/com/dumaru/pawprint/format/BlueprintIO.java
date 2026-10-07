@@ -74,6 +74,28 @@ public final class BlueprintIO {
         }
     }
 
+    /** Replaces only {@code meta.json}, copying the block data unchanged. */
+    public static void writeMeta(Path file, BlueprintMeta meta) throws IOException {
+        byte[] data;
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            data = readEntry(zip, DATA_ENTRY, MAX_DATA_BYTES);
+        }
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(temp))) {
+            zip.putNextEntry(new ZipEntry(META_ENTRY));
+            zip.write(GSON.toJson(meta).getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(DATA_ENTRY));
+            zip.write(data);
+            zip.closeEntry();
+        }
+        try {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     public static BlueprintMeta readMeta(Path file) throws IOException {
         try (ZipFile zip = new ZipFile(file.toFile())) {
             return parseMeta(readEntry(zip, META_ENTRY, MAX_META_BYTES));
@@ -169,6 +191,9 @@ public final class BlueprintIO {
             }
             if (meta.mods == null) {
                 meta.mods = new ArrayList<>();
+            }
+            if (meta.blocks == null) {
+                meta.blocks = new ArrayList<>();
             }
             return meta;
         } catch (JsonParseException e) {

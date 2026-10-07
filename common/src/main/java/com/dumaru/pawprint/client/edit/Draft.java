@@ -76,6 +76,15 @@ public final class Draft {
         return sourceFile;
     }
 
+    /** Keeps "overwrite original" pointing at the right file when it is renamed or moved. */
+    public static void pathChanged(String oldPath, @Nullable String newPath) {
+        if (oldPath.equals(sourceFile)) {
+            sourceFile = newPath;
+            sourceMeta = null;
+            dirty = true;
+        }
+    }
+
     public static @Nullable BlueprintMeta sourceMeta() {
         return sourceMeta;
     }

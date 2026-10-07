@@ -153,10 +153,13 @@ public final class Blueprint {
             meta.blockCount = blocks.size();
             meta.removalCount = removals.size();
             TreeSet<String> mods = new TreeSet<>();
+            TreeSet<String> blockIds = new TreeSet<>();
             for (String entry : palette) {
                 mods.add(BlockStateCodec.namespace(entry));
+                blockIds.add(BlockStateCodec.blockId(entry));
             }
             meta.mods = new ArrayList<>(mods);
+            meta.blocks = new ArrayList<>(blockIds);
             return new Blueprint(meta, palette, blocks, removals);
         }
     }

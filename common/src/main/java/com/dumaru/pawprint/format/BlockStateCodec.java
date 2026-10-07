@@ -27,6 +27,13 @@ public final class BlockStateCodec {
         }
     }
 
+    /** The block ID part of a serialized state, e.g. {@code minecraft:oak_stairs}. */
+    public static String blockId(String value) {
+        int bracket = value.indexOf('[');
+        String id = bracket < 0 ? value : value.substring(0, bracket);
+        return id.contains(":") ? id : "minecraft:" + id;
+    }
+
     public static String namespace(String value) {
         int colon = value.indexOf(':');
         int bracket = value.indexOf('[');

@@ -1,10 +1,12 @@
 package com.dumaru.pawprint.client;
 
+import com.dumaru.pawprint.client.edit.Draft;
 import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.screen.EditMenuScreen;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
+import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -26,7 +28,14 @@ public final class PawprintClient {
     private PawprintClient() {
     }
 
+    /** Called once by each loader after the common init. */
+    public static void init() {
+        BlueprintLibrary.addPathListener(PlacementManager::pathChanged);
+        BlueprintLibrary.addPathListener(Draft::pathChanged);
+    }
+
     public static void onClientTick(Minecraft minecraft) {
+        SelfTest.tick(minecraft);
         PlacementManager.tick(minecraft);
         EditMode.tick(minecraft);
         if (minecraft.player == null) {

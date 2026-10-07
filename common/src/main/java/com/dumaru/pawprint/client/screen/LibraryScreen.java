@@ -9,17 +9,17 @@ import com.dumaru.pawprint.client.Selection;
 import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
+import com.dumaru.pawprint.client.render.ThumbnailCache;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
-import com.dumaru.pawprint.format.text.TextBlueprintWriter;
 import com.dumaru.pawprint.library.BlueprintLibrary;
+import com.dumaru.pawprint.library.LibraryState;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.ObjectSelectionList;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.CommonComponents;
@@ -35,93 +35,276 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Lists saved blueprints and offers the phase-1 actions: place, capture the selection, remove the placement.
+ * The blueprint library: search, group filter, sorting, list or grid view with thumbnails, a detail panel for the
+ * selected blueprint, and the global actions (capture, AI import, block list, folder).
  */
 public class LibraryScreen extends Screen {
-    private static final int BUTTON_WIDTH = 120;
-    private static final int BUTTON_GAP = 4;
-    /** Room below the list for the status lines and three rows of buttons. */
-    private static final int LIST_BOTTOM_MARGIN = 112;
-    /** Above this many blocks the text form gets long for an AI chat; copying still works. */
-    private static final int LARGE_FOR_AI = 20_000;
+    private static final int MARGIN = 8;
+    private static final int GAP = 4;
+    private static final int DETAIL_WIDTH = 150;
+    private static final int TOP = 32;
+    private static final int BOTTOM = 66;
+    private static final int DETAIL_THUMB = 96;
     private static final int SUCCESS_COLOR = 0x55FF55;
     private static final int WARNING_COLOR = 0xFFFF55;
     private static final int ERROR_COLOR = 0xFF5555;
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
+
+    private static String lastSearch = "";
 
     private final @Nullable Screen parent;
-    private BlueprintList list;
+    private List<BlueprintLibrary.Entry> all = List.of();
+    private BlueprintBrowser browser;
+    private EditBox search;
+    private Button groupButton;
+    private Button sortButton;
+    private Button directionButton;
+    private Button viewButton;
     private Button placeHere;
     private Button placeAtOrigin;
+    private Button favorite;
+    private Button manage;
     private Button removePlacement;
     private Button captureSelection;
-    private Button copyAsText;
-    /** Result of the last action, shown above the buttons; red for errors. */
     private @Nullable Component status;
     private int statusColor;
+    private @Nullable String pendingSelection;
 
     public LibraryScreen(@Nullable Screen parent) {
         super(Component.translatable("pawprint.screen.library.title"));
         this.parent = parent;
     }
 
+    // Layout
+
     @Override
     protected void init() {
-        list = addRenderableWidget(new BlueprintList(minecraft, width, height - 32 - LIST_BOTTOM_MARGIN, 32));
-        list.setEntries(BlueprintLibrary.list());
+        LibraryState.Data state = LibraryState.get();
+        String keepSelection = pendingSelection != null ? pendingSelection
+                : browser != null && browser.selected() != null ? browser.selected().relativePath() : null;
+        pendingSelection = null;
 
-        int rowWidth = BUTTON_WIDTH * 3 + BUTTON_GAP * 2;
-        int left = (width - rowWidth) / 2;
+        int right = width - MARGIN;
+        int detailX = right - DETAIL_WIDTH;
+        int listRight = detailX - GAP;
 
-        // AI row: four narrower buttons spanning the same width as the rows below.
-        int aiWidth = (rowWidth - BUTTON_GAP * 3) / 4;
-        int row0 = height - 82;
-        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.copy_prompt"), b -> copyPrompt())
-                .bounds(left, row0, aiWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.import_clipboard"), b -> importClipboard())
-                .bounds(left + (aiWidth + BUTTON_GAP), row0, aiWidth, 20).build());
-        copyAsText = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.copy_text"), b -> copyAsText())
-                .bounds(left + (aiWidth + BUTTON_GAP) * 2, row0, aiWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.library.export_blocks"), b -> exportBlockList())
-                .bounds(left + (aiWidth + BUTTON_GAP) * 3, row0, aiWidth, 20).build());
+        // Top bar: search, group, sort, direction, view.
+        int x = right;
+        viewButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleView())
+                .bounds(x -= 20, 12, 20, 18).build());
+        directionButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleDirection())
+                .bounds(x -= 20 + 2, 12, 20, 18).build());
+        sortButton = addRenderableWidget(Button.builder(Component.empty(), b -> cycleSort())
+                .bounds(x -= 90 + 2, 12, 90, 18).build());
+        groupButton = addRenderableWidget(Button.builder(Component.empty(), b -> pickGroup())
+                .bounds(x -= 100 + 2, 12, 100, 18).build());
+        search = addRenderableWidget(new EditBox(font, MARGIN, 12, Math.max(60, x - 4 - MARGIN), 18,
+                Component.translatable("pawprint.library.search")));
+        search.setHint(Component.translatable("pawprint.library.search_hint").withStyle(ChatFormatting.DARK_GRAY));
+        search.setValue(lastSearch);
+        search.setResponder(value -> {
+            lastSearch = value;
+            applyFilter();
+        });
 
-        int row1 = height - 56;
-        int row2 = height - 30;
-        placeHere = addRenderableWidget(button("pawprint.screen.library.place_here", this::placeHere, left, row1));
+        browser = addRenderableWidget(new BlueprintBrowser(font, MARGIN, TOP + 4, listRight - MARGIN,
+                height - BOTTOM - TOP - 4, entry -> onSelected(), this::placeHereFor));
+        browser.setGrid(state.grid);
+
+        // Detail panel buttons.
+        int buttonY = TOP + 4 + DETAIL_THUMB + 4 + 6 * 10 + 4;
+        int half = (DETAIL_WIDTH - GAP) / 2;
+        placeHere = addRenderableWidget(button("pawprint.screen.library.place_here", this::placeHere, detailX, buttonY, DETAIL_WIDTH));
         placeAtOrigin = addRenderableWidget(button("pawprint.screen.library.place_at_origin", this::placeAtOrigin,
-                left + BUTTON_WIDTH + BUTTON_GAP, row1));
+                detailX, buttonY + 22, DETAIL_WIDTH));
+        favorite = addRenderableWidget(Button.builder(Component.empty(), b -> toggleFavorite())
+                .bounds(detailX, buttonY + 44, half, 20).build());
+        manage = addRenderableWidget(button("pawprint.library.manage", this::openManage, detailX + half + GAP, buttonY + 44, half));
+
+        // Bottom bar: global actions in two rows of four.
+        int buttonWidth = Math.min(110, (width - MARGIN * 2 - GAP * 3) / 4);
+        int rowLeft = (width - (buttonWidth * 4 + GAP * 3)) / 2;
+        int row1 = height - 50;
+        int row2 = height - 26;
+        captureSelection = addRenderableWidget(button("pawprint.screen.library.capture", this::captureSelection, rowLeft, row1, buttonWidth));
+        addRenderableWidget(button("pawprint.screen.library.import_clipboard", this::importClipboard,
+                rowLeft + (buttonWidth + GAP), row1, buttonWidth));
+        addRenderableWidget(button("pawprint.screen.library.copy_prompt", this::copyPrompt,
+                rowLeft + (buttonWidth + GAP) * 2, row1, buttonWidth));
+        addRenderableWidget(button("pawprint.screen.library.export_blocks", this::exportBlockList,
+                rowLeft + (buttonWidth + GAP) * 3, row1, buttonWidth));
         removePlacement = addRenderableWidget(button("pawprint.screen.library.remove_placement", this::removePlacement,
-                left + (BUTTON_WIDTH + BUTTON_GAP) * 2, row1));
-        captureSelection = addRenderableWidget(button("pawprint.screen.library.capture", this::captureSelection, left, row2));
+                rowLeft, row2, buttonWidth));
+        addRenderableWidget(button("pawprint.library.group.new", this::newGroup, rowLeft + (buttonWidth + GAP), row2, buttonWidth));
         addRenderableWidget(button("pawprint.screen.library.open_folder", this::openFolder,
-                left + BUTTON_WIDTH + BUTTON_GAP, row2));
+                rowLeft + (buttonWidth + GAP) * 2, row2, buttonWidth));
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
-                .bounds(left + (BUTTON_WIDTH + BUTTON_GAP) * 2, row2, BUTTON_WIDTH, 20).build());
+                .bounds(rowLeft + (buttonWidth + GAP) * 3, row2, buttonWidth, 20).build());
+
+        all = BlueprintLibrary.list();
+        applyFilter();
+        browser.select(keepSelection);
         updateButtons();
     }
 
-    private Button button(String key, Runnable action, int x, int y) {
-        return Button.builder(Component.translatable(key), b -> action.run()).bounds(x, y, BUTTON_WIDTH, 20).build();
+    private Button button(String key, Runnable action, int x, int y, int buttonWidth) {
+        return Button.builder(Component.translatable(key), b -> action.run()).bounds(x, y, buttonWidth, 20).build();
+    }
+
+    private void applyFilter() {
+        LibraryState.Data state = LibraryState.get();
+        browser.setEntries(LibraryQuery.apply(all, search.getValue(), groupFilter(),
+                LibraryQuery.Sort.valueOf(state.sort), state.ascending));
+        updateButtons();
+    }
+
+    private static String groupFilter() {
+        String group = LibraryState.get().group;
+        return group == null || group.isEmpty() ? LibraryQuery.ALL : group;
     }
 
     private void updateButtons() {
-        if (placeHere == null) {
-            return; // The list can change selection before the buttons exist.
+        if (manage == null) {
+            return;
         }
-        BlueprintLibrary.Entry selected = selected();
+        LibraryState.Data state = LibraryState.get();
+        groupButton.setMessage(Component.translatable("pawprint.library.group", GroupPickerScreen.label(groupFilter())));
+        sortButton.setMessage(Component.translatable(LibraryQuery.Sort.valueOf(state.sort).translationKey()));
+        directionButton.setMessage(Component.literal(state.ascending ? "↑" : "↓"));
+        viewButton.setMessage(Component.literal(state.grid ? "≡" : "▦"));
+
+        BlueprintLibrary.Entry selected = browser.selected();
         placeHere.active = selected != null;
         placeAtOrigin.active = selected != null && isFromHere(selected.meta().origin);
+        favorite.active = selected != null;
+        favorite.setMessage(Component.translatable(selected != null && LibraryState.isFavorite(selected.relativePath())
+                ? "pawprint.library.unfavorite" : "pawprint.library.favorite"));
+        manage.active = selected != null;
         removePlacement.active = PlacementManager.active() != null;
         captureSelection.active = Selection.box() != null;
-        copyAsText.active = selected != null;
     }
 
-    private @Nullable BlueprintLibrary.Entry selected() {
-        BlueprintList.Entry entry = list.getSelected();
-        return entry == null ? null : entry.entry;
+    private void onSelected() {
+        status = null;
+        updateButtons();
+    }
+
+    // Top bar actions
+
+    private void toggleView() {
+        LibraryState.Data state = LibraryState.get();
+        state.grid = !state.grid;
+        LibraryState.save();
+        browser.setGrid(state.grid);
+        updateButtons();
+    }
+
+    private void toggleDirection() {
+        LibraryState.get().ascending = !LibraryState.get().ascending;
+        LibraryState.save();
+        applyFilter();
+    }
+
+    private void cycleSort() {
+        LibraryState.Data state = LibraryState.get();
+        state.sort = LibraryQuery.Sort.valueOf(state.sort).next().name();
+        // Names read best A to Z; everything else newest or largest first.
+        state.ascending = state.sort.equals(LibraryQuery.Sort.NAME.name());
+        LibraryState.save();
+        applyFilter();
+    }
+
+    private void pickGroup() {
+        minecraft.setScreen(new GroupPickerScreen(this, Component.translatable("pawprint.library.group.pick"), true,
+                groupFilter(), group -> {
+            if (!group.startsWith("*")) {
+                createGroup(group);
+            }
+            LibraryState.get().group = group;
+            LibraryState.save();
+        }));
+    }
+
+    private void newGroup() {
+        minecraft.setScreen(new TextInputScreen(this, Component.translatable("pawprint.library.group.new"), "",
+                Component.translatable("pawprint.library.group.new_hint"), false, name -> {
+            createGroup(name);
+            minecraft.setScreen(this);
+        }));
+    }
+
+    private void createGroup(String group) {
+        try {
+            BlueprintLibrary.createGroup(group);
+        } catch (IOException e) {
+            setStatus(Component.translatable("pawprint.library.action_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
+    // Detail panel actions
+
+    private void placeHere() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected != null) {
+            placeHereFor(selected);
+        }
+    }
+
+    private void placeHereFor(BlueprintLibrary.Entry entry) {
+        HitResult hit = minecraft.hitResult;
+        BlockPos origin = hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK
+                ? blockHit.getBlockPos().relative(blockHit.getDirection()) // Like placing a block against a face.
+                : minecraft.player.blockPosition();
+        place(entry, origin);
+    }
+
+    private void placeAtOrigin() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected != null && selected.meta().origin != null) {
+            int[] pos = selected.meta().origin.pos;
+            place(selected, new BlockPos(pos[0], pos[1], pos[2]));
+        }
+    }
+
+    private void place(BlueprintLibrary.Entry entry, BlockPos origin) {
+        try {
+            Blueprint blueprint = BlueprintLibrary.load(entry.relativePath());
+            PlacementManager.add(new Placement(entry.relativePath(), blueprint, origin, Rotation.NONE, Mirror.NONE));
+            if (!EditMode.isActive()) {
+                PlacementManager.setViewing(true); // Otherwise the new placement would be invisible.
+            }
+            LibraryState.markUsed(entry.relativePath());
+            minecraft.setScreen(null);
+            PawprintClient.notify(minecraft, Component.translatable("pawprint.placement.placed", entry.meta().name,
+                    PawprintKeys.ROTATE.getTranslatedKeyMessage(), PawprintKeys.MIRROR.getTranslatedKeyMessage()));
+        } catch (IOException e) {
+            Pawprint.LOG.warn("Could not load blueprint {}", entry.file(), e);
+            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
+        }
+    }
+
+    private void toggleFavorite() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected != null) {
+            LibraryState.toggleFavorite(selected.relativePath());
+            applyFilter();
+        }
+    }
+
+    private void openManage() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected != null) {
+            minecraft.setScreen(new ManageBlueprintScreen(this, selected));
+        }
     }
 
     private static boolean isFromHere(@Nullable BlueprintMeta.Origin origin) {
@@ -130,46 +313,7 @@ public class LibraryScreen extends Screen {
                 && Objects.equals(origin.dimension, ClientContext.dimension());
     }
 
-    private void placeHere() {
-        BlockPos origin = PawprintClient.targetedBlock(minecraft) != null
-                ? placeAgainst(minecraft.hitResult)
-                : minecraft.player.blockPosition();
-        place(origin);
-    }
-
-    /** The position next to the clicked face, like placing a block. */
-    private static BlockPos placeAgainst(HitResult hit) {
-        BlockHitResult blockHit = (BlockHitResult) hit;
-        return blockHit.getBlockPos().relative(blockHit.getDirection());
-    }
-
-    private void placeAtOrigin() {
-        BlueprintLibrary.Entry selected = selected();
-        if (selected != null && selected.meta().origin != null) {
-            int[] pos = selected.meta().origin.pos;
-            place(new BlockPos(pos[0], pos[1], pos[2]));
-        }
-    }
-
-    private void place(BlockPos origin) {
-        BlueprintLibrary.Entry selected = selected();
-        if (selected == null) {
-            return;
-        }
-        try {
-            Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
-            PlacementManager.add(new Placement(selected.relativePath(), blueprint, origin, Rotation.NONE, Mirror.NONE));
-            if (!EditMode.isActive()) {
-                PlacementManager.setViewing(true); // Otherwise the new placement would be invisible.
-            }
-            onClose();
-            PawprintClient.notify(minecraft, Component.translatable("pawprint.placement.placed", selected.meta().name,
-                    PawprintKeys.ROTATE.getTranslatedKeyMessage(), PawprintKeys.MIRROR.getTranslatedKeyMessage()));
-        } catch (IOException e) {
-            Pawprint.LOG.warn("Could not load blueprint {}", selected.file(), e);
-            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
-        }
-    }
+    // Global actions
 
     private void removePlacement() {
         PlacementManager.removeActive();
@@ -192,13 +336,6 @@ public class LibraryScreen extends Screen {
         }
     }
 
-    private void setStatus(Component message, int color) {
-        status = message;
-        statusColor = color;
-    }
-
-    // AI blueprints (docs/AI_BLUEPRINT_FORMAT.md)
-
     private void copyPrompt() {
         minecraft.keyboardHandler.setClipboard(AiTools.prompt());
         setStatus(Component.translatable("pawprint.ai.prompt_copied"), SUCCESS_COLOR);
@@ -206,21 +343,28 @@ public class LibraryScreen extends Screen {
 
     private void importClipboard() {
         String text = minecraft.keyboardHandler.getClipboard();
+        if (text.length() > AiTools.MAX_CLIPBOARD_CHARS) {
+            setStatus(Component.translatable("pawprint.ai.clipboard_too_large", AiTools.MAX_CLIPBOARD_CHARS), ERROR_COLOR);
+            return;
+        }
         try {
             TextBlueprintReader.Result result = TextBlueprintReader.read(text, minecraft.getUser().getName());
-            Path file = BlueprintLibrary.saveNew(result.blueprint());
-            refresh();
-            String relative = BlueprintLibrary.relativize(file);
-            list.children().stream().filter(entry -> entry.entry.relativePath().equals(relative))
-                    .findFirst().ifPresent(list::setSelected);
+            String group = groupFilter().startsWith("*") ? "" : groupFilter();
+            Path file = BlueprintLibrary.saveNew(result.blueprint(), group);
+            Component message;
+            int color;
             if (result.warnings().isEmpty()) {
-                setStatus(Component.translatable("pawprint.ai.imported", result.blueprint().meta().name,
-                        result.blueprint().meta().blockCount), SUCCESS_COLOR);
+                message = Component.translatable("pawprint.ai.imported", result.blueprint().meta().name,
+                        result.blueprint().meta().blockCount);
+                color = SUCCESS_COLOR;
             } else {
                 result.warnings().forEach(warning -> Pawprint.LOG.info("Import warning: {}", warning));
-                setStatus(Component.translatable("pawprint.ai.imported_with_warnings", result.blueprint().meta().name,
-                        result.warnings().size(), result.warnings().get(0)), WARNING_COLOR);
+                message = Component.translatable("pawprint.ai.imported_with_warnings", result.blueprint().meta().name,
+                        result.warnings().size(), result.warnings().get(0));
+                color = WARNING_COLOR;
             }
+            refresh(BlueprintLibrary.relativize(file), message, false);
+            statusColor = color;
         } catch (TextBlueprintReader.FormatException e) {
             // Put the error on the clipboard so it can be pasted straight back to the AI.
             minecraft.keyboardHandler.setClipboard("The Pawprint importer rejected the JSON: " + e.getMessage()
@@ -229,22 +373,6 @@ public class LibraryScreen extends Screen {
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not save the imported blueprint", e);
             setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), ERROR_COLOR);
-        }
-    }
-
-    private void copyAsText() {
-        BlueprintLibrary.Entry selected = selected();
-        if (selected == null) {
-            return;
-        }
-        try {
-            Blueprint blueprint = BlueprintLibrary.load(selected.relativePath());
-            minecraft.keyboardHandler.setClipboard(TextBlueprintWriter.write(blueprint));
-            boolean large = blueprint.meta().blockCount > LARGE_FOR_AI;
-            setStatus(Component.translatable(large ? "pawprint.ai.text_copied_large" : "pawprint.ai.text_copied",
-                    blueprint.meta().blockCount), large ? WARNING_COLOR : SUCCESS_COLOR);
-        } catch (IOException | IllegalStateException e) {
-            setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
         }
     }
 
@@ -258,11 +386,30 @@ public class LibraryScreen extends Screen {
         }
     }
 
-    /** Called when returning from the save screen so a new blueprint shows up. */
-    void refresh() {
-        list.setEntries(BlueprintLibrary.list());
-        updateButtons();
+    private void setStatus(Component message, int color) {
+        status = message;
+        statusColor = color;
     }
+
+    /** Reloads the list; called when returning from the save screen so a new blueprint shows up. */
+    void refresh() {
+        all = BlueprintLibrary.list();
+        applyFilter();
+    }
+
+    /** Reloads the list after a change made by a sub-screen, selecting {@code select} and showing a message. */
+    void refresh(@Nullable String select, Component message, boolean error) {
+        pendingSelection = select;
+        setStatus(message, error ? ERROR_COLOR : SUCCESS_COLOR);
+        if (browser != null) {
+            all = BlueprintLibrary.list();
+            applyFilter();
+            browser.select(select);
+            updateButtons();
+        }
+    }
+
+    // Rendering
 
     @Override
     public void tick() {
@@ -271,91 +418,82 @@ public class LibraryScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        ThumbnailCache.tick();
         super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
-        graphics.drawCenteredString(font, selectionInfo(), width / 2, 20, 0xA0A0A0);
-        if (list.children().isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.screen.library.empty"),
-                    width / 2, height / 2 - 20, 0xA0A0A0);
+        graphics.drawString(font, title, MARGIN, 2, 0xFFFFFF);
+        graphics.drawString(font, selectionInfo(), MARGIN + font.width(title) + 8, 2, 0xA0A0A0);
+        if (browser.isEmpty()) {
+            graphics.drawCenteredString(font, Component.translatable(all.isEmpty()
+                            ? "pawprint.screen.library.empty" : "pawprint.library.no_match"),
+                    browser.getX() + browser.getWidth() / 2, browser.getY() + 20, 0xA0A0A0);
         }
+        renderDetails(graphics);
         if (status != null) {
-            List<FormattedCharSequence> lines = font.split(status, Math.min(width - 20, 400));
-            int y = height - LIST_BOTTOM_MARGIN + 6;
-            for (int i = 0; i < Math.min(lines.size(), 2); i++) {
-                graphics.drawCenteredString(font, lines.get(i), width / 2, y + i * 10, statusColor);
+            List<FormattedCharSequence> lines = font.split(status, width - MARGIN * 2);
+            graphics.drawCenteredString(font, lines.get(0), width / 2, height - BOTTOM + 4, statusColor);
+        }
+    }
+
+    private void renderDetails(GuiGraphics graphics) {
+        BlueprintLibrary.Entry entry = browser.selected();
+        int x = width - MARGIN - DETAIL_WIDTH;
+        int y = TOP + 4;
+        if (entry == null) {
+            graphics.drawCenteredString(font, Component.translatable("pawprint.library.select_hint"),
+                    x + DETAIL_WIDTH / 2, y + 40, 0x808080);
+            return;
+        }
+        BlueprintBrowser.renderThumbnail(graphics, entry, x + (DETAIL_WIDTH - DETAIL_THUMB) / 2, y, DETAIL_THUMB);
+        y += DETAIL_THUMB + 4;
+        BlueprintMeta meta = entry.meta();
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(meta.name).withStyle(ChatFormatting.WHITE));
+        lines.add(Component.translatable("pawprint.screen.library.details", meta.size[0], meta.size[1], meta.size[2],
+                meta.blockCount));
+        lines.add(Component.translatable("pawprint.library.detail.group", GroupPickerScreen.label(entry.group())));
+        lines.add(Component.translatable("pawprint.library.detail.tags",
+                meta.tags.isEmpty() ? "-" : String.join(", ", meta.tags)));
+        lines.add(Component.translatable("pawprint.library.detail.modified", formatDate(meta.modified)));
+        lines.add(Component.translatable("pawprint.library.detail.author", meta.author.isEmpty() ? "-" : meta.author));
+        for (Component line : lines) {
+            graphics.drawString(font, font.plainSubstrByWidth(line.getString(), DETAIL_WIDTH), x, y, 0xC0C0C0);
+            y += 10;
+        }
+        if (!meta.description.isEmpty()) {
+            int descriptionY = placeHere.getY() + 70;
+            for (FormattedCharSequence line : font.split(Component.literal(meta.description), DETAIL_WIDTH)) {
+                if (descriptionY + 10 > height - BOTTOM) {
+                    break;
+                }
+                graphics.drawString(font, line, x, descriptionY, 0x909090);
+                descriptionY += 10;
             }
+        }
+    }
+
+    private static String formatDate(String instant) {
+        try {
+            return DATE.format(Instant.parse(instant));
+        } catch (DateTimeParseException e) {
+            return instant;
         }
     }
 
     private Component selectionInfo() {
         BoundingBox box = Selection.box();
         if (box != null) {
-            return Component.translatable("pawprint.screen.library.selection",
-                    box.getXSpan(), box.getYSpan(), box.getZSpan());
+            return Component.translatable("pawprint.screen.library.selection", box.getXSpan(), box.getYSpan(), box.getZSpan());
         }
-        return Component.translatable("pawprint.screen.library.no_selection",
-                PawprintKeys.MARK_CORNER.getTranslatedKeyMessage());
+        return Component.translatable("pawprint.screen.library.no_selection", PawprintKeys.MARK_CORNER.getTranslatedKeyMessage());
+    }
+
+    @Override
+    public void removed() {
+        ThumbnailCache.releaseAll();
     }
 
     @Override
     public void onClose() {
         minecraft.setScreen(parent);
-    }
-
-    private class BlueprintList extends ObjectSelectionList<BlueprintList.Entry> {
-        BlueprintList(Minecraft minecraft, int width, int height, int y) {
-            super(minecraft, width, height, y, 24);
-        }
-
-        void setEntries(List<BlueprintLibrary.Entry> entries) {
-            clearEntries();
-            for (BlueprintLibrary.Entry entry : entries) {
-                addEntry(new Entry(entry));
-            }
-        }
-
-        @Override
-        public int getRowWidth() {
-            return Math.min(360, width - 20);
-        }
-
-        @Override
-        public void setSelected(@Nullable Entry entry) {
-            super.setSelected(entry);
-            status = null;
-            updateButtons();
-        }
-
-        class Entry extends ObjectSelectionList.Entry<Entry> {
-            final BlueprintLibrary.Entry entry;
-
-            Entry(BlueprintLibrary.Entry entry) {
-                this.entry = entry;
-            }
-
-            @Override
-            public void render(GuiGraphics graphics, int index, int top, int left, int width, int height,
-                               int mouseX, int mouseY, boolean hovering, float partialTick) {
-                BlueprintMeta meta = entry.meta();
-                graphics.drawString(font, meta.name, left + 4, top + 2, 0xFFFFFF);
-                Component details = Component.translatable("pawprint.screen.library.details",
-                        meta.size[0], meta.size[1], meta.size[2], meta.blockCount);
-                if (!entry.group().isEmpty()) {
-                    details = details.copy().append(" · " + entry.group());
-                }
-                graphics.drawString(font, details.copy().withStyle(ChatFormatting.GRAY), left + 4, top + 12, 0xFFFFFF);
-            }
-
-            @Override
-            public boolean mouseClicked(double mouseX, double mouseY, int button) {
-                BlueprintList.this.setSelected(this);
-                return true;
-            }
-
-            @Override
-            public Component getNarration() {
-                return Component.literal(entry.meta().name);
-            }
-        }
     }
 }

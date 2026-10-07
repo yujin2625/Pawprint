@@ -179,6 +179,67 @@ public final class PlacementManager {
         ghostsByPos = newByPos;
     }
 
+    /**
+     * Follows a blueprint file that was renamed, moved ({@code newPath} set) or deleted ({@code newPath} null),
+     * both in the current placements and in the saved placements of every other server and dimension.
+     */
+    public static void pathChanged(String oldPath, @Nullable String newPath) {
+        boolean changed = false;
+        for (int i = placements.size() - 1; i >= 0; i--) {
+            if (placements.get(i).file().equals(oldPath)) {
+                if (newPath == null) {
+                    placements.remove(i);
+                } else {
+                    placements.get(i).setFile(newPath);
+                }
+                changed = true;
+            }
+        }
+        if (changed) {
+            active = Math.min(active, placements.size() - 1);
+            changed();
+        }
+        Path folder = Pawprint.dataDir().resolve("placements");
+        if (!Files.isDirectory(folder)) {
+            return;
+        }
+        try (var files = Files.walk(folder)) {
+            for (Path file : (Iterable<Path>) files.filter(f -> f.toString().endsWith(".json"))::iterator) {
+                rewriteSaved(file, oldPath, newPath);
+            }
+        } catch (IOException e) {
+            Pawprint.LOG.warn("Could not update saved placements", e);
+        }
+    }
+
+    private static void rewriteSaved(Path file, String oldPath, @Nullable String newPath) {
+        try {
+            SavedPlacements saved;
+            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                saved = GSON.fromJson(reader, SavedPlacements.class);
+            }
+            if (saved == null || saved.placements == null
+                    || saved.placements.stream().noneMatch(entry -> oldPath.equals(entry.file))) {
+                return;
+            }
+            if (newPath == null) {
+                saved.placements.removeIf(entry -> oldPath.equals(entry.file));
+                saved.active = Math.min(saved.active, saved.placements.size() - 1);
+            } else {
+                saved.placements.forEach(entry -> {
+                    if (oldPath.equals(entry.file)) {
+                        entry.file = newPath;
+                    }
+                });
+            }
+            try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+                GSON.toJson(saved, writer);
+            }
+        } catch (IOException | JsonParseException e) {
+            Pawprint.LOG.warn("Could not update {}", file, e);
+        }
+    }
+
     // Persistence
 
     private static final class SavedPlacements {

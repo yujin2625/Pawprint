@@ -17,6 +17,9 @@ import java.util.TreeSet;
  * in this game so the AI can use modded blocks too. See docs/AI_BLUEPRINT_FORMAT.md.
  */
 public final class AiTools {
+    /** Clipboard imports larger than this are refused, matching the limit for text files in the library folder. */
+    public static final int MAX_CLIPBOARD_CHARS = 32 << 20;
+
     private static final String PROMPT = """
             You are designing a Minecraft build for the Pawprint mod. Reply with ONE JSON object only, no prose.
 

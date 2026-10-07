@@ -19,6 +19,7 @@ import net.neoforged.neoforge.common.NeoForge;
 public class PawprintNeoForge {
     public PawprintNeoForge(IEventBus modBus) {
         Pawprint.init();
+        PawprintClient.init();
         modBus.addListener(RegisterKeyMappingsEvent.class, event -> PawprintKeys.ALL.forEach(event::register));
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
                 event -> PawprintClient.onClientTick(Minecraft.getInstance()));

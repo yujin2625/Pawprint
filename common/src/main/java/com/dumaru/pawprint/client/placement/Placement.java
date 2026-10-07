@@ -13,7 +13,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * mirrored, then rotated around it, the same way vanilla structure templates are.
  */
 public final class Placement {
-    private final String file;
+    private String file;
     private final Blueprint blueprint;
     private BlockPos origin;
     private Rotation rotation;
@@ -30,6 +30,10 @@ public final class Placement {
     /** Library-relative path of the blueprint file. */
     public String file() {
         return file;
+    }
+
+    void setFile(String file) {
+        this.file = file;
     }
 
     public Blueprint blueprint() {
