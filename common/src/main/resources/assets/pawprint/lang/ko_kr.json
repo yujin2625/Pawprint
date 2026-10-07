@@ -1,6 +1,40 @@
 {
   "key.categories.pawprint": "Pawprint",
   "key.pawprint.open_library": "청사진 라이브러리 열기",
+  "key.pawprint.mark_corner": "선택 영역 모서리 지정",
+  "key.pawprint.move_forward": "배치 앞으로 이동",
+  "key.pawprint.move_back": "배치 뒤로 이동",
+  "key.pawprint.move_left": "배치 왼쪽으로 이동",
+  "key.pawprint.move_right": "배치 오른쪽으로 이동",
+  "key.pawprint.move_up": "배치 위로 이동",
+  "key.pawprint.move_down": "배치 아래로 이동",
+  "key.pawprint.rotate": "배치 회전",
+  "key.pawprint.mirror": "배치 반전",
+
   "pawprint.screen.library.title": "청사진 라이브러리",
-  "pawprint.screen.library.empty": "아직 청사진이 없습니다."
+  "pawprint.screen.library.empty": "아직 청사진이 없습니다.",
+  "pawprint.screen.library.selection": "선택 영역: %s × %s × %s",
+  "pawprint.screen.library.no_selection": "선택 영역 없음. %s 키를 두 번 눌러 두 모서리를 지정하세요.",
+  "pawprint.screen.library.details": "%s × %s × %s · 블럭 %s개",
+  "pawprint.screen.library.place_here": "여기에 배치",
+  "pawprint.screen.library.place_at_origin": "원위치에 배치",
+  "pawprint.screen.library.remove_placement": "배치 제거",
+  "pawprint.screen.library.capture": "선택 영역 저장",
+  "pawprint.screen.library.open_folder": "폴더 열기",
+  "pawprint.screen.library.load_failed": "청사진을 불러오지 못했습니다: %s",
+
+  "pawprint.screen.save.title": "선택 영역을 청사진으로 저장",
+  "pawprint.screen.save.name": "이름",
+  "pawprint.screen.save.save": "저장",
+
+  "pawprint.selection.first": "모서리 1 지정: %s, %s, %s",
+  "pawprint.selection.complete": "%s × %s × %s 선택됨. %s 키로 라이브러리를 열어 저장하세요.",
+
+  "pawprint.capture.too_large": "선택 영역이 너무 큽니다 (%s칸, 최대 %s칸).",
+  "pawprint.capture.unloaded": "선택 영역 일부가 로드되지 않았습니다. 가까이 가서 다시 시도하세요.",
+  "pawprint.capture.empty": "선택 영역에 공기만 있습니다.",
+  "pawprint.capture.write_failed": "파일을 저장하지 못했습니다: %s",
+  "pawprint.capture.saved": "\"%s\" 저장됨 (블럭 %s개)",
+
+  "pawprint.placement.placed": "\"%s\" 배치됨. 방향키 / Page Up / Page Down으로 이동, %s 회전, %s 반전."
 }

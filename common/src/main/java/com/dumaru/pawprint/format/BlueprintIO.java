@@ -1,0 +1,192 @@
+package com.dumaru.pawprint.format;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import it.unimi.dsi.fastutil.longs.Long2IntMap;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntArrayTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.LongArrayTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
+
+/**
+ * Reads and writes {@code .pawprint} files: a zip with {@code meta.json} and {@code blueprint.nbt}.
+ * Every read is bounded so a crafted file cannot exhaust memory.
+ */
+public final class BlueprintIO {
+    public static final int FORMAT_VERSION = 1;
+    public static final String EXTENSION = ".pawprint";
+
+    private static final String META_ENTRY = "meta.json";
+    private static final String DATA_ENTRY = "blueprint.nbt";
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+
+    private static final int MAX_META_BYTES = 1 << 20;
+    private static final int MAX_DATA_BYTES = 64 << 20;
+    private static final long MAX_NBT_HEAP = 512L << 20;
+    private static final int MAX_BLOCKS = 16_000_000;
+    private static final int MAX_PALETTE = 1 << 20;
+
+    private BlueprintIO() {
+    }
+
+    public static void write(Blueprint blueprint, Path file) throws IOException {
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
+        // NbtIo closes the stream it writes to, so compress into memory first instead of into the zip.
+        NbtIo.writeCompressed(toNbt(blueprint), data);
+
+        Files.createDirectories(file.getParent());
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(temp))) {
+            zip.putNextEntry(new ZipEntry(META_ENTRY));
+            zip.write(GSON.toJson(blueprint.meta()).getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(DATA_ENTRY));
+            data.writeTo(zip);
+            zip.closeEntry();
+        }
+        try {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    public static BlueprintMeta readMeta(Path file) throws IOException {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            return parseMeta(readEntry(zip, META_ENTRY, MAX_META_BYTES));
+        }
+    }
+
+    public static Blueprint read(Path file) throws IOException {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            BlueprintMeta meta = parseMeta(readEntry(zip, META_ENTRY, MAX_META_BYTES));
+            byte[] data = readEntry(zip, DATA_ENTRY, MAX_DATA_BYTES);
+            CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.create(MAX_NBT_HEAP));
+            return fromNbt(meta, tag);
+        }
+    }
+
+    private static CompoundTag toNbt(Blueprint blueprint) {
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("DataVersion", blueprint.meta().dataVersion);
+        tag.putIntArray("Size", blueprint.meta().size.clone());
+
+        ListTag palette = new ListTag();
+        for (String entry : blueprint.palette()) {
+            palette.add(StringTag.valueOf(entry));
+        }
+        tag.put("Palette", palette);
+
+        long[] positions = new long[blueprint.blocks().size()];
+        int[] states = new int[positions.length];
+        int i = 0;
+        for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
+            positions[i] = entry.getLongKey();
+            states[i] = entry.getIntValue();
+            i++;
+        }
+        tag.put("Positions", new LongArrayTag(positions));
+        tag.put("States", new IntArrayTag(states));
+        tag.put("Removals", new LongArrayTag(blueprint.removals().toLongArray()));
+        return tag;
+    }
+
+    private static Blueprint fromNbt(BlueprintMeta meta, CompoundTag tag) throws IOException {
+        ListTag paletteTag = tag.getList("Palette", Tag.TAG_STRING);
+        if (paletteTag.size() > MAX_PALETTE) {
+            throw new IOException("Palette too large: " + paletteTag.size());
+        }
+        List<String> palette = new ArrayList<>(paletteTag.size());
+        for (int i = 0; i < paletteTag.size(); i++) {
+            palette.add(paletteTag.getString(i));
+        }
+
+        long[] positions = tag.getLongArray("Positions");
+        int[] states = tag.getIntArray("States");
+        long[] removalArray = tag.getLongArray("Removals");
+        if (positions.length != states.length) {
+            throw new IOException("Positions and states differ in length");
+        }
+        if (positions.length + removalArray.length > MAX_BLOCKS) {
+            throw new IOException("Too many blocks: " + (positions.length + removalArray.length));
+        }
+
+        Long2IntMap blocks = new Long2IntOpenHashMap(positions.length);
+        for (int i = 0; i < positions.length; i++) {
+            if (states[i] < 0 || states[i] >= palette.size()) {
+                throw new IOException("Palette index out of range: " + states[i]);
+            }
+            blocks.put(positions[i], states[i]);
+        }
+        LongSet removals = new LongOpenHashSet(removalArray);
+
+        int[] size = tag.getIntArray("Size");
+        if (size.length == 3) {
+            meta.size = size;
+        }
+        meta.blockCount = blocks.size();
+        meta.removalCount = removals.size();
+        return new Blueprint(meta, palette, blocks, removals);
+    }
+
+    private static BlueprintMeta parseMeta(byte[] bytes) throws IOException {
+        try {
+            BlueprintMeta meta = GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), BlueprintMeta.class);
+            if (meta == null) {
+                throw new IOException("Empty meta.json");
+            }
+            if (meta.format > FORMAT_VERSION) {
+                throw new IOException("Blueprint format " + meta.format + " is newer than this version of Pawprint supports");
+            }
+            if (meta.size == null || meta.size.length != 3) {
+                meta.size = new int[]{0, 0, 0};
+            }
+            if (meta.tags == null) {
+                meta.tags = new ArrayList<>();
+            }
+            if (meta.mods == null) {
+                meta.mods = new ArrayList<>();
+            }
+            return meta;
+        } catch (JsonParseException e) {
+            throw new IOException("Invalid meta.json", e);
+        }
+    }
+
+    private static byte[] readEntry(ZipFile zip, String name, int maxBytes) throws IOException {
+        ZipEntry entry = zip.getEntry(name);
+        if (entry == null) {
+            throw new IOException("Missing " + name);
+        }
+        try (InputStream in = zip.getInputStream(entry)) {
+            byte[] bytes = in.readNBytes(maxBytes + 1);
+            if (bytes.length > maxBytes) {
+                throw new IOException(name + " is larger than " + maxBytes + " bytes");
+            }
+            return bytes;
+        }
+    }
+}

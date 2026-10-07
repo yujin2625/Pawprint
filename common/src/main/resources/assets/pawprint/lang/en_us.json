@@ -1,6 +1,40 @@
 {
   "key.categories.pawprint": "Pawprint",
   "key.pawprint.open_library": "Open Blueprint Library",
+  "key.pawprint.mark_corner": "Mark Selection Corner",
+  "key.pawprint.move_forward": "Move Placement Forward",
+  "key.pawprint.move_back": "Move Placement Back",
+  "key.pawprint.move_left": "Move Placement Left",
+  "key.pawprint.move_right": "Move Placement Right",
+  "key.pawprint.move_up": "Move Placement Up",
+  "key.pawprint.move_down": "Move Placement Down",
+  "key.pawprint.rotate": "Rotate Placement",
+  "key.pawprint.mirror": "Mirror Placement",
+
   "pawprint.screen.library.title": "Blueprint Library",
-  "pawprint.screen.library.empty": "No blueprints yet."
+  "pawprint.screen.library.empty": "No blueprints yet.",
+  "pawprint.screen.library.selection": "Selection: %s × %s × %s",
+  "pawprint.screen.library.no_selection": "No selection. Press %s twice to mark two corners.",
+  "pawprint.screen.library.details": "%s × %s × %s · %s blocks",
+  "pawprint.screen.library.place_here": "Place Here",
+  "pawprint.screen.library.place_at_origin": "Place at Origin",
+  "pawprint.screen.library.remove_placement": "Remove Placement",
+  "pawprint.screen.library.capture": "Save Selection",
+  "pawprint.screen.library.open_folder": "Open Folder",
+  "pawprint.screen.library.load_failed": "Could not load the blueprint: %s",
+
+  "pawprint.screen.save.title": "Save Selection as Blueprint",
+  "pawprint.screen.save.name": "Name",
+  "pawprint.screen.save.save": "Save",
+
+  "pawprint.selection.first": "Corner 1 set at %s, %s, %s",
+  "pawprint.selection.complete": "Selected %s × %s × %s. Press %s to open the library and save it.",
+
+  "pawprint.capture.too_large": "Selection is too large (%s blocks, limit %s).",
+  "pawprint.capture.unloaded": "Part of the selection is not loaded. Move closer and try again.",
+  "pawprint.capture.empty": "The selection contains only air.",
+  "pawprint.capture.write_failed": "Could not save the file: %s",
+  "pawprint.capture.saved": "Saved \"%s\" (%s blocks)",
+
+  "pawprint.placement.placed": "Placed \"%s\". Arrow keys / Page Up / Page Down move it, %s rotates, %s mirrors."
 }

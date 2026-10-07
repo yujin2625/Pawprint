@@ -1,20 +1,112 @@
 package com.dumaru.pawprint.client;
 
+import com.dumaru.pawprint.client.placement.Placement;
+import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.client.screen.LibraryScreen;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Client callbacks that each loader forwards from its own event system.
  */
 public final class PawprintClient {
+    /** Holding Shift while moving a placement moves it this many blocks. */
+    private static final int FAST_MOVE = 5;
+
     private PawprintClient() {
     }
 
     public static void onClientTick(Minecraft minecraft) {
+        PlacementManager.tick(minecraft);
+        if (minecraft.player == null) {
+            return;
+        }
         while (PawprintKeys.OPEN_LIBRARY.consumeClick()) {
             if (minecraft.screen == null) {
                 minecraft.setScreen(new LibraryScreen(null));
             }
+        }
+        while (PawprintKeys.MARK_CORNER.consumeClick()) {
+            markCorner(minecraft);
+        }
+        handlePlacementKeys(minecraft);
+    }
+
+    private static void markCorner(Minecraft minecraft) {
+        BlockPos pos = targetedBlock(minecraft);
+        if (pos == null) {
+            pos = minecraft.player.blockPosition();
+        }
+        int corner = Selection.mark(pos);
+        BoundingBox box = Selection.box();
+        if (corner == 2 && box != null) {
+            notify(minecraft, Component.translatable("pawprint.selection.complete",
+                    box.getXSpan(), box.getYSpan(), box.getZSpan(), PawprintKeys.OPEN_LIBRARY.getTranslatedKeyMessage()));
+        } else {
+            notify(minecraft, Component.translatable("pawprint.selection.first", pos.getX(), pos.getY(), pos.getZ()));
+        }
+    }
+
+    private static void handlePlacementKeys(Minecraft minecraft) {
+        Placement placement = PlacementManager.active();
+        Direction facing = minecraft.player.getDirection();
+        int step = Screen.hasShiftDown() ? FAST_MOVE : 1;
+        boolean changed = false;
+
+        changed |= move(PawprintKeys.MOVE_FORWARD, placement, facing, step);
+        changed |= move(PawprintKeys.MOVE_BACK, placement, facing.getOpposite(), step);
+        changed |= move(PawprintKeys.MOVE_LEFT, placement, facing.getCounterClockWise(), step);
+        changed |= move(PawprintKeys.MOVE_RIGHT, placement, facing.getClockWise(), step);
+        changed |= move(PawprintKeys.MOVE_UP, placement, Direction.UP, step);
+        changed |= move(PawprintKeys.MOVE_DOWN, placement, Direction.DOWN, step);
+        while (PawprintKeys.ROTATE.consumeClick()) {
+            if (placement != null) {
+                placement.rotateClockwise();
+                changed = true;
+            }
+        }
+        while (PawprintKeys.MIRROR.consumeClick()) {
+            if (placement != null) {
+                placement.cycleMirror();
+                changed = true;
+            }
+        }
+        if (changed) {
+            PlacementManager.changed();
+        }
+    }
+
+    private static boolean move(KeyMapping key, @Nullable Placement placement, Direction direction, int step) {
+        boolean moved = false;
+        while (key.consumeClick()) {
+            if (placement != null) {
+                placement.move(direction.getStepX() * step, direction.getStepY() * step, direction.getStepZ() * step);
+                moved = true;
+            }
+        }
+        return moved;
+    }
+
+    /** The block the crosshair points at, or null when it points at air or an entity. */
+    public static @Nullable BlockPos targetedBlock(Minecraft minecraft) {
+        HitResult hit = minecraft.hitResult;
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
+            return blockHit.getBlockPos();
+        }
+        return null;
+    }
+
+    public static void notify(Minecraft minecraft, Component message) {
+        if (minecraft.player != null) {
+            minecraft.player.displayClientMessage(message, true);
         }
     }
 }
