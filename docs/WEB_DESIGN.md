@@ -310,6 +310,7 @@ example.pawpack
   | `viewport-bg`, `grid` | 3D/2D 뷰포트 배경과 격자선 |
   | `selection`, `preview` | 선택 영역, 놓일 자리 미리보기 |
   | `danger`, `warning`, `success` | 오류, 경고(팩에 없는 블럭 등), 완료 |
+  | `chrome`, `chrome-text` | 상단 막대·도구 막대 배경과 글자 (구현 중 추가) |
 - 글자와 배경의 명암비가 낮으면 테마 설정 창에서 경고를 띄운다.
 
 ### 11.2 강조색
