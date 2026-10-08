@@ -1,5 +1,6 @@
 <script lang="ts">
   import { languages, locale, setLanguage, t } from '../i18n/i18n.svelte';
+  import EditorPage from './pages/EditorPage.svelte';
   import PacksPage from './pages/PacksPage.svelte';
   import ProjectsPage from './pages/ProjectsPage.svelte';
 
@@ -11,10 +12,10 @@
     return () => window.removeEventListener('hashchange', update);
   });
 
-  const page = $derived(hash.startsWith('#/packs') ? 'packs' : 'projects');
+  const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor') ? 'editor' : 'projects');
 </script>
 
-<div class="shell">
+<div class={["shell", { full: page === "editor" }]}>
   <header>
     <a class="logo" href="#/projects"><img class="pixel" src="./brand/logo-horizontal-dark@2x.png" alt={t('app.name')} width="108" height="24" /></a>
     <nav aria-label={t('nav.main')}>
@@ -35,16 +36,20 @@
   <main>
     {#if page === 'packs'}
       <PacksPage />
+    {:else if page === 'editor'}
+      <EditorPage />
     {:else}
       <ProjectsPage />
     {/if}
   </main>
 
+  {#if page !== 'editor'}
   <footer>
     <span>{t('app.disclaimer')}</span>
     <span class="spacer"></span>
     <span>{t('app.localOnly')}</span>
   </footer>
+  {/if}
 </div>
 
 <style>
@@ -63,6 +68,19 @@
     padding: 0 24px;
     background: var(--chrome);
     border-bottom: 2px solid var(--outline);
+  }
+
+  .full {
+    height: 100vh;
+    min-height: 0;
+  }
+
+  .full main {
+    max-width: none;
+    padding: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .logo {
