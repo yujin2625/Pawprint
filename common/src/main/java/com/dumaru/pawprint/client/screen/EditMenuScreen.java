@@ -159,7 +159,7 @@ public class EditMenuScreen extends Screen {
         try {
             Path file = Pawprint.dataDir().resolve("exports").resolve(ClientContext.fileSafe(name) + BlueprintIO.EXTENSION);
             BlueprintIO.write(blueprint, file);
-            Util.getPlatform().openPath(file.getParent());
+            Util.getPlatform().openFile(file.getParent().toFile());
             setStatus(Component.translatable("pawprint.edit.exported", file.getFileName().toString()), 0x80FF80);
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not export the draft", e);

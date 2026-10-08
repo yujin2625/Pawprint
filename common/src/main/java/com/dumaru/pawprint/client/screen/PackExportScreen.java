@@ -130,7 +130,7 @@ public class PackExportScreen extends Screen {
                 status = Component.translatable("pawprint.screen.pack.done", result.file().getFileName().toString(),
                         result.blocks(), result.textures());
                 statusColor = 0x80FF80;
-                Util.getPlatform().openPath(result.file().getParent());
+                Util.getPlatform().openFile(result.file().getParent().toFile());
             }
             updateButtons();
         }));
@@ -156,8 +156,10 @@ public class PackExportScreen extends Screen {
     /** Languages installed in the game, each a checkbox row. */
     private class LanguageList extends ObjectSelectionList<LanguageList.Entry> {
         LanguageList(Minecraft minecraft, int width, int height, int top, int left) {
-            super(minecraft, width, height, top, ROW);
-            setX(left);
+            super(minecraft, width, PackExportScreen.this.height, top, top + height, ROW);
+            setLeftPos(left);
+            setRenderBackground(false);
+            setRenderTopAndBottom(false);
         }
 
         void replace(List<Entry> entries) {
@@ -172,7 +174,7 @@ public class PackExportScreen extends Screen {
 
         @Override
         protected int getScrollbarPosition() {
-            return getX() + width - 6;
+            return x0 + width - 6;
         }
 
         class Entry extends ObjectSelectionList.Entry<Entry> {
