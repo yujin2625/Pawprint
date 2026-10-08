@@ -15,6 +15,9 @@
   import Palette from '../editor/Palette.svelte';
   import PixelIcon from '../editor/PixelIcon.svelte';
   import Stamps from '../editor/Stamps.svelte';
+  import LayersPanel from '../editor/LayersPanel.svelte';
+  import MaterialsPanel from '../editor/MaterialsPanel.svelte';
+  import { hiddenLayers, moveCellsTo, protectedLayers, rows } from '../../core/blueprint/layers';
 
   let { projectId }: { projectId: string } = $props();
 
@@ -31,7 +34,8 @@
   let viewport: Viewport | null = null;
   let slice: SliceView | null = null;
   let edit3d: Editor3D | null = null;
-  let panelTab = $state<'palette' | 'stamps'>('palette');
+  let panelTab = $state<'palette' | 'layers' | 'materials' | 'stamps'>('palette');
+  let moveTo = $state<number>(0);
   let stampsKey = $state(0);
   let replaceFrom = $state('');
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -60,6 +64,9 @@
         pack = p;
         resources = new BlockResources(p, 4096);
         name = loaded.blueprint.meta.name;
+        editor.solo = null;
+        editor.selection = null;
+        editor.currentLayer = loaded.blueprint.currentLayer = 0;
         const b = loaded.blueprint.bounds();
         editor.slice = b ? (editor.plane === 'y' ? b.min[1] : editor.plane === 'z' ? b.max[2] : b.max[0]) : 0;
         blueprint = loaded.blueprint;
@@ -80,6 +87,7 @@
     viewport = view;
     if (import.meta.env.DEV) (window as unknown as { __viewport?: Viewport }).__viewport = view;
     view.onStats = (s) => (stats = s);
+    view.setHiddenLayers(editor.hiddenLayers);
     void view.show(blueprint);
     const editing = new Editor3D(view, blueprint, {
       settings: () => editor,
@@ -146,9 +154,26 @@
     };
   });
 
+  // Hidden and locked layers: what is drawn and what may be edited.
+  $effect(() => {
+    const bp = blueprint;
+    void revision;
+    const solo = editor.solo;
+    if (!bp) return;
+    if (solo !== null && !bp.layers.some((l) => l.id === solo)) {
+      editor.solo = null;
+      return;
+    }
+    const hidden = hiddenLayers(bp, solo);
+    bp.protectedLayers = new Set([...protectedLayers(bp), ...hidden]);
+    editor.hiddenLayers = hidden;
+    viewport?.setHiddenLayers(hidden);
+    if (!bp.layers.some((l) => l.id === editor.currentLayer)) editor.currentLayer = bp.currentLayer = 0;
+  });
+
   // Tool and slice settings reach the views.
   $effect(() => {
-    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.height, editor.selection, editor.clip, editor.plane, editor.slice, editor.onionBelow, editor.onionAbove, editor.onionOpacity];
+    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.height, editor.selection, editor.clip, editor.hiddenLayers, editor.plane, editor.slice, editor.onionBelow, editor.onionAbove, editor.onionOpacity];
     slice?.settingsChanged();
     edit3d?.refresh();
   });
@@ -236,6 +261,22 @@
     // Keep properties the new block also has (stairs keep their facing); without a pack keep them all.
     const keep = (prop: string) => !def || prop in def.properties;
     onSelection('replace', (b) => replaceInBox(blueprint!, b, replaceFrom, editor.block, keep));
+  }
+
+  const layerChoices = $derived.by(() => {
+    void revision;
+    return blueprint ? rows(blueprint).filter((r) => !r.layer.group).map((r) => r.layer) : [];
+  });
+  const currentLayerName = $derived(layerChoices.find((l) => l.id === editor.currentLayer)?.name ?? '');
+
+  function moveSelectionToLayer() {
+    const box = editor.selection;
+    if (!box || !blueprint) return;
+    const cells: [number, number, number][] = [];
+    for (let y = box.min[1]; y <= box.max[1]; y++)
+      for (let z = box.min[2]; z <= box.max[2]; z++)
+        for (let x = box.min[0]; x <= box.max[0]; x++) if (blueprint.get(x, y, z) !== 0 && blueprint.editable(x, y, z)) cells.push([x, y, z]);
+    moveCellsTo(blueprint, cells, moveTo);
   }
 
   const selectionBlocks = $derived.by(() => {
@@ -382,6 +423,7 @@
       {#if editor.tool === 'fill'}<span>{t('editor.fillHelp')}</span>{/if}
       {#if editor.tool === 'picker'}<span>{t('editor.pickerHelp')}</span>{/if}
       <span class="spacer"></span>
+      <button class="link" type="button" onclick={() => (panelTab = 'layers')}>{t('layers.title')}: <span class="value">{currentLayerName}</span>{#if editor.solo !== null} · {t('layers.soloOn')}{/if}</button>
       <span>{t('editor.block')}: <span class="value">{nameOf(editor.block)}</span></span>
     </div>
 
@@ -399,6 +441,12 @@
         </span>
         <button class="btn" type="button" onclick={() => copySelection(false)}>{t('editor.sel.copy')}</button>
         <button class="btn" type="button" onclick={() => copySelection(true)}>{t('editor.sel.cut')}</button>
+        <span class="field">
+          <select class="input small" bind:value={moveTo} aria-label={t('layers.moveTo')}>
+            {#each layerChoices as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+          </select>
+          <button class="btn" type="button" onclick={moveSelectionToLayer}>{t('layers.moveTo')}</button>
+        </span>
         <button class="btn" type="button" onclick={saveSelectionAsStamp}>{t('editor.sel.saveStamp')}</button>
         <span class="spacer"></span>
         <button class="btn" type="button" onclick={() => (editor.selection = null)}>{t('editor.sel.clear')}</button>
@@ -456,10 +504,16 @@
       <aside class="panel side">
         <div class="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={panelTab === 'palette'} class:on={panelTab === 'palette'} onclick={() => (panelTab = 'palette')}>{t('editor.palette')}</button>
+          <button type="button" role="tab" aria-selected={panelTab === 'layers'} class:on={panelTab === 'layers'} onclick={() => (panelTab = 'layers')}>{t('layers.title')}</button>
+          <button type="button" role="tab" aria-selected={panelTab === 'materials'} class:on={panelTab === 'materials'} onclick={() => (panelTab = 'materials')}>{t('materials.title')}</button>
           <button type="button" role="tab" aria-selected={panelTab === 'stamps'} class:on={panelTab === 'stamps'} onclick={() => (panelTab = 'stamps')}>{t('editor.stamps')}</button>
         </div>
         {#if panelTab === 'palette'}
           {#if resources}<Palette {pack} {resources} />{/if}
+        {:else if panelTab === 'layers'}
+          {#if blueprint}<LayersPanel {blueprint} {revision} />{/if}
+        {:else if panelTab === 'materials'}
+          {#if blueprint}<MaterialsPanel {blueprint} {pack} {revision} />{/if}
         {:else}
           <Stamps currentId={projectId} refreshKey={stampsKey} />
         {/if}
@@ -625,6 +679,14 @@
     height: 2px;
     margin: 3px 0;
     background: var(--outline);
+  }
+
+  .link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--chrome-muted);
+    cursor: pointer;
   }
 
   .num {

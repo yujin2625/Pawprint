@@ -9,6 +9,8 @@ import type { Viewport } from './viewport';
 export interface Edit3DSettings extends ToolSettings {
   selection: Box | null;
   clip: Clip | null;
+  /** Layers not drawn: the cursor passes through them. */
+  hiddenLayers: ReadonlySet<number>;
 }
 
 export interface Edit3DCallbacks {
@@ -85,7 +87,8 @@ export class Editor3D {
   /** The block under the cursor, or the ground below the blueprint when nothing is hit. */
   private hit(x: number, y: number): { cell: World; normal: World; ground: boolean } | null {
     const { origin, dir } = this.ray(x, y);
-    const found = raycast(origin, dir, 2000, (cx, cy, cz) => this.bp.get(cx, cy, cz) > 0);
+    const hidden = this.callbacks.settings().hiddenLayers;
+    const found = raycast(origin, dir, 2000, (cx, cy, cz) => this.bp.get(cx, cy, cz) > 0 && !(hidden.size && hidden.has(this.bp.layerAt(cx, cy, cz))));
     if (found) return { cell: found.cell, normal: found.normal, ground: false };
     const ground = this.bp.bounds()?.min[1] ?? 0;
     const point = rayAxisPlane(origin, dir, 1, ground);

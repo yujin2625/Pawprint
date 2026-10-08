@@ -13,6 +13,12 @@ export const editor = $state({
   /** Layers 3D shapes (box, wall, sphere, …) extrude through. */
   height: 4,
   selection: null as Box | null,
+  /** Layers not drawn and not editable; derived from the layer panel by the editor page. */
+  hiddenLayers: new Set<number>() as ReadonlySet<number>,
+  /** Layer shown alone, or null. */
+  solo: null as number | null,
+  /** Layer new blocks go to (mirrors the blueprint's currentLayer). */
+  currentLayer: 0,
   clip: null as Clip | null,
   plane: 'y' as Plane,
   slice: 0,

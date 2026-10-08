@@ -34,6 +34,7 @@ export class Viewport {
   private blueprint: EditableBlueprint | null = null;
   private unsubscribe: (() => void) | null = null;
   private sentPalette = 0;
+  private hidden: ReadonlySet<number> = new Set();
   private pendingCells: number[] = [];
   private flushing = false;
   private gridKey = '';
@@ -90,17 +91,38 @@ export class Viewport {
     this.updateHelpers();
     this.frame();
 
-    const cells = bp.allCells();
     this.worker = new Worker(new URL('../workers/mesher.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<MesherResponse>) => this.onWorker(event.data);
-    this.post({ type: 'load', positions: cells.positions, values: cells.values, palette: entries });
+    this.load(entries);
     this.unsubscribe = bp.onChange((changed) => {
       for (let i = 0; i < changed.length; i += 3) {
         const x = changed[i]!, y = changed[i + 1]!, z = changed[i + 2]!;
-        this.pendingCells.push(x, y, z, bp.get(x, y, z));
+        this.pendingCells.push(x, y, z, this.hidden.has(bp.layerAt(x, y, z)) ? 0 : bp.get(x, y, z));
       }
       void this.flush();
     });
+  }
+
+  /** Sends every visible cell to the worker and rebuilds all sections. */
+  private load(entries = this.resources.meshEntries(this.blueprint?.palette.slice(0, this.sentPalette) ?? [])): void {
+    const bp = this.blueprint;
+    if (!bp) return;
+    const positions: number[] = [];
+    const values: number[] = [];
+    bp.forEachCell((x, y, z, value, layer) => {
+      if (value > 0 && !this.hidden.has(layer)) positions.push(x, y, z), values.push(value);
+    });
+    for (const key of [...this.sections.keys()]) this.removeSection(key);
+    this.queue = [];
+    this.inFlight = 0;
+    this.post({ type: 'load', positions: new Int32Array(positions), values: new Int32Array(values), palette: entries });
+  }
+
+  /** Layers not drawn (hidden in the layer panel, or not the soloed one). */
+  setHiddenLayers(hidden: ReadonlySet<number>): void {
+    const same = hidden.size === this.hidden.size && [...hidden].every((id) => this.hidden.has(id));
+    this.hidden = new Set(hidden);
+    if (!same && this.worker) this.load();
   }
 
   /** Sends edits to the worker, after loading textures for blocks used for the first time. */

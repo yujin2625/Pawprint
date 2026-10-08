@@ -104,10 +104,12 @@ export class SliceView {
     return [Math.round((u - this.center[0]) * this.zoom + w / 2), Math.round((v - this.center[1]) * this.zoom + h / 2)];
   }
 
+  /** What is drawn at a cell: hidden layers show as empty. */
   private valueAt(u: number, v: number, offset = 0): number {
     const s = this.callbacks.settings();
     const [x, y, z] = toWorld(s.plane, s.slice + offset, u, v);
-    return this.blueprint.get(x, y, z);
+    const value = this.blueprint.get(x, y, z);
+    return value !== EMPTY && s.hiddenLayers.size && s.hiddenLayers.has(this.blueprint.layerAt(x, y, z)) ? EMPTY : value;
   }
 
   // Input

@@ -184,7 +184,7 @@ public final class SelfTest {
             return;
         }
         try (var files = java.nio.file.Files.list(folder)) {
-            for (Path file : files.filter(f -> f.toString().endsWith(".pawprint")).sorted().toList()) {
+            for (Path file : files.filter(f -> java.nio.file.Files.isRegularFile(f) && f.toString().endsWith(".pawprint")).sorted().toList()) {
                 Blueprint web = com.dumaru.pawprint.format.BlueprintIO.read(file);
                 long unresolved = java.util.stream.IntStream.range(0, web.palette().size()).filter(i -> web.state(i) == null).count();
                 long layered = web.blocks().keySet().longStream().filter(pos -> web.layer(pos) != 0).count();
@@ -192,6 +192,10 @@ public final class SelfTest {
                         file.getFileName(), web.meta().format, web.sizeX(), web.sizeY(), web.sizeZ(), web.meta().blockCount,
                         web.meta().removalCount, web.palette().size(), unresolved, layered,
                         web.meta().layers == null ? 0 : web.meta().layers.size());
+                // Edited by the mod and saved back, for the web to check that layers came through.
+                Blueprint edited = com.dumaru.pawprint.format.BlockReplace.replace(web, state -> state.is(Blocks.OAK_PLANKS), Blocks.SPRUCE_PLANKS);
+                java.nio.file.Files.createDirectories(folder.resolve("out"));
+                com.dumaru.pawprint.format.BlueprintIO.write(edited, folder.resolve("out").resolve(file.getFileName()));
             }
         }
     }

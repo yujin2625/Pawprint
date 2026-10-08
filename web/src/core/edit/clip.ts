@@ -63,7 +63,7 @@ export function replaceInBox(bp: EditableBlueprint, box: Box, fromId: string, to
     if (id !== fromId) continue;
     const merged = { ...target.props };
     for (const [k, v] of Object.entries(props)) if (keep(k)) merged[k] = v;
-    bp.set(x, y, z, bp.stateIndex(formatState(target.id, merged)) + 1);
+    bp.set(x, y, z, bp.stateIndex(formatState(target.id, merged)) + 1, true);
     count++;
   }
   return count;
