@@ -1,16 +1,12 @@
 import { EMPTY, REMOVAL, type EditableBlueprint } from '../core/blueprint/editable';
-import { brush, ellipse, flood, rect, strokeLine, toSlice, toWorld, unique, type BrushShape, type Cell2, type Plane } from '../core/edit/shapes';
+import { toSlice, toWorld, type Cell2, type Plane } from '../core/edit/shapes';
+import { fillPlane, hoverCells, Stroke, type PlaneRef, type World } from '../core/edit/tools';
+import { boxOf, paste, type Box } from '../core/edit/clip';
+import type { Edit3DSettings } from '../render/editor3d';
 import type { BlockResources } from '../render/resources';
 
-export type Tool = 'pencil' | 'eraser' | 'fill' | 'picker' | 'line' | 'rect' | 'ellipse';
-
 /** What the 2D view needs from the editor each frame. */
-export interface SliceSettings {
-  tool: Tool;
-  block: string;
-  brushShape: BrushShape;
-  brushSize: number;
-  filled: boolean;
+export interface SliceSettings extends Edit3DSettings {
   plane: Plane;
   slice: number;
   onionBelow: boolean;
@@ -21,6 +17,7 @@ export interface SliceSettings {
 export interface SliceCallbacks {
   settings(): SliceSettings;
   onPick(state: string): void;
+  onSelect(box: Box): void;
   onCursor(world: [number, number, number] | null, state: string | null): void;
   onMessage(key: string): void;
 }
@@ -38,9 +35,8 @@ export class SliceView {
   private center: [number, number] = [0, 0];
   private hover: Cell2 | null = null;
   private preview: Cell2[] = [];
-  private anchor: Cell2 | null = null;
-  private last: Cell2 | null = null;
-  private drawing = false;
+  private stroke: Stroke | null = null;
+  private selectAnchor: Cell2 | null = null;
   private panning: { x: number; y: number } | null = null;
   private dirty = true;
   private frameHandle = 0;
@@ -121,7 +117,7 @@ export class SliceView {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('pointerdown', (e) => {
       c.focus();
-      c.setPointerCapture(e.pointerId);
+      capture(c, e.pointerId);
       const cell = this.cellAt(e.clientX, e.clientY);
       if (e.button === 1 || e.button === 2) {
         this.panning = { x: e.clientX, y: e.clientY };
@@ -161,13 +157,11 @@ export class SliceView {
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', () => {
-      if (this.drawing) {
-        this.blueprint.abort();
-        this.drawing = false;
-        this.anchor = null;
-        this.preview = [];
-        this.dirty = true;
-      }
+      this.stroke?.cancel();
+      this.stroke = null;
+      this.selectAnchor = null;
+      this.preview = [];
+      this.dirty = true;
       this.panning = null;
     });
     c.addEventListener('pointerleave', () => {
@@ -203,89 +197,88 @@ export class SliceView {
     if (state) this.callbacks.onPick(state);
   }
 
-  private paintValue(s: SliceSettings): number {
-    return s.tool === 'eraser' ? EMPTY : this.blueprint.stateIndex(s.block) + 1;
+  private ref(s: SliceSettings): PlaneRef {
+    return { plane: s.plane, slice: s.slice, extrude: 1 };
+  }
+
+  /** World cells of a tool, as cells of the current slice (3D shapes show their first layer). */
+  private onSlice(cells: World[], s: SliceSettings): Cell2[] {
+    const out: Cell2[] = [];
+    for (const [x, y, z] of cells) {
+      const c = toSlice(s.plane, x, y, z);
+      if (c.slice === s.slice) out.push([c.u, c.v]);
+    }
+    return out;
   }
 
   private start(cell: Cell2, s: SliceSettings): void {
     if (s.tool === 'fill') {
-      this.fill(cell, s);
+      if (!fillPlane(this.blueprint, s, this.ref(s), cell)) this.callbacks.onMessage('editor.fillTooLarge');
       return;
     }
-    this.drawing = true;
-    this.anchor = cell;
-    this.last = cell;
-    this.blueprint.begin(s.tool);
-    if (s.tool === 'pencil' || s.tool === 'eraser') this.apply(brush(cell[0], cell[1], s.brushShape, s.brushSize), s);
-    else this.preview = [cell];
+    if (s.tool === 'stamp') {
+      if (!s.clip) return;
+      this.blueprint.begin('stamp');
+      paste(this.blueprint, s.clip, toWorld(s.plane, s.slice, cell[0], cell[1]));
+      this.blueprint.commit();
+      return;
+    }
+    if (s.tool === 'select') {
+      this.selectAnchor = cell;
+      this.preview = [cell];
+      this.dirty = true;
+      return;
+    }
+    this.stroke = new Stroke(this.blueprint, s, this.ref(s), cell);
+    this.preview = this.onSlice(this.stroke.preview(), s);
     this.dirty = true;
+  }
+
+  private get drawing(): boolean {
+    return this.stroke !== null || this.selectAnchor !== null;
   }
 
   private drag(cell: Cell2): void {
     const s = this.callbacks.settings();
-    if (s.tool === 'pencil' || s.tool === 'eraser') {
-      this.apply(strokeLine(this.last ?? cell, cell, s.brushShape, s.brushSize), s);
-      this.last = cell;
-    } else if (this.anchor) {
-      this.preview = this.shape(this.anchor, cell, s);
+    if (this.stroke) {
+      this.stroke.move(cell);
+      this.preview = this.onSlice(this.stroke.preview(), s);
+    } else if (this.selectAnchor) {
+      const a = this.selectAnchor;
+      const u0 = Math.min(a[0], cell[0]), u1 = Math.max(a[0], cell[0]), v0 = Math.min(a[1], cell[1]), v1 = Math.max(a[1], cell[1]);
+      this.preview = [];
+      for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) if (u === u0 || u === u1 || v === v0 || v === v1) this.preview.push([u, v]);
     }
   }
 
   private finish(): void {
     const s = this.callbacks.settings();
-    if (this.anchor && (s.tool === 'line' || s.tool === 'rect' || s.tool === 'ellipse')) {
-      this.apply(this.shape(this.anchor, this.hover ?? this.anchor, s), s);
+    if (this.stroke) {
+      this.stroke.finish();
+      this.stroke = null;
     }
-    this.blueprint.commit();
-    this.drawing = false;
-    this.anchor = null;
-    this.last = null;
+    if (this.selectAnchor) {
+      const a = this.selectAnchor, b = this.hover ?? a;
+      this.callbacks.onSelect(boxOf(toWorld(s.plane, s.slice, a[0], a[1]), toWorld(s.plane, s.slice, b[0], b[1])));
+      this.selectAnchor = null;
+    }
     this.preview = [];
     this.updateHoverPreview();
     this.dirty = true;
   }
 
-  private shape(a: Cell2, b: Cell2, s: SliceSettings): Cell2[] {
-    if (s.tool === 'line') return strokeLine(a, b, s.brushShape, s.brushSize);
-    if (s.tool === 'rect') return rect(a, b, s.filled);
-    return ellipse(a, b, s.filled);
-  }
-
-  private apply(cells: Cell2[], s: SliceSettings): void {
-    const value = this.paintValue(s);
-    for (const [u, v] of unique(cells)) {
-      const [x, y, z] = toWorld(s.plane, s.slice, u, v);
-      this.blueprint.set(x, y, z, value);
-    }
-  }
-
-  /** Fills the area of same cells around the click, within the blueprint's box plus a margin. */
-  private fill(cell: Cell2, s: SliceSettings): void {
-    const b = this.blueprint.bounds();
-    let box = { u0: cell[0] - 32, v0: cell[1] - 32, u1: cell[0] + 32, v1: cell[1] + 32 };
-    if (b) {
-      const lo = toSlice(s.plane, ...b.min), hi = toSlice(s.plane, ...b.max);
-      box = { u0: Math.min(lo.u, hi.u) - 1, v0: Math.min(lo.v, hi.v) - 1, u1: Math.max(lo.u, hi.u) + 1, v1: Math.max(lo.v, hi.v) + 1 };
-    }
-    const area = flood(cell, (u, v) => this.valueAt(u, v), box);
-    if (!area) {
-      this.callbacks.onMessage('editor.fillTooLarge');
-      return;
-    }
-    this.blueprint.begin('fill');
-    this.apply(area, s);
-    this.blueprint.commit();
-  }
-
   private updateHoverPreview(): void {
     const s = this.callbacks.settings();
-    if (!this.hover || s.tool === 'fill' || s.tool === 'picker') {
-      this.preview = this.hover ? [this.hover] : [];
+    if (!this.hover) {
+      this.preview = [];
       return;
     }
-    this.preview = s.tool === 'pencil' || s.tool === 'eraser' || s.tool === 'line'
-      ? brush(this.hover[0], this.hover[1], s.brushShape, s.brushSize)
-      : [this.hover];
+    if (s.tool === 'stamp' && s.clip) {
+      const [ox, oy, oz] = toWorld(s.plane, s.slice, this.hover[0], this.hover[1]);
+      this.preview = this.onSlice(s.clip.cells.map(({ p }) => [ox + p[0], oy + p[1], oz + p[2]] as World), s);
+      return;
+    }
+    this.preview = this.onSlice(hoverCells(s, this.ref(s), this.hover), s);
   }
 
   /** Called when tool or brush settings change. */
@@ -395,6 +388,21 @@ export class SliceView {
       ctx.stroke();
     }
 
+    // Selection where it crosses this slice.
+    if (s.selection) {
+      const lo = toSlice(s.plane, ...s.selection.min), hi = toSlice(s.plane, ...s.selection.max);
+      const sMin = Math.min(lo.slice, hi.slice), sMax = Math.max(lo.slice, hi.slice);
+      if (s.slice >= sMin && s.slice <= sMax) {
+        const [x0, y0] = this.screenOf(Math.min(lo.u, hi.u), Math.min(lo.v, hi.v));
+        const [x1, y1] = this.screenOf(Math.max(lo.u, hi.u) + 1, Math.max(lo.v, hi.v) + 1);
+        ctx.strokeStyle = color('--selection', '#faeeda');
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2);
+        ctx.setLineDash([]);
+      }
+    }
+
     // Tool preview and hovered cell.
     const erase = s.tool === 'eraser';
     ctx.fillStyle = erase ? 'rgba(163, 58, 44, 0.35)' : 'rgba(239, 159, 39, 0.35)';
@@ -439,5 +447,14 @@ export class SliceView {
     this.unsubscribe();
     this.resizeObserver.disconnect();
     this.canvas.remove();
+  }
+}
+
+/** Keeps getting pointer events while dragging outside the canvas; harmless if the pointer is already gone. */
+function capture(element: HTMLElement, pointerId: number): void {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // The pointer was released before we could capture it.
   }
 }

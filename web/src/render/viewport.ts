@@ -171,6 +171,29 @@ export class Viewport {
     this.dirty = true;
   }
 
+  get camera(): THREE.PerspectiveCamera {
+    return this.controls.camera;
+  }
+
+  get canvas(): HTMLCanvasElement {
+    return this.renderer.domElement;
+  }
+
+  /** Adds an object drawn over the blueprint (cursor previews, selection). */
+  addOverlay(object: THREE.Object3D): void {
+    this.helpers.add(object);
+    this.dirty = true;
+  }
+
+  removeOverlay(object: THREE.Object3D): void {
+    this.helpers.remove(object);
+    this.dirty = true;
+  }
+
+  invalidate(): void {
+    this.dirty = true;
+  }
+
   /** A PNG of the current view, for project thumbnails. */
   snapshot(size = 256): Promise<Blob | null> {
     this.renderer.render(this.scene, this.controls.camera);
@@ -253,11 +276,13 @@ export class Viewport {
     if (key === this.gridKey) return;
     this.gridKey = key;
     for (const child of [...this.helpers.children]) {
-      if (child === this.slicePlane) continue;
+      if (child === this.slicePlane || !child.userData.helper) continue;
       this.helpers.remove(child);
       if (child instanceof THREE.LineSegments) (child.geometry.dispose(), (child.material as THREE.Material).dispose());
     }
-    this.helpers.add(groundGrid(min[0]!, min[2]!, max[0]! + 1, max[2]! + 1, min[1]!));
+    const grid = groundGrid(min[0]!, min[2]!, max[0]! + 1, max[2]! + 1, min[1]!);
+    grid.userData.helper = true;
+    this.helpers.add(grid);
     if (b) {
       const size = [max[0]! - min[0]! + 1, max[1]! - min[1]! + 1, max[2]! - min[2]! + 1];
       const box = new THREE.LineSegments(
@@ -265,6 +290,7 @@ export class Viewport {
         new THREE.LineBasicMaterial({ color: 0xfac775, transparent: true, opacity: 0.6 }),
       );
       box.position.set(min[0]! + size[0]! / 2, min[1]! + size[1]! / 2, min[2]! + size[2]! / 2);
+      box.userData.helper = true;
       this.helpers.add(box);
     }
     this.dirty = true;

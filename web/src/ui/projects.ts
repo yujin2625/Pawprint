@@ -1,6 +1,7 @@
 import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint } from '../core/format/pawprint';
 import { getProject, putProject, type StoredProject } from '../storage/db';
+import { copy, paste, type Clip } from '../core/edit/clip';
 
 /** Projects: blueprints kept in this browser, stored as whole `.pawprint` files. */
 
@@ -58,4 +59,20 @@ export function download(bp: EditableBlueprint): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The whole blueprint of a project, ready to stamp. */
+export async function loadClip(id: string): Promise<Clip | null> {
+  const loaded = await loadProject(id);
+  const bounds = loaded?.blueprint.bounds();
+  return loaded && bounds ? copy(loaded.blueprint, bounds) : null;
+}
+
+/** Saves a clip as its own project tagged "stamp", so it shows in the stamp list (and can be edited like any blueprint). */
+export async function saveStamp(clip: Clip, name: string): Promise<string> {
+  const bp = new EditableBlueprint({ ...newMeta(name), tags: ['stamp'] });
+  bp.begin('stamp');
+  paste(bp, clip, [0, 0, 0]);
+  bp.commit();
+  return createProject(bp);
 }

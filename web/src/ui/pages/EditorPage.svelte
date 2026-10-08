@@ -5,12 +5,16 @@
   import type { EditableBlueprint } from '../../core/blueprint/editable';
   import { BlockResources } from '../../render/resources';
   import { Viewport, type ViewportStats } from '../../render/viewport';
-  import { SliceView, type Tool } from '../../view2d/sliceView';
+  import { SliceView } from '../../view2d/sliceView';
+  import { Editor3D } from '../../render/editor3d';
+  import { SOLID_SHAPES, type Tool } from '../../core/edit/tools';
+  import { blocksIn, boxSize, clearBox, copy, fillBox, mirrorClip, replaceInBox, rotateClip, type Box } from '../../core/edit/clip';
   import { loadDefaultPack } from '../packs/activePack';
-  import { download, loadProject, saveProject } from '../projects';
+  import { download, loadProject, saveProject, saveStamp } from '../projects';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import Palette from '../editor/Palette.svelte';
   import PixelIcon from '../editor/PixelIcon.svelte';
+  import Stamps from '../editor/Stamps.svelte';
 
   let { projectId }: { projectId: string } = $props();
 
@@ -26,11 +30,18 @@
   let name = $state('');
   let viewport: Viewport | null = null;
   let slice: SliceView | null = null;
+  let edit3d: Editor3D | null = null;
+  let panelTab = $state<'palette' | 'stamps'>('palette');
+  let stampsKey = $state(0);
+  let replaceFrom = $state('');
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const TOOLS: { id: Tool; key: string }[] = [
-    { id: 'pencil', key: 'B' }, { id: 'eraser', key: 'E' }, { id: 'fill', key: 'G' }, { id: 'picker', key: 'I' },
-    { id: 'line', key: 'L' }, { id: 'rect', key: 'R' }, { id: 'ellipse', key: 'O' },
+  const TOOLS: ({ id: Tool; key: string } | null)[] = [
+    { id: 'select', key: 'V' }, null,
+    { id: 'pencil', key: 'B' }, { id: 'eraser', key: 'E' }, { id: 'fill', key: 'G' }, { id: 'picker', key: 'I' }, null,
+    { id: 'line', key: 'L' }, { id: 'rect', key: 'R' }, { id: 'ellipse', key: 'O' }, null,
+    { id: 'box', key: 'U' }, { id: 'hollow', key: '' }, { id: 'wall', key: 'K' }, { id: 'sphere', key: '' }, { id: 'cylinder', key: '' }, null,
+    { id: 'stamp', key: 'S' },
   ];
 
   // Load the pack, then the project.
@@ -70,7 +81,24 @@
     if (import.meta.env.DEV) (window as unknown as { __viewport?: Viewport }).__viewport = view;
     view.onStats = (s) => (stats = s);
     void view.show(blueprint);
+    const editing = new Editor3D(view, blueprint, {
+      settings: () => editor,
+      onPick: (state) => {
+        editor.block = state;
+        editor.tool = 'pencil';
+      },
+      onSelect: (box) => (editor.selection = box),
+      onCursor: (world, state) => {
+        editor.cursor = world;
+        editor.cursorState = state;
+      },
+      onMessage: (key) => (editor.message = key),
+    });
+    edit3d = editing;
+    if (import.meta.env.DEV) (window as unknown as { __edit3d?: Editor3D }).__edit3d = editing;
     return () => {
+      editing.dispose();
+      edit3d = null;
       view.dispose();
       viewport = null;
     };
@@ -85,6 +113,7 @@
         editor.block = state;
         editor.tool = 'pencil';
       },
+      onSelect: (box) => (editor.selection = box),
       onCursor: (world, state) => {
         editor.cursor = world;
         editor.cursorState = state;
@@ -119,8 +148,9 @@
 
   // Tool and slice settings reach the views.
   $effect(() => {
-    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.plane, editor.slice, editor.onionBelow, editor.onionAbove, editor.onionOpacity];
+    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.height, editor.selection, editor.clip, editor.plane, editor.slice, editor.onionBelow, editor.onionAbove, editor.onionOpacity];
     slice?.settingsChanged();
+    edit3d?.refresh();
   });
   $effect(() => {
     const showSlice = editor.view !== '3d';
@@ -167,10 +197,90 @@
     queueMicrotask(() => slice?.centerOnBlueprint());
   }
 
+  /** Runs an edit on the selection as one undo step. */
+  function onSelection(label: string, run: (box: Box) => void) {
+    const box = editor.selection;
+    if (!box || !blueprint) return;
+    blueprint.begin(label);
+    run(box);
+    blueprint.commit();
+  }
+
+  function copySelection(cut: boolean) {
+    const box = editor.selection;
+    if (!box || !blueprint) return;
+    editor.clip = copy(blueprint, box);
+    if (cut) onSelection('cut', (b) => clearBox(blueprint!, b));
+    editor.message = cut ? 'editor.cutDone' : 'editor.copyDone';
+  }
+
+  function pasteClip() {
+    if (editor.clip) editor.tool = 'stamp';
+  }
+
+  async function saveSelectionAsStamp() {
+    const box = editor.selection;
+    if (!box || !blueprint) return;
+    const clip = copy(blueprint, box);
+    if (!clip.cells.length) return;
+    await saveStamp(clip, '★ ' + (blueprint.meta.name || t('projects.untitled')) + ' ' + boxSize(box).join('×'));
+    stampsKey++;
+    editor.message = 'editor.stampSaved';
+  }
+
+  function replaceSelection() {
+    const box = editor.selection;
+    if (!box || !blueprint || !replaceFrom) return;
+    const target = parseState(editor.block);
+    const def = pack?.blocks.find((b) => b.id === target.id);
+    // Keep properties the new block also has (stairs keep their facing); without a pack keep them all.
+    const keep = (prop: string) => !def || prop in def.properties;
+    onSelection('replace', (b) => replaceInBox(blueprint!, b, replaceFrom, editor.block, keep));
+  }
+
+  const selectionBlocks = $derived.by(() => {
+    void revision;
+    return editor.selection && blueprint ? blocksIn(blueprint, editor.selection).slice(0, 30) : [];
+  });
+  $effect(() => {
+    if (selectionBlocks.length && !selectionBlocks.some((b) => b.id === replaceFrom)) replaceFrom = selectionBlocks[0]!.id;
+  });
+
   function onKey(e: KeyboardEvent) {
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
     const key = e.key.toLowerCase();
+    // While the right button is held in 3D, letters move the camera.
+    if (viewport?.controls.isLooking) return;
+    if (editor.tool === 'stamp' && editor.clip && !e.ctrlKey && !e.metaKey && (key === 'r' || key === 'x' || key === 'z')) {
+      e.preventDefault();
+      editor.clip = key === 'r' ? rotateClip(editor.clip, e.shiftKey ? 3 : 1) : mirrorClip(editor.clip, key as 'x' | 'z');
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (key === 'c' || key === 'x')) {
+      if (editor.selection) {
+        e.preventDefault();
+        copySelection(key === 'x');
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'v') {
+      e.preventDefault();
+      pasteClip();
+      return;
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (editor.selection) {
+        e.preventDefault();
+        onSelection('delete', (b) => clearBox(blueprint!, b));
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      editor.selection = null;
+      if (editor.tool === 'stamp') editor.tool = 'pencil';
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && key === 'z') {
       e.preventDefault();
       if (e.shiftKey) blueprint?.redo();
@@ -205,7 +315,8 @@
     void revision;
     return blueprint?.canRedo ?? false;
   });
-  const shapeTool = $derived(editor.tool === 'rect' || editor.tool === 'ellipse');
+  const shapeTool = $derived(editor.tool === 'rect' || editor.tool === 'ellipse' || editor.tool === 'cylinder' || editor.tool === 'sphere');
+  const solidTool = $derived(SOLID_SHAPES.includes(editor.tool));
   const brushTool = $derived(editor.tool === 'pencil' || editor.tool === 'eraser' || editor.tool === 'line');
   const sliceLabel = $derived(editor.plane === 'y' ? 'Y' : editor.plane === 'z' ? 'Z' : 'X');
 </script>
@@ -252,18 +363,58 @@
           <button type="button" class:on={!editor.filled} onclick={() => (editor.filled = false)}>{t('editor.outline')}</button>
         </div>
       {/if}
+      {#if solidTool}
+        <label class="field">{t('editor.height')} <input class="num" type="number" min="1" max="256" bind:value={editor.height} /></label>
+        <span>{t('editor.solidHelp')}</span>
+      {/if}
+      {#if editor.tool === 'select'}<span>{t('editor.selectHelp')}</span>{/if}
+      {#if editor.tool === 'stamp'}
+        {#if editor.clip}
+          <span class="value">{editor.clip.size.join(' × ')}</span>
+          <button class="btn icon" type="button" title={t('editor.rotate')} onclick={() => editor.clip && (editor.clip = rotateClip(editor.clip, 1))}>↻</button>
+          <button class="btn" type="button" onclick={() => editor.clip && (editor.clip = mirrorClip(editor.clip, 'x'))}>{t('editor.mirrorX')}</button>
+          <button class="btn" type="button" onclick={() => editor.clip && (editor.clip = mirrorClip(editor.clip, 'z'))}>{t('editor.mirrorZ')}</button>
+          <span>{t('editor.stampHelp')}</span>
+        {:else}
+          <span>{t('editor.noClip')}</span>
+        {/if}
+      {/if}
       {#if editor.tool === 'fill'}<span>{t('editor.fillHelp')}</span>{/if}
       {#if editor.tool === 'picker'}<span>{t('editor.pickerHelp')}</span>{/if}
       <span class="spacer"></span>
       <span>{t('editor.block')}: <span class="value">{nameOf(editor.block)}</span></span>
     </div>
 
+    {#if editor.selection}
+      <div class="options selection">
+        <span class="tool-name">{t('editor.selection')}</span>
+        <span class="value">{boxSize(editor.selection).join(' × ')}</span>
+        <button class="btn" type="button" onclick={() => onSelection('delete', (b) => clearBox(blueprint!, b))}>{t('editor.sel.delete')}</button>
+        <button class="btn" type="button" onclick={() => onSelection('fill', (b) => fillBox(blueprint!, b, editor.block))}>{t('editor.sel.fill')}</button>
+        <span class="field">
+          <select class="input small" bind:value={replaceFrom} aria-label={t('editor.sel.replaceFrom')}>
+            {#each selectionBlocks as b (b.id)}<option value={b.id}>{nameOf(b.id)} ({b.count})</option>{/each}
+          </select>
+          <button class="btn" type="button" disabled={!replaceFrom} onclick={replaceSelection}>{t('editor.sel.replace')}</button>
+        </span>
+        <button class="btn" type="button" onclick={() => copySelection(false)}>{t('editor.sel.copy')}</button>
+        <button class="btn" type="button" onclick={() => copySelection(true)}>{t('editor.sel.cut')}</button>
+        <button class="btn" type="button" onclick={saveSelectionAsStamp}>{t('editor.sel.saveStamp')}</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" onclick={() => (editor.selection = null)}>{t('editor.sel.clear')}</button>
+      </div>
+    {/if}
+
     <div class="body">
       <nav class="tools" aria-label={t('editor.tools')}>
-        {#each TOOLS as tool (tool.id)}
-          <button type="button" class:on={editor.tool === tool.id} title="{t('editor.tool.' + tool.id)} ({tool.key})" aria-label={t('editor.tool.' + tool.id)} onclick={() => (editor.tool = tool.id)}>
-            <PixelIcon name={tool.id} />
-          </button>
+        {#each TOOLS as tool, i (tool?.id ?? 'sep' + i)}
+          {#if tool}
+            <button type="button" class:on={editor.tool === tool.id} title={t('editor.tool.' + tool.id) + (tool.key ? ` (${tool.key})` : '')} aria-label={t('editor.tool.' + tool.id)} onclick={() => (editor.tool = tool.id)}>
+              <PixelIcon name={tool.id} />
+            </button>
+          {:else}
+            <span class="sep"></span>
+          {/if}
         {/each}
       </nav>
 
@@ -303,7 +454,15 @@
       </div>
 
       <aside class="panel side">
-        {#if resources}<Palette {pack} {resources} />{/if}
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={panelTab === 'palette'} class:on={panelTab === 'palette'} onclick={() => (panelTab = 'palette')}>{t('editor.palette')}</button>
+          <button type="button" role="tab" aria-selected={panelTab === 'stamps'} class:on={panelTab === 'stamps'} onclick={() => (panelTab = 'stamps')}>{t('editor.stamps')}</button>
+        </div>
+        {#if panelTab === 'palette'}
+          {#if resources}<Palette {pack} {resources} />{/if}
+        {:else}
+          <Stamps currentId={projectId} refreshKey={stampsKey} />
+        {/if}
       </aside>
     </div>
 
@@ -444,6 +603,7 @@
     align-items: center;
     gap: 2px;
     padding: 6px 0;
+    overflow-y: auto;
     border-right: 2px solid var(--outline);
   }
 
@@ -458,6 +618,49 @@
     color: var(--chrome-text);
     cursor: pointer;
     clip-path: var(--notch);
+  }
+
+  .sep {
+    width: 28px;
+    height: 2px;
+    margin: 3px 0;
+    background: var(--outline);
+  }
+
+  .num {
+    width: 56px;
+    padding: 1px 4px;
+    border: 0;
+    background: var(--chrome-raised);
+    color: var(--chrome-text);
+  }
+
+  .selection {
+    background: var(--chrome-2);
+  }
+
+  .input.small {
+    padding: 1px 4px;
+    max-width: 200px;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 2px solid var(--panel-border);
+  }
+
+  .tabs button {
+    flex: 1;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .tabs button.on {
+    background: var(--text);
+    color: var(--panel);
   }
 
   .tools button:hover {

@@ -92,6 +92,11 @@ export class FlyCamera {
     });
   }
 
+  /** True while the right button is held (keys then move the camera instead of being shortcuts). */
+  get isLooking(): boolean {
+    return this.looking;
+  }
+
   /** Moves with held keys; returns whether the camera changed. */
   update(dt: number): boolean {
     if (!this.looking || this.keys.size === 0) return false;
