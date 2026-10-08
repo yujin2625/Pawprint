@@ -14,3 +14,7 @@
 *.cfg text eol=lf
 *.jks binary
 *.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

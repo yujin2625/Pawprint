@@ -1,19 +1,33 @@
 package com.dumaru.pawprint.client.screen;
 
+import com.dumaru.pawprint.Pawprint;
+import com.dumaru.pawprint.client.ClientContext;
+import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.edit.Draft;
 import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
+import com.dumaru.pawprint.format.Blueprint;
+import com.dumaru.pawprint.format.BlueprintIO;
+import com.dumaru.pawprint.format.convert.Formats;
 import com.dumaru.pawprint.shape.Shape;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +48,9 @@ public class EditMenuScreen extends Screen {
     private Button editPlacement;
     private Button saveDraft;
     private Button clearDraft;
+    private Button exportDraft;
+    private @Nullable Component status;
+    private int statusColor;
 
     public EditMenuScreen() {
         super(Component.translatable("pawprint.screen.edit.title"));
@@ -75,17 +92,19 @@ public class EditMenuScreen extends Screen {
         search.setResponder(this::runSearch);
         runSearch(lastQuery);
 
-        int buttonWidth = 110;
+        int buttonWidth = Math.min(110, (width - MARGIN * 2 - 16) / 5);
         int row = height - 28;
-        int left = (width - (buttonWidth * 4 + 12)) / 2;
+        int left = (width - (buttonWidth * 5 + 16)) / 2;
         saveDraft = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.save_draft"),
                 b -> minecraft.setScreen(new SaveDraftScreen(this))).bounds(left, row, buttonWidth, 20).build());
         editPlacement = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.edit_placement"),
                 b -> editActivePlacement()).bounds(left + buttonWidth + 4, row, buttonWidth, 20).build());
         clearDraft = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.clear_draft"),
                 b -> clearDraft()).bounds(left + (buttonWidth + 4) * 2, row, buttonWidth, 20).build());
+        exportDraft = addRenderableWidget(Button.builder(Component.translatable("pawprint.edit.export_file"),
+                b -> exportDraft()).bounds(left + (buttonWidth + 4) * 3, row, buttonWidth, 20).build());
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
-                .bounds(left + (buttonWidth + 4) * 3, row, buttonWidth, 20).build());
+                .bounds(left + (buttonWidth + 4) * 4, row, buttonWidth, 20).build());
         updateButtons();
         setInitialFocus(search);
     }
@@ -99,6 +118,7 @@ public class EditMenuScreen extends Screen {
         redo.active = Draft.canRedo();
         saveDraft.active = !Draft.isEmpty();
         clearDraft.active = !Draft.isEmpty();
+        exportDraft.active = !Draft.isEmpty();
         // Loading a placement replaces the draft, so only allow it when there is nothing to lose.
         editPlacement.active = Draft.isEmpty() && PlacementManager.active() != null;
     }
@@ -129,11 +149,72 @@ public class EditMenuScreen extends Screen {
         updateButtons();
     }
 
+    /** Writes the draft to {@code pawprint/exports} as a .pawprint, e.g. to open it in the web editor. */
+    private void exportDraft() {
+        String name = "Draft " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm"));
+        Blueprint blueprint = Draft.toBlueprint(name, minecraft.getUser().getName());
+        if (blueprint == null) {
+            return;
+        }
+        try {
+            Path file = Pawprint.dataDir().resolve("exports").resolve(ClientContext.fileSafe(name) + BlueprintIO.EXTENSION);
+            BlueprintIO.write(blueprint, file);
+            Util.getPlatform().openPath(file.getParent());
+            setStatus(Component.translatable("pawprint.edit.exported", file.getFileName().toString()), 0x80FF80);
+        } catch (IOException e) {
+            Pawprint.LOG.warn("Could not export the draft", e);
+            setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), 0xFF5555);
+        }
+    }
+
+    /**
+     * Dropping a blueprint file (e.g. one saved from the web editor) loads it as the draft, starting at the player's
+     * feet. Only when the draft is empty, so nothing is lost.
+     */
+    @Override
+    public void onFilesDrop(List<Path> files) {
+        if (files.isEmpty() || minecraft.player == null) {
+            return;
+        }
+        Path file = files.get(0);
+        if (!Draft.isEmpty()) {
+            setStatus(Component.translatable("pawprint.edit.import_need_empty"), 0xFF5555);
+            return;
+        }
+        try {
+            Blueprint blueprint;
+            if (file.getFileName().toString().endsWith(BlueprintIO.EXTENSION)) {
+                blueprint = BlueprintIO.read(file);
+            } else {
+                Formats format = Formats.forFile(file);
+                if (format == null) {
+                    throw new IOException("unknown file type");
+                }
+                blueprint = format.read(file);
+            }
+            Draft.loadFrom(new Placement(null, blueprint, minecraft.player.blockPosition(), Rotation.NONE, Mirror.NONE));
+            PlacementManager.draftChanged();
+            updateButtons();
+            PawprintClient.notify(minecraft, Component.translatable("pawprint.edit.imported", blueprint.meta().name, blueprint.meta().blockCount));
+            onClose();
+        } catch (IOException | RuntimeException e) {
+            Pawprint.LOG.warn("Could not load {} as the draft", file, e);
+            setStatus(Component.translatable("pawprint.edit.import_failed", file.getFileName().toString(), String.valueOf(e.getMessage())), 0xFF5555);
+        }
+    }
+
+    private void setStatus(Component message, int color) {
+        status = message;
+        statusColor = color;
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
+        graphics.drawCenteredString(font, status != null ? status : Component.translatable("pawprint.edit.drop_hint"),
+                width / 2, height - 40, status != null ? statusColor : 0x808080);
         graphics.drawString(font, Component.translatable("pawprint.screen.edit.tools"), MARGIN, 20, 0xA0A0A0);
         grid.renderTooltip(graphics, mouseX, mouseY);
     }

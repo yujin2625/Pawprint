@@ -1,0 +1,142 @@
+<script lang="ts">
+  import { languages, locale, setLanguage, t } from '../i18n/i18n.svelte';
+  import EditorPage from './pages/EditorPage.svelte';
+  import PacksPage from './pages/PacksPage.svelte';
+  import ProjectsPage from './pages/ProjectsPage.svelte';
+
+  let hash = $state(location.hash);
+
+  $effect(() => {
+    const update = () => (hash = location.hash);
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  });
+
+  const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor') ? 'editor' : 'projects');
+</script>
+
+<div class={["shell", { full: page === "editor" }]}>
+  <header>
+    <a class="logo" href="#/projects"><img class="pixel" src="./brand/logo-horizontal-dark@2x.png" alt={t('app.name')} width="108" height="24" /></a>
+    <nav aria-label={t('nav.main')}>
+      <a href="#/projects" aria-current={page === 'projects' ? 'page' : undefined}>{t('nav.projects')}</a>
+      <a href="#/packs" aria-current={page === 'packs' ? 'page' : undefined}>{t('nav.packs')}</a>
+    </nav>
+    <div class="spacer"></div>
+    <label>
+      <span class="visually-hidden">{t('app.language')}</span>
+      <select class="lang" value={locale.code} onchange={(e) => setLanguage(e.currentTarget.value)}>
+        {#each languages as language (language.code)}
+          <option value={language.code}>{language.name}</option>
+        {/each}
+      </select>
+    </label>
+  </header>
+
+  <main>
+    {#if page === 'packs'}
+      <PacksPage />
+    {:else if page === 'editor'}
+      <EditorPage />
+    {:else}
+      <ProjectsPage />
+    {/if}
+  </main>
+
+  {#if page !== 'editor'}
+  <footer>
+    <span>{t('app.disclaimer')}</span>
+    <span class="spacer"></span>
+    <span>{t('app.localOnly')}</span>
+  </footer>
+  {/if}
+</div>
+
+<style>
+  .shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    padding: 0 24px;
+    background: var(--chrome);
+    border-bottom: 2px solid var(--outline);
+  }
+
+  .full {
+    height: 100vh;
+    min-height: 0;
+  }
+
+  .full main {
+    max-width: none;
+    padding: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo {
+    display: flex;
+  }
+
+  nav {
+    display: flex;
+    align-self: stretch;
+    gap: 4px;
+  }
+
+  nav a {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    color: var(--chrome-muted);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+  }
+
+  nav a[aria-current='page'] {
+    color: var(--chrome-text);
+    border-bottom-color: var(--accent);
+  }
+
+  nav a:hover {
+    color: var(--chrome-text);
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .lang {
+    padding: 4px 8px;
+    background: var(--chrome-raised);
+    color: var(--chrome-text);
+    border: 0;
+    clip-path: var(--notch);
+  }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 24px 40px;
+  }
+
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 10px 24px;
+    background: var(--chrome);
+    color: var(--chrome-muted);
+  }
+</style>

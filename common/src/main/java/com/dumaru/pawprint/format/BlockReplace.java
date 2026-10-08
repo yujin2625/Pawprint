@@ -17,7 +17,7 @@ public final class BlockReplace {
     private BlockReplace() {
     }
 
-    /** Returns a new blueprint with the same metadata; positions and removals are unchanged. */
+    /** Returns a new blueprint with the same metadata; positions, removals and layers are unchanged. */
     public static Blueprint replace(Blueprint blueprint, Predicate<BlockState> match, Block replacement) {
         String[] palette = new String[blueprint.palette().size()];
         for (int i = 0; i < palette.length; i++) {
@@ -26,13 +26,13 @@ public final class BlockReplace {
                     ? BlockStateCodec.serialize(convert(state, replacement))
                     : blueprint.palette().get(i);
         }
-        Blueprint.Builder builder = Blueprint.builder();
+        Blueprint.Builder builder = Blueprint.builder().layersFrom(blueprint.meta());
         for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
             long pos = entry.getLongKey();
-            builder.put(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), palette[entry.getIntValue()]);
+            builder.put(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), palette[entry.getIntValue()], blueprint.layer(pos));
         }
         for (long pos : blueprint.removals()) {
-            builder.remove(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos));
+            builder.remove(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), blueprint.layer(pos));
         }
         return builder.build(blueprint.meta());
     }

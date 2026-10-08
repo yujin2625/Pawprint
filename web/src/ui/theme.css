@@ -1,0 +1,179 @@
+/*
+ * Theme "Blueprint" (default). Every color is a CSS variable so the theme editor can change it.
+ * Keys follow WEB_DESIGN.md §11.1; chrome-* are the top bar and tool strips.
+ */
+:root {
+  --bg: #2a6fb5;
+  --grid: rgba(255, 255, 255, 0.22);
+  --chrome: #1a5694;
+  --chrome-2: #1f61a3;
+  --chrome-raised: #2e73ba;
+  --chrome-border: #4a8bcc;
+  --chrome-text: #faeeda;
+  --chrome-muted: #d2e3f4;
+  --outline: #12477d;
+  --panel: #faeeda;
+  --panel-2: #f3e3c7;
+  --panel-border: #e3cfa8;
+  --panel-input: #fff8ec;
+  --text: #2c2c2a;
+  --text-muted: #6b5a3e;
+  --accent: #ef9f27;
+  --accent-soft: #f6d9a8;
+  --on-accent: #412402;
+  --viewport-bg: #2a6fb5;
+  --selection: #faeeda;
+  --preview: #ef9f27;
+  --danger: #a33a2c;
+  --warning: #7a3e00;
+  --warning-bg: #fce3b8;
+  --success: #3d7a47;
+
+  /* Silver is drawn on a 19px grid; only multiples of 19 stay crisp. */
+  --font: 'Silver Pawprint', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  --text-size: 19px;
+  --title-size: 38px;
+  --notch: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px), 0 2px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.5px);
+  background-size: 24px 24px;
+  color: var(--chrome-text);
+  font-family: var(--font);
+  font-size: var(--text-size);
+  line-height: normal;
+  -webkit-font-smoothing: none;
+  font-synthesis: none;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+  font-weight: normal;
+}
+
+h1 {
+  font-size: var(--title-size);
+}
+
+h2,
+h3 {
+  font-size: var(--text-size);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+img.pixel {
+  image-rendering: pixelated;
+}
+
+/* Pixel buttons: notched corners, light top-left and dark bottom-right edges. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 0;
+  background: var(--chrome-raised);
+  color: var(--chrome-text);
+  clip-path: var(--notch);
+  box-shadow:
+    inset -2px -2px 0 rgba(0, 0, 0, 0.22),
+    inset 2px 2px 0 rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn:active:not(:disabled) {
+  box-shadow:
+    inset 2px 2px 0 rgba(0, 0, 0, 0.22),
+    inset -2px -2px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn.light {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.btn.danger {
+  background: var(--panel-2);
+  color: var(--danger);
+}
+
+.input {
+  padding: 5px 9px;
+  border: 0;
+  background: var(--panel-input);
+  color: var(--text);
+  clip-path: var(--notch);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.panel {
+  background: var(--panel);
+  color: var(--text);
+  border: 2px solid var(--outline);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
