@@ -42,4 +42,4 @@ python brand/tools/make_brand.py
 
 ## 라이선스
 
-이 저장소의 다른 코드와 같이 MIT 라이선스입니다. 독자적으로 그린 그림이며 Mojang 에셋을 포함하지 않습니다.
+이 저장소의 다른 코드와 같이 PolyForm Noncommercial 1.0.0 라이선스입니다. 독자적으로 그린 그림이며 Mojang 에셋을 포함하지 않습니다.
