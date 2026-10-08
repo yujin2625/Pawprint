@@ -1,9 +1,13 @@
 package com.dumaru.pawprint.fabric;
 
 import com.dumaru.pawprint.platform.Platform;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.level.block.state.BlockState;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.nio.file.Path;
+import java.util.Optional;
 
 public class FabricPlatform implements Platform {
     @Override
@@ -29,5 +33,27 @@ public class FabricPlatform implements Platform {
     @Override
     public Path getConfigDir() {
         return FabricLoader.getInstance().getConfigDir();
+    }
+
+    @Override
+    public Optional<ModInfo> modInfo(String modId) {
+        return FabricLoader.getInstance().getModContainer(modId)
+                .map(container -> new ModInfo(container.getMetadata().getName(), container.getMetadata().getVersion().getFriendlyString()));
+    }
+
+    @Override
+    public String renderLayer(BlockState state) {
+        // Fabric API registers block render layers into the vanilla map.
+        RenderType type = ItemBlockRenderTypes.getChunkRenderType(state);
+        if (type == RenderType.translucent()) {
+            return "translucent";
+        }
+        if (type == RenderType.cutoutMipped()) {
+            return "cutout_mipped";
+        }
+        if (type == RenderType.cutout()) {
+            return "cutout";
+        }
+        return "solid";
     }
 }

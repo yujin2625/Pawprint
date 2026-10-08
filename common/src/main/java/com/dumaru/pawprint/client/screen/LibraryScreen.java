@@ -139,9 +139,9 @@ public class LibraryScreen extends Screen {
         manage = addRenderableWidget(button("pawprint.library.manage", this::openManage,
                 detailX + starWidth + GAP * 2 + third, buttonY + 44, third));
 
-        // Bottom bar: global actions in two rows of four.
-        int buttonWidth = Math.min(110, (width - MARGIN * 2 - GAP * 3) / 4);
-        int rowLeft = (width - (buttonWidth * 4 + GAP * 3)) / 2;
+        // Bottom bar: global actions in two rows of five.
+        int buttonWidth = Math.min(104, (width - MARGIN * 2 - GAP * 4) / 5);
+        int rowLeft = (width - (buttonWidth * 5 + GAP * 4)) / 2;
         int row1 = height - 50;
         int row2 = height - 26;
         captureSelection = addRenderableWidget(button("pawprint.screen.library.capture", this::captureSelection, rowLeft, row1, buttonWidth));
@@ -151,13 +151,15 @@ public class LibraryScreen extends Screen {
                 rowLeft + (buttonWidth + GAP) * 2, row1, buttonWidth));
         addRenderableWidget(button("pawprint.screen.library.export_blocks", this::exportBlockList,
                 rowLeft + (buttonWidth + GAP) * 3, row1, buttonWidth));
+        addRenderableWidget(button("pawprint.screen.library.export_pack", () -> minecraft.setScreen(new PackExportScreen(this)),
+                rowLeft + (buttonWidth + GAP) * 4, row1, buttonWidth));
         removePlacement = addRenderableWidget(button("pawprint.screen.library.remove_placement", this::removePlacement,
                 rowLeft, row2, buttonWidth));
         addRenderableWidget(button("pawprint.library.group.new", this::newGroup, rowLeft + (buttonWidth + GAP), row2, buttonWidth));
         addRenderableWidget(button("pawprint.screen.library.open_folder", this::openFolder,
                 rowLeft + (buttonWidth + GAP) * 2, row2, buttonWidth));
         addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose())
-                .bounds(rowLeft + (buttonWidth + GAP) * 3, row2, buttonWidth, 20).build());
+                .bounds(rowLeft + (buttonWidth + GAP) * 4, row2, buttonWidth, 20).build());
 
         if (!importedOnOpen) {
             importedOnOpen = true;

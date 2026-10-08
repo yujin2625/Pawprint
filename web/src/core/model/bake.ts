@@ -291,7 +291,8 @@ function bakeElement(
   for (const dir of DIRS) {
     const face = e.faces[dir];
     if (!face?.texture) continue;
-    const ref = resolveTexture(textures, face.texture);
+    // Face textures are always variable names; the game accepts them with or without '#'.
+    const ref = resolveTexture(textures, face.texture.startsWith('#') ? face.texture : '#' + face.texture);
     const texture = ref ? texturePath(ref) : MISSING_TEXTURE;
     let pts = corners(dir, e.from, e.to);
 

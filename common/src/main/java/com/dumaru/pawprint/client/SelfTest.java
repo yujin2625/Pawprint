@@ -170,6 +170,93 @@ public final class SelfTest {
         java.nio.file.Files.write(file, bytes.toByteArray());
         Blueprint old = Formats.MCEDIT_SCHEMATIC.read(file);
         Pawprint.LOG.info("SELFTEST legacy schematic palette: {}", old.palette());
+        layerChecks(blueprint, folder);
+    }
+
+    /**
+     * Format 2: layers made in the web editor must survive saving, block replacement, share strings and editing as a
+     * draft; a blueprint with only the default layer is still written as format 1.
+     */
+    private static void layerChecks(Blueprint sample, Path folder) throws Exception {
+        com.google.gson.JsonArray layers = com.google.gson.JsonParser.parseString(
+                "[{\"id\":0,\"name\":\"Default\",\"color\":\"#7FB3FF\",\"visible\":true,\"locked\":false,\"parent\":null},"
+                + "{\"id\":1,\"name\":\"Roof\",\"color\":\"#FFB347\",\"visible\":false,\"locked\":true,\"parent\":2},"
+                + "{\"id\":2,\"name\":\"Floor 1\",\"color\":\"#7FB3FF\",\"visible\":true,\"locked\":false,\"parent\":null,\"group\":true,\"children\":[1]}]")
+                .getAsJsonArray();
+        com.google.gson.JsonArray order = com.google.gson.JsonParser.parseString("[2,0]").getAsJsonArray();
+        Blueprint layered = Blueprint.builder().layers(layers, order, null)
+                .put(0, 0, 0, Blocks.STONE.defaultBlockState(), 0)
+                .put(1, 0, 0, Blocks.OAK_PLANKS.defaultBlockState(), 1)
+                .remove(2, 0, 0, 1)
+                .put(3, 0, 0, Blocks.OAK_PLANKS.defaultBlockState(), 7) // unknown layer: falls back to 0
+                .build("Layers", "test", null);
+        long roof = BlockPos.asLong(1, 0, 0), dug = BlockPos.asLong(2, 0, 0), unknown = BlockPos.asLong(3, 0, 0);
+        Path file = folder.resolve("layers.pawprint");
+        com.dumaru.pawprint.format.BlueprintIO.write(layered, file);
+        Blueprint back = com.dumaru.pawprint.format.BlueprintIO.read(file);
+        boolean saved = back.meta().format == 2 && back.layer(roof) == 1 && back.layer(dug) == 1 && back.layer(unknown) == 0
+                && back.meta().layers != null && back.meta().layers.size() == 3 && back.meta().layerOrder.size() == 2;
+        Blueprint replaced = com.dumaru.pawprint.format.BlockReplace.replace(back, state -> state.is(Blocks.OAK_PLANKS), Blocks.STONE);
+        boolean replace = replaced.layer(roof) == 1 && replaced.meta().format == 2;
+        Blueprint shared = com.dumaru.pawprint.format.BlueprintIO.fromShareString(
+                com.dumaru.pawprint.format.BlueprintIO.toShareString(back), "test");
+        boolean share = shared.layer(roof) == 1 && shared.layer(dug) == 1 && shared.meta().layers != null;
+        com.dumaru.pawprint.client.edit.Draft.loadFrom(new com.dumaru.pawprint.client.placement.Placement(null, back,
+                new BlockPos(100, 64, 100), net.minecraft.world.level.block.Rotation.NONE, net.minecraft.world.level.block.Mirror.NONE));
+        Blueprint drafted = com.dumaru.pawprint.client.edit.Draft.toBlueprint("Drafted", "test");
+        com.dumaru.pawprint.client.edit.Draft.clear();
+        boolean draft = drafted != null && drafted.layer(roof) == 1 && drafted.layer(dug) == 1 && drafted.meta().format == 2;
+        Path plain = folder.resolve("plain.pawprint");
+        com.dumaru.pawprint.format.BlueprintIO.write(sample, plain);
+        boolean formatOne = com.dumaru.pawprint.format.BlueprintIO.readMeta(plain).format == 1;
+        Pawprint.LOG.info("SELFTEST layers: saved {}, replace {}, share string {}, draft {}, single layer as format 1 {}",
+                ok(saved), ok(replace), ok(share), ok(draft), ok(formatOne));
+    }
+
+    private static String ok(boolean value) {
+        return value ? "OK" : "MISMATCH";
+    }
+
+    /** Exports a block pack with English and Korean names and checks what is in it. */
+    private static void packCheck(Minecraft minecraft) throws Exception {
+        long started = System.currentTimeMillis();
+        var result = com.dumaru.pawprint.client.pack.PackExporter.export(minecraft,
+                new com.dumaru.pawprint.client.pack.PackExporter.Options("Pawprint Selftest", java.util.List.of("en_us", "ko_kr"), true)).join();
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(result.file().toFile())) {
+            java.util.function.Function<String, String> text = name -> {
+                try (var in = zip.getInputStream(zip.getEntry(name))) {
+                    return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    return "";
+                }
+            };
+            var blocks = com.google.gson.JsonParser.parseString(text.apply("blocks.json")).getAsJsonArray();
+            var korean = com.google.gson.JsonParser.parseString(text.apply("lang/ko_kr.json")).getAsJsonObject();
+            var english = com.google.gson.JsonParser.parseString(text.apply("lang/en_us.json")).getAsJsonObject();
+            com.google.gson.JsonObject stairs = null;
+            int withTabs = 0;
+            int tinted = 0;
+            for (var element : blocks) {
+                var block = element.getAsJsonObject();
+                if (block.get("id").getAsString().equals("minecraft:oak_stairs")) {
+                    stairs = block;
+                }
+                if (block.getAsJsonArray("tabs").size() > 0) {
+                    withTabs++;
+                }
+                if (block.get("tint").isJsonObject()) {
+                    tinted++;
+                }
+            }
+            long blockstates = zip.stream().filter(entry -> entry.getName().contains("/blockstates/")).count();
+            Pawprint.LOG.info("SELFTEST pack: {} in {} ms, {} blocks ({} in creative tabs, {} tinted), {} blockstates, {} models, {} textures, {} missing files",
+                    result.file().getFileName(), System.currentTimeMillis() - started, blocks.size(), withTabs, tinted, blockstates,
+                    result.models(), result.textures(), result.missingFiles());
+            Pawprint.LOG.info("SELFTEST pack names: en {} ({}), ko {} ({}); oak_stairs {}", english.size(),
+                    english.has("minecraft:oak_stairs") ? english.get("minecraft:oak_stairs").getAsString() : "-",
+                    korean.size(), korean.has("minecraft:oak_stairs") ? korean.get("minecraft:oak_stairs").getAsString() : "-",
+                    stairs == null ? "MISSING" : stairs.get("default") + " " + stairs.get("renderLayer") + " " + stairs.get("item"));
+        }
     }
 
     private static final String ORIGIN_FOLDER = "pawprint_selftest_origin";
@@ -249,6 +336,7 @@ public final class SelfTest {
                         Pawprint.LOG.info("SELFTEST back in origin: {} placement(s){}", PlacementManager.placements().size(),
                                 PlacementManager.placements().isEmpty() ? ""
                                         : ", first at " + PlacementManager.placements().get(0).origin().toShortString());
+                        packCheck(minecraft);
                         minecraft.player.setXRot(60f);
                         var placement = PlacementManager.active();
                         var before = placement.origin();

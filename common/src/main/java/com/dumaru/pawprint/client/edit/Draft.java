@@ -6,6 +6,9 @@ import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -31,6 +34,14 @@ public final class Draft {
     private static final int AUTOSAVE_TICKS = 100;
 
     private static final Long2ObjectMap<BlockState> cells = new Long2ObjectOpenHashMap<>();
+    /**
+     * Web editor layers of the cells (format 2), by world position; cells not listed are in layer 0. The mod does not
+     * show layers, it only keeps them: a cell keeps its layer when its block changes, new cells go to layer 0.
+     */
+    private static final Long2IntMap layers = new Long2IntOpenHashMap();
+    private static @Nullable JsonArray layerList;
+    private static @Nullable JsonArray layerOrder;
+    private static @Nullable JsonObject packHint;
     private static final Deque<List<Change>> undo = new ArrayDeque<>();
     private static final Deque<List<Change>> redo = new ArrayDeque<>();
     private static @Nullable List<Change> recording;
@@ -160,11 +171,32 @@ public final class Draft {
 
     public static void clear() {
         cells.clear();
+        clearLayers();
         undo.clear();
         redo.clear();
         sourceFile = null;
         sourceMeta = null;
         touched();
+    }
+
+    private static void clearLayers() {
+        layers.clear();
+        layerList = null;
+        layerOrder = null;
+        packHint = null;
+    }
+
+    private static void keepLayers(Blueprint blueprint, long relative, long world) {
+        int layer = blueprint.layer(relative);
+        if (layer != 0) {
+            layers.put(world, layer);
+        }
+    }
+
+    private static void keepLayerList(BlueprintMeta meta) {
+        layerList = meta.layers;
+        layerOrder = meta.layerOrder;
+        packHint = meta.packHint;
     }
 
     /** Replaces the draft with a placement's blocks, so an existing blueprint can be edited. */
@@ -174,12 +206,17 @@ public final class Draft {
         for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
             BlockState state = blueprint.state(entry.getIntValue());
             if (state != null) {
-                cells.put(placement.toWorld(entry.getLongKey()).asLong(), placement.toWorld(state));
+                long world = placement.toWorld(entry.getLongKey()).asLong();
+                cells.put(world, placement.toWorld(state));
+                keepLayers(blueprint, entry.getLongKey(), world);
             }
         }
         for (long removal : blueprint.removals()) {
-            cells.put(placement.toWorld(removal).asLong(), Blocks.AIR.defaultBlockState());
+            long world = placement.toWorld(removal).asLong();
+            cells.put(world, Blocks.AIR.defaultBlockState());
+            keepLayers(blueprint, removal, world);
         }
+        keepLayerList(blueprint.meta());
         sourceFile = placement.file();
         sourceMeta = blueprint.meta();
         touched();
@@ -191,16 +228,17 @@ public final class Draft {
             return null;
         }
         BlockPos min = minCorner();
-        Blueprint.Builder builder = Blueprint.builder();
+        Blueprint.Builder builder = Blueprint.builder().layers(layerList, layerOrder, packHint);
         for (Long2ObjectMap.Entry<BlockState> entry : cells.long2ObjectEntrySet()) {
             BlockPos pos = BlockPos.of(entry.getLongKey());
             int x = pos.getX() - min.getX();
             int y = pos.getY() - min.getY();
             int z = pos.getZ() - min.getZ();
+            int layer = layers.get(entry.getLongKey());
             if (entry.getValue().isAir()) {
-                builder.remove(x, y, z);
+                builder.remove(x, y, z, layer);
             } else {
-                builder.put(x, y, z, entry.getValue());
+                builder.put(x, y, z, entry.getValue(), layer);
             }
         }
         BlueprintMeta.Origin origin = server != null && dimension != null
@@ -231,6 +269,7 @@ public final class Draft {
     public static void switchContext(@Nullable String newServer, @Nullable String newDimension) {
         save();
         cells.clear();
+        clearLayers();
         undo.clear();
         redo.clear();
         sourceFile = null;
@@ -284,12 +323,17 @@ public final class Draft {
             for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
                 BlockState state = blueprint.state(entry.getIntValue());
                 if (state != null) {
-                    cells.put(BlockPos.of(entry.getLongKey()).offset(min).asLong(), state);
+                    long world = BlockPos.of(entry.getLongKey()).offset(min).asLong();
+                    cells.put(world, state);
+                    keepLayers(blueprint, entry.getLongKey(), world);
                 }
             }
             for (long removal : blueprint.removals()) {
-                cells.put(BlockPos.of(removal).offset(min).asLong(), Blocks.AIR.defaultBlockState());
+                long world = BlockPos.of(removal).offset(min).asLong();
+                cells.put(world, Blocks.AIR.defaultBlockState());
+                keepLayers(blueprint, removal, world);
             }
+            keepLayerList(blueprint.meta());
             // The library file being edited is remembered in the description field of the draft file.
             String description = blueprint.meta().description;
             sourceFile = description == null || description.isEmpty() ? null : description;

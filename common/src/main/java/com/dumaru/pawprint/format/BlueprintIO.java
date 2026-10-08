@@ -2,6 +2,7 @@ package com.dumaru.pawprint.format;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -37,7 +38,8 @@ import java.util.zip.ZipOutputStream;
  * Every read is bounded so a crafted file cannot exhaust memory.
  */
 public final class BlueprintIO {
-    public static final int FORMAT_VERSION = 1;
+    /** Newest format this version reads and writes (2 adds layers; files without extra layers are still written as 1). */
+    public static final int FORMAT_VERSION = 2;
     public static final String EXTENSION = ".pawprint";
 
     private static final String META_ENTRY = "meta.json";
@@ -127,6 +129,14 @@ public final class BlueprintIO {
         ListTag tags = new ListTag();
         blueprint.meta().tags.forEach(text -> tags.add(StringTag.valueOf(text)));
         tag.put("Tags", tags);
+        if (blueprint.meta().layers != null) {
+            JsonObject layers = new JsonObject();
+            layers.add("layers", blueprint.meta().layers);
+            if (blueprint.meta().layerOrder != null) {
+                layers.add("layerOrder", blueprint.meta().layerOrder);
+            }
+            tag.putString("Layers", GSON.toJson(layers));
+        }
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         NbtIo.writeCompressed(tag, bytes);
         return SHARE_PREFIX + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray());
@@ -160,17 +170,21 @@ public final class BlueprintIO {
         meta.author = author;
         meta.created = meta.modified = java.time.Instant.now().toString();
         meta.dataVersion = tag.getInt("DataVersion");
-        Blueprint blueprint = fromNbt(meta, tag);
+        if (tag.contains("Layers", Tag.TAG_STRING)) {
+            try {
+                JsonObject layers = GSON.fromJson(tag.getString("Layers"), JsonObject.class);
+                if (layers != null && layers.has("layers") && layers.get("layers").isJsonArray()) {
+                    meta.layers = layers.getAsJsonArray("layers");
+                    meta.layerOrder = layers.has("layerOrder") && layers.get("layerOrder").isJsonArray() ? layers.getAsJsonArray("layerOrder") : null;
+                    meta.format = 2;
+                }
+            } catch (JsonParseException e) {
+                // A damaged layer list only loses the layers, not the blocks.
+                meta.layers = null;
+            }
+        }
         // Recompute derived fields (mods, block list, versions) like any new blueprint.
-        Blueprint.Builder builder = Blueprint.builder();
-        for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
-            long pos = entry.getLongKey();
-            builder.put(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos), blueprint.palette().get(entry.getIntValue()));
-        }
-        for (long pos : blueprint.removals()) {
-            builder.remove(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos));
-        }
-        return builder.build(meta);
+        return fromNbt(meta, tag).toBuilder().build(meta);
     }
 
     private static CompoundTag toNbt(Blueprint blueprint) {
@@ -194,7 +208,21 @@ public final class BlueprintIO {
         }
         tag.put("Positions", new LongArrayTag(positions));
         tag.put("States", new IntArrayTag(states));
-        tag.put("Removals", new LongArrayTag(blueprint.removals().toLongArray()));
+        long[] removals = blueprint.removals().toLongArray();
+        tag.put("Removals", new LongArrayTag(removals));
+        if (blueprint.meta().format >= 2) {
+            // Parallel to Positions and Removals, in the same order.
+            int[] blockLayers = new int[positions.length];
+            for (int j = 0; j < positions.length; j++) {
+                blockLayers[j] = blueprint.layer(positions[j]);
+            }
+            int[] removalLayers = new int[removals.length];
+            for (int j = 0; j < removals.length; j++) {
+                removalLayers[j] = blueprint.layer(removals[j]);
+            }
+            tag.put("BlockLayers", new IntArrayTag(blockLayers));
+            tag.put("RemovalLayers", new IntArrayTag(removalLayers));
+        }
         return tag;
     }
 
@@ -226,6 +254,13 @@ public final class BlueprintIO {
             blocks.put(positions[i], states[i]);
         }
         LongSet removals = new LongOpenHashSet(removalArray);
+        Long2IntMap blockLayers = new Long2IntOpenHashMap();
+        Long2IntMap removalLayers = new Long2IntOpenHashMap();
+        if (meta.format >= 2) {
+            java.util.Set<Integer> known = BlueprintMeta.layerIds(meta.layers);
+            readLayers(tag.getIntArray("BlockLayers"), positions, known, blockLayers);
+            readLayers(tag.getIntArray("RemovalLayers"), removalArray, known, removalLayers);
+        }
 
         int[] size = tag.getIntArray("Size");
         if (size.length == 3) {
@@ -233,7 +268,19 @@ public final class BlueprintIO {
         }
         meta.blockCount = blocks.size();
         meta.removalCount = removals.size();
-        return new Blueprint(meta, palette, blocks, removals);
+        return new Blueprint(meta, palette, blocks, removals, blockLayers, removalLayers);
+    }
+
+    /** A layer array that does not match its positions is ignored; unknown layer IDs mean the default layer. */
+    private static void readLayers(int[] layers, long[] positions, java.util.Set<Integer> known, Long2IntMap out) {
+        if (layers.length != positions.length) {
+            return;
+        }
+        for (int i = 0; i < layers.length; i++) {
+            if (layers[i] != 0 && known.contains(layers[i])) {
+                out.put(positions[i], layers[i]);
+            }
+        }
     }
 
     private static BlueprintMeta parseMeta(byte[] bytes) throws IOException {
