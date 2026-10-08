@@ -171,6 +171,29 @@ public final class SelfTest {
         Blueprint old = Formats.MCEDIT_SCHEMATIC.read(file);
         Pawprint.LOG.info("SELFTEST legacy schematic palette: {}", old.palette());
         layerChecks(blueprint, folder);
+        webFiles();
+    }
+
+    /**
+     * Reads blueprints saved by the web editor, placed in {@code pawprint/selftest-web}, and reports what the mod
+     * makes of them: every block state should resolve in this game.
+     */
+    private static void webFiles() throws Exception {
+        Path folder = Pawprint.dataDir().resolve("selftest-web");
+        if (!java.nio.file.Files.isDirectory(folder)) {
+            return;
+        }
+        try (var files = java.nio.file.Files.list(folder)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".pawprint")).sorted().toList()) {
+                Blueprint web = com.dumaru.pawprint.format.BlueprintIO.read(file);
+                long unresolved = java.util.stream.IntStream.range(0, web.palette().size()).filter(i -> web.state(i) == null).count();
+                long layered = web.blocks().keySet().longStream().filter(pos -> web.layer(pos) != 0).count();
+                Pawprint.LOG.info("SELFTEST web file {}: format {}, size {}x{}x{}, {} blocks, {} removals, palette {} ({} unknown), {} blocks off layer 0, layers {}",
+                        file.getFileName(), web.meta().format, web.sizeX(), web.sizeY(), web.sizeZ(), web.meta().blockCount,
+                        web.meta().removalCount, web.palette().size(), unresolved, layered,
+                        web.meta().layers == null ? 0 : web.meta().layers.size());
+            }
+        }
     }
 
     /**

@@ -3,7 +3,7 @@ import type { PackInfo } from '../core/pack/types';
 /** Everything is stored in this browser only (IndexedDB). See WEB_IMPLEMENTATION.md §4.9. */
 
 const DB_NAME = 'pawprint';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface StoredPack {
   id: string;
@@ -25,6 +25,7 @@ function open(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains('packs')) db.createObjectStore('packs', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => {
@@ -42,7 +43,7 @@ function done<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-async function store(name: 'packs' | 'settings', mode: IDBTransactionMode): Promise<IDBObjectStore> {
+async function store(name: 'packs' | 'settings' | 'projects', mode: IDBTransactionMode): Promise<IDBObjectStore> {
   return (await open()).transaction(name, mode).objectStore(name);
 }
 
@@ -76,6 +77,36 @@ export async function setDefaultPack(id: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+/** A blueprint being worked on in the web editor; `file` is the whole `.pawprint`. */
+export interface StoredProject {
+  id: string;
+  name: string;
+  created: string;
+  modified: string;
+  blockCount: number;
+  size: [number, number, number];
+  thumbnail: Blob | null;
+  file: Blob;
+}
+
+/** Project list without the files (the list only needs names and thumbnails). */
+export async function listProjects(): Promise<StoredProject[]> {
+  const projects = await done((await store('projects', 'readonly')).getAll() as IDBRequest<StoredProject[]>);
+  return projects.sort((a, b) => b.modified.localeCompare(a.modified));
+}
+
+export async function getProject(id: string): Promise<StoredProject | undefined> {
+  return done((await store('projects', 'readonly')).get(id) as IDBRequest<StoredProject | undefined>);
+}
+
+export async function putProject(project: StoredProject): Promise<void> {
+  await done((await store('projects', 'readwrite')).put(project));
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await done((await store('projects', 'readwrite')).delete(id));
 }
 
 export async function getSetting<T>(key: string): Promise<T | undefined> {
