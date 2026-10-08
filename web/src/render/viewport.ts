@@ -1,11 +1,9 @@
 import * as THREE from 'three';
-import type { Blueprint } from '../core/format/pawprint';
-import type { LoadedPack } from '../core/pack/pawpack';
-import { ModelBaker } from '../core/model/bake';
-import { texturesOf, toMeshPalette } from '../core/mesh/prepare';
+import type { EditableBlueprint } from '../core/blueprint/editable';
 import type { SectionMesh } from '../core/mesh/mesher';
+import type { Plane } from '../core/edit/shapes';
 import type { MesherRequest, MesherResponse } from '../workers/mesher.worker';
-import { buildAtlas } from './atlas';
+import type { BlockResources } from './resources';
 import { FlyCamera } from './camera';
 
 // Colors are used as-is, like the game: no sRGB ↔ linear conversion anywhere.
@@ -19,8 +17,8 @@ export interface ViewportStats {
 }
 
 /**
- * The 3D view: one three.js scene, section meshes built in a worker (nearest sections first), and the fly camera.
- * Renders only when something changed.
+ * The 3D view of an editable blueprint: section meshes built in a worker (nearest first) and rebuilt where edits
+ * land, the fly camera, and helpers (ground grid, bounds, the 2D view's current slice). Renders only on change.
  */
 export class Viewport {
   readonly renderer: THREE.WebGLRenderer;
@@ -31,19 +29,28 @@ export class Viewport {
   private readonly world = new THREE.Group();
   private readonly helpers = new THREE.Group();
   private readonly sections = new Map<string, THREE.Mesh[]>();
-  private materials: THREE.Material[] = [];
-  private texture: THREE.Texture | null = null;
+  private readonly materials: THREE.Material[];
   private worker: Worker | null = null;
-  private bounds = { min: new THREE.Vector3(), max: new THREE.Vector3(1, 1, 1) };
+  private blueprint: EditableBlueprint | null = null;
+  private unsubscribe: (() => void) | null = null;
+  private sentPalette = 0;
+  private pendingCells: number[] = [];
+  private flushing = false;
+  private gridKey = '';
+  private slicePlane: THREE.Mesh | null = null;
   private stats: ViewportStats = { sectionsDone: 0, sectionsTotal: 0, quads: 0, missingBlocks: [] };
   private dirty = true;
   private frameHandle = 0;
   private lastTime = 0;
   private readonly resizeObserver: ResizeObserver;
+  private queue: string[] = [];
+  private inFlight = 0;
 
-  constructor(private readonly container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    // Shading is done on color values the way the game does (no linear-space conversion).
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly resources: BlockResources,
+  ) {
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     const canvas = this.renderer.domElement;
@@ -56,6 +63,13 @@ export class Viewport {
     this.scene.background = new THREE.Color(bg);
     this.scene.add(this.world, this.helpers);
 
+    const map = resources.texture;
+    this.materials = [
+      new THREE.MeshBasicMaterial({ map, vertexColors: true }),
+      new THREE.MeshBasicMaterial({ map, vertexColors: true, alphaTest: 0.5 }),
+      new THREE.MeshBasicMaterial({ map, vertexColors: true, transparent: true, depthWrite: false }),
+    ];
+
     this.controls = new FlyCamera(canvas);
     this.controls.onChange = () => (this.dirty = true);
     window.addEventListener('keydown', this.onKey);
@@ -66,47 +80,110 @@ export class Viewport {
     this.frameHandle = requestAnimationFrame(this.loop);
   }
 
-  async show(bp: Blueprint, pack: LoadedPack | null): Promise<void> {
+  async show(bp: EditableBlueprint): Promise<void> {
     this.clear();
-    const blocks = pack ? new Map(pack.blocks.map((b) => [b.id, b])) : null;
-    const baker = new ModelBaker(pack && blocks ? { file: (p) => pack.files.get(p), block: (id) => blocks.get(id) } : null);
-    const baked = bp.palette.map((state) => baker.bake(state));
-    this.stats = { sectionsDone: 0, sectionsTotal: 0, quads: 0, missingBlocks: [...new Set(baked.filter((b) => b.missing).map((b) => b.blockId))] };
-
-    const maxSize = Math.min(8192, this.renderer.capabilities.maxTextureSize);
-    const atlas = await buildAtlas(texturesOf(baked), (p) => pack?.files.get(p), maxSize);
-    const texture = new THREE.CanvasTexture(atlas.canvas);
-    texture.flipY = false;
-    texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestFilter;
-    texture.generateMipmaps = false;
-    texture.colorSpace = THREE.NoColorSpace;
-    this.texture = texture;
-    this.materials = [
-      new THREE.MeshBasicMaterial({ map: texture, vertexColors: true }),
-      new THREE.MeshBasicMaterial({ map: texture, vertexColors: true, alphaTest: 0.5 }),
-      new THREE.MeshBasicMaterial({ map: texture, vertexColors: true, transparent: true, depthWrite: false }),
-    ];
-
-    const palette = toMeshPalette(baked, atlas.rect);
-    this.setBounds(bp);
+    this.blueprint = bp;
+    await this.resources.prepare(bp.palette);
+    this.sentPalette = bp.palette.length;
+    const entries = this.resources.meshEntries(bp.palette);
+    this.stats = { sectionsDone: 0, sectionsTotal: 0, quads: 0, missingBlocks: this.missingIn(bp.palette) };
+    this.updateHelpers();
     this.frame();
 
+    const cells = bp.allCells();
     this.worker = new Worker(new URL('../workers/mesher.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<MesherResponse>) => this.onWorker(event.data);
-    this.post({ type: 'load', positions: bp.positions, states: bp.states, palette });
+    this.post({ type: 'load', positions: cells.positions, values: cells.values, palette: entries });
+    this.unsubscribe = bp.onChange((changed) => {
+      for (let i = 0; i < changed.length; i += 3) {
+        const x = changed[i]!, y = changed[i + 1]!, z = changed[i + 2]!;
+        this.pendingCells.push(x, y, z, bp.get(x, y, z));
+      }
+      void this.flush();
+    });
+  }
+
+  /** Sends edits to the worker, after loading textures for blocks used for the first time. */
+  private async flush(): Promise<void> {
+    if (this.flushing || !this.blueprint) return;
+    this.flushing = true;
+    try {
+      while (this.pendingCells.length) {
+        const bp = this.blueprint;
+        const start = this.sentPalette;
+        const added = bp.palette.slice(start);
+        if (added.length) await this.resources.prepare(added);
+        const cells = new Int32Array(this.pendingCells);
+        this.pendingCells = [];
+        // Values may point at palette entries added during the await; send everything up to now.
+        const palette = bp.palette.slice(start);
+        if (palette.length > added.length) await this.resources.prepare(palette);
+        this.sentPalette = start + palette.length;
+        if (palette.length) this.stats.missingBlocks = this.missingIn(bp.palette);
+        this.post({ type: 'update', paletteStart: start, palette: this.resources.meshEntries(palette), cells });
+      }
+      this.updateHelpers();
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  private missingIn(states: string[]): string[] {
+    return [...new Set(states.map((s) => this.resources.bake(s)).filter((b) => b.missing).map((b) => b.blockId))];
   }
 
   frame(): void {
-    this.controls.frame(this.bounds.min, this.bounds.max);
+    const bounds = this.blueprint?.bounds();
+    const min = bounds ? new THREE.Vector3(...bounds.min) : new THREE.Vector3(-8, 0, -8);
+    const max = bounds ? new THREE.Vector3(...bounds.max).addScalar(1) : new THREE.Vector3(8, 4, 8);
+    this.controls.frame(min, max);
   }
 
-  private queue: string[] = [];
-  private inFlight = 0;
+  /** Shows where the 2D view's slice is (a translucent sheet), or hides it with null. */
+  setSlice(plane: Plane | null, slice = 0): void {
+    if (this.slicePlane) {
+      this.helpers.remove(this.slicePlane);
+      this.slicePlane.geometry.dispose();
+      (this.slicePlane.material as THREE.Material).dispose();
+      this.slicePlane = null;
+    }
+    if (plane) {
+      const b = this.blueprint?.bounds();
+      const min = b ? b.min : [-8, 0, -8], max = b ? b.max : [8, 4, 8];
+      const pad = 4;
+      const size = [max[0]! - min[0]! + 1 + pad * 2, max[1]! - min[1]! + 1 + pad * 2, max[2]! - min[2]! + 1 + pad * 2];
+      const center = [(min[0]! + max[0]! + 1) / 2, (min[1]! + max[1]! + 1) / 2, (min[2]! + max[2]! + 1) / 2];
+      const geometry = new THREE.PlaneGeometry(plane === 'x' ? size[2]! : size[0]!, plane === 'y' ? size[2]! : size[1]!);
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xef9f27, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+      if (plane === 'y') {
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(center[0]!, slice + 0.5, center[2]!);
+      } else if (plane === 'z') {
+        mesh.position.set(center[0]!, center[1]!, slice + 0.5);
+      } else {
+        mesh.rotation.y = Math.PI / 2;
+        mesh.position.set(slice + 0.5, center[1]!, center[2]!);
+      }
+      mesh.renderOrder = 10;
+      this.slicePlane = mesh;
+      this.helpers.add(mesh);
+    }
+    this.dirty = true;
+  }
+
+  /** A PNG of the current view, for project thumbnails. */
+  snapshot(size = 256): Promise<Blob | null> {
+    this.renderer.render(this.scene, this.controls.camera);
+    const source = this.renderer.domElement;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const s = Math.min(source.width, source.height);
+    canvas.getContext('2d')!.drawImage(source, (source.width - s) / 2, (source.height - s) / 2, s, s, 0, 0, size, size);
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  }
 
   private onWorker(msg: MesherResponse): void {
     if (msg.type === 'loaded') {
-      // Nearest sections first so the part you look at appears right away.
       const eye = this.controls.camera.position;
       const center = (o: [number, number, number]) => new THREE.Vector3(o[0] + 8, o[1] + 8, o[2] + 8);
       this.queue = msg.sections.sort((a, b) => center(a.origin).distanceToSquared(eye) - center(b.origin).distanceToSquared(eye)).map((s) => s.key);
@@ -115,11 +192,14 @@ export class Viewport {
       this.pump();
       return;
     }
-    this.inFlight--;
     if (msg.type === 'section') this.addSection(msg.mesh);
-    this.stats.sectionsDone++;
+    else this.removeSection(msg.key);
+    if (!msg.update) {
+      this.inFlight--;
+      this.stats.sectionsDone++;
+      this.pump();
+    }
     this.onStats({ ...this.stats });
-    this.pump();
   }
 
   private pump(): void {
@@ -146,36 +226,48 @@ export class Viewport {
       object.matrixAutoUpdate = false;
       object.updateMatrix();
       object.renderOrder = i;
+      object.userData.quads = layer.indices.length / 6;
       this.world.add(object);
       meshes.push(object);
+      this.stats.quads += object.userData.quads;
     });
     this.sections.set(mesh.key, meshes);
-    this.stats.quads += mesh.quadCount;
     this.dirty = true;
   }
 
   private removeSection(key: string): void {
     for (const mesh of this.sections.get(key) ?? []) {
+      this.stats.quads -= mesh.userData.quads ?? 0;
       mesh.geometry.dispose();
       this.world.remove(mesh);
     }
     this.sections.delete(key);
+    this.dirty = true;
   }
 
-  private setBounds(bp: Blueprint): void {
-    const [sx, sy, sz] = bp.meta.size;
-    this.bounds = { min: new THREE.Vector3(0, 0, 0), max: new THREE.Vector3(Math.max(1, sx), Math.max(1, sy), Math.max(1, sz)) };
+  /** Ground grid and bounds box follow the blueprint's size. */
+  private updateHelpers(): void {
+    const b = this.blueprint?.bounds();
+    const min = b ? b.min : [-8, 0, -8], max = b ? b.max : [7, 0, 7];
+    const key = min.join() + '|' + max.join();
+    if (key === this.gridKey) return;
+    this.gridKey = key;
     for (const child of [...this.helpers.children]) {
+      if (child === this.slicePlane) continue;
       this.helpers.remove(child);
       if (child instanceof THREE.LineSegments) (child.geometry.dispose(), (child.material as THREE.Material).dispose());
     }
-    this.helpers.add(groundGrid(Math.max(1, sx), Math.max(1, sz)));
-    const box = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(this.bounds.max.x, this.bounds.max.y, this.bounds.max.z)),
-      new THREE.LineBasicMaterial({ color: 0xfac775, transparent: true, opacity: 0.6 }),
-    );
-    box.position.copy(this.bounds.max).multiplyScalar(0.5);
-    this.helpers.add(box);
+    this.helpers.add(groundGrid(min[0]!, min[2]!, max[0]! + 1, max[2]! + 1, min[1]!));
+    if (b) {
+      const size = [max[0]! - min[0]! + 1, max[1]! - min[1]! + 1, max[2]! - min[2]! + 1];
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(size[0], size[1], size[2])),
+        new THREE.LineBasicMaterial({ color: 0xfac775, transparent: true, opacity: 0.6 }),
+      );
+      box.position.set(min[0]! + size[0]! / 2, min[1]! + size[1]! / 2, min[2]! + size[2]! / 2);
+      this.helpers.add(box);
+    }
+    this.dirty = true;
   }
 
   private onKey = (e: KeyboardEvent): void => {
@@ -189,6 +281,7 @@ export class Viewport {
     const dt = Math.min(0.1, (time - (this.lastTime || time)) / 1000);
     this.lastTime = time;
     if (this.controls.update(dt)) this.dirty = true;
+    if (this.resources.texture.needsUpdate) this.dirty = true;
     if (this.dirty) {
       this.dirty = false;
       this.renderer.render(this.scene, this.controls.camera);
@@ -209,44 +302,44 @@ export class Viewport {
   }
 
   private clear(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.worker?.terminate();
     this.worker = null;
     this.queue = [];
     this.inFlight = 0;
+    this.pendingCells = [];
     for (const key of [...this.sections.keys()]) this.removeSection(key);
-    this.materials.forEach((m) => m.dispose());
-    this.texture?.dispose();
   }
 
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     this.clear();
+    this.setSlice(null);
     this.resizeObserver.disconnect();
     window.removeEventListener('keydown', this.onKey);
     this.controls.dispose();
+    this.materials.forEach((m) => m.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
 }
 
 /** Blueprint-paper grid on the ground: a line every block, a stronger one every 16. */
-function groundGrid(sx: number, sz: number): THREE.LineSegments {
+function groundGrid(x0b: number, z0b: number, x1b: number, z1b: number, y: number): THREE.LineSegments {
   const margin = 8;
-  const x0 = -margin, x1 = sx + margin, z0 = -margin, z1 = sz + margin;
+  const x0 = x0b - margin, x1 = x1b + margin, z0 = z0b - margin, z1 = z1b + margin;
   const minor: number[] = [];
   const major: number[] = [];
   for (let x = x0; x <= x1; x++) (x % 16 === 0 ? major : minor).push(x, 0, z0, x, 0, z1);
   for (let z = z0; z <= z1; z++) (z % 16 === 0 ? major : minor).push(x0, 0, z, x1, 0, z);
-  const geometry = new THREE.BufferGeometry();
   const all = [...minor, ...major];
+  const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(all, 3));
   const colors = new Float32Array(all.length);
-  for (let i = 0; i < all.length / 3; i++) {
-    const strong = i >= minor.length / 3;
-    colors.set(strong ? [0.72, 0.84, 0.96] : [0.45, 0.62, 0.84], i * 3);
-  }
+  for (let i = 0; i < all.length / 3; i++) colors.set(i >= minor.length / 3 ? [0.72, 0.84, 0.96] : [0.45, 0.62, 0.84], i * 3);
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const grid = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5 }));
-  grid.position.y = -0.002;
+  grid.position.y = y - 0.002;
   return grid;
 }

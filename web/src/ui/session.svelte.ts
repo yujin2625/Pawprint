@@ -1,9 +1,7 @@
-import type { Blueprint } from '../core/format/pawprint';
+/** Which project the editor shows (also kept in the URL: #/editor/<id>). */
+export const session = $state<{ projectId: string | null }>({ projectId: null });
 
-/** The blueprint open in the editor. Saving to the project list comes with W5. */
-export const session = $state<{ blueprint: Blueprint | null; fileName: string }>({ blueprint: null, fileName: '' });
-
-export function openBlueprint(blueprint: Blueprint, fileName: string): void {
-  session.blueprint = blueprint;
-  session.fileName = fileName;
+export function openProject(id: string): void {
+  session.projectId = id;
+  location.hash = '#/editor/' + id;
 }

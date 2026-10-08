@@ -12,7 +12,8 @@
     return () => window.removeEventListener('hashchange', update);
   });
 
-  const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor') ? 'editor' : 'projects');
+  const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor/') ? 'editor' : 'projects');
+  const projectId = $derived(page === 'editor' ? decodeURIComponent(hash.slice('#/editor/'.length)) : '');
 </script>
 
 <div class={["shell", { full: page === "editor" }]}>
@@ -37,7 +38,7 @@
     {#if page === 'packs'}
       <PacksPage />
     {:else if page === 'editor'}
-      <EditorPage />
+      {#key projectId}<EditorPage {projectId} />{/key}
     {:else}
       <ProjectsPage />
     {/if}
