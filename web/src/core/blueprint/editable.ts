@@ -200,15 +200,83 @@ export class EditableBlueprint {
     this.recording = { label, changes: [] };
   }
 
-  /** Sets one cell inside the current batch. New blocks go to the current layer; a changed block keeps its layer. */
-  set(x: number, y: number, z: number, value: number): void {
+  /**
+   * Layers that cannot be changed right now (locked or hidden). Cells in them are left alone by every edit, and
+   * nothing is placed while the current layer is one of them.
+   */
+  protectedLayers: ReadonlySet<number> = new Set();
+
+  /** Whether an edit may touch this cell. */
+  editable(x: number, y: number, z: number): boolean {
+    if (this.get(x, y, z) !== EMPTY && this.protectedLayers.has(this.layerAt(x, y, z))) return false;
+    return true;
+  }
+
+  /**
+   * Sets one cell inside the current batch. The cell moves to the current layer (docs/FORMAT_PAWPRINT.md §5.3),
+   * unless `keepLayer` (block swaps such as replace or turning keep a block where it was).
+   */
+  set(x: number, y: number, z: number, value: number, keepLayer = false): void {
     if (!this.recording) throw new Error('set() outside begin()/commit()');
     const before = this.get(x, y, z);
-    if (before === value) return;
     const layerBefore = this.layerAt(x, y, z);
-    const layerAfter = value === EMPTY ? 0 : before === EMPTY ? this.currentLayer : layerBefore;
+    if (before !== EMPTY && this.protectedLayers.has(layerBefore)) return;
+    if (value !== EMPTY && !keepLayer && this.protectedLayers.has(this.currentLayer)) return;
+    const layerAfter = value === EMPTY ? 0 : keepLayer && before !== EMPTY ? layerBefore : this.currentLayer;
+    if (before === value && layerBefore === layerAfter) return;
     this.write(x, y, z, value, layerAfter);
     this.recording.changes.push(x, y, z, before, value, layerBefore, layerAfter);
+  }
+
+  /** Moves a block to another layer without changing it. */
+  setLayer(x: number, y: number, z: number, layer: number): void {
+    if (!this.recording) throw new Error('setLayer() outside begin()/commit()');
+    const value = this.get(x, y, z);
+    const before = this.layerAt(x, y, z);
+    if (value === EMPTY || before === layer) return;
+    this.write(x, y, z, value, layer);
+    this.recording.changes.push(x, y, z, value, value, before, layer);
+  }
+
+  /** Cells of a layer: x, y, z triples. */
+  cellsOfLayer(layer: number): number[] {
+    const out: number[] = [];
+    for (const s of this.sections.values()) {
+      if (s.count === 0) continue;
+      for (let i = 0; i < s.cells.length; i++) {
+        if (s.cells[i] === EMPTY || s.layers[i] !== layer) continue;
+        out.push(s.origin[0] + (i % SECTION), s.origin[1] + Math.floor(i / (SECTION * SECTION)), s.origin[2] + (Math.floor(i / SECTION) % SECTION));
+      }
+    }
+    return out;
+  }
+
+  /** Block count per layer (removals not counted). */
+  layerCounts(): Map<number, number> {
+    const counts = new Map<number, number>();
+    for (const s of this.sections.values()) {
+      if (s.count === 0) continue;
+      for (let i = 0; i < s.cells.length; i++) if (s.cells[i]! > 0) counts.set(s.layers[i]!, (counts.get(s.layers[i]!) ?? 0) + 1);
+    }
+    return counts;
+  }
+
+  /** Visits every non-empty cell with its value and layer. */
+  forEachCell(fn: (x: number, y: number, z: number, value: number, layer: number) => void): void {
+    for (const s of this.sections.values()) {
+      if (s.count === 0) continue;
+      for (let i = 0; i < s.cells.length; i++) {
+        const v = s.cells[i]!;
+        if (v === EMPTY) continue;
+        fn(s.origin[0] + (i % SECTION), s.origin[1] + Math.floor(i / (SECTION * SECTION)), s.origin[2] + (Math.floor(i / SECTION) % SECTION), v, s.layers[i]!);
+      }
+    }
+  }
+
+  /** Layer list changed (no cell changes): listeners redraw. */
+  layersChanged(): void {
+    this.revision++;
+    this.listeners.forEach((l) => l(new Int32Array(0)));
   }
 
   /** Ends the batch; returns false when nothing changed. */

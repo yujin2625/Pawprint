@@ -28,18 +28,57 @@ describe('EditableBlueprint', () => {
     expect(changed).toEqual([2, 2, 2]);
   });
 
-  it('keeps a cell layer when its block changes; new cells use the current layer', () => {
+  it('moves a painted cell to the current layer; block swaps keep it', () => {
     const bp = new EditableBlueprint(newMeta('t'));
     const a = bp.stateIndex('a:a') + 1, b = bp.stateIndex('a:b') + 1;
     bp.currentLayer = 2;
     bp.begin('x');
     bp.set(1, 1, 1, a);
+    bp.set(2, 1, 1, a);
     bp.commit();
     bp.currentLayer = 0;
     bp.begin('y');
     bp.set(1, 1, 1, b);
+    bp.set(2, 1, 1, b, true);
     bp.commit();
-    expect(bp.layerAt(1, 1, 1)).toBe(2);
+    expect(bp.layerAt(1, 1, 1)).toBe(0);
+    expect(bp.layerAt(2, 1, 1)).toBe(2);
+    // Painting the same block onto another layer's cell still moves it.
+    bp.currentLayer = 3;
+    bp.begin('z');
+    bp.set(1, 1, 1, b);
+    bp.commit();
+    expect(bp.layerAt(1, 1, 1)).toBe(3);
+    bp.undo();
+    expect(bp.layerAt(1, 1, 1)).toBe(0);
+  });
+
+  it('leaves protected layers alone and moves blocks between layers', () => {
+    const bp = new EditableBlueprint(newMeta('t'));
+    const a = bp.stateIndex('a:a') + 1;
+    bp.currentLayer = 1;
+    bp.begin('x');
+    bp.set(0, 0, 0, a);
+    bp.commit();
+    bp.protectedLayers = new Set([1]);
+    bp.currentLayer = 0;
+    bp.begin('erase');
+    bp.set(0, 0, 0, EMPTY);
+    bp.commit();
+    expect(bp.get(0, 0, 0)).toBe(a);
+    bp.currentLayer = 1;
+    bp.begin('paint');
+    bp.set(5, 0, 0, a);
+    bp.commit();
+    expect(bp.get(5, 0, 0)).toBe(EMPTY);
+    bp.protectedLayers = new Set();
+    bp.begin('move');
+    bp.setLayer(0, 0, 0, 4);
+    bp.commit();
+    expect(bp.layerAt(0, 0, 0)).toBe(4);
+    expect(bp.layerCounts()).toEqual(new Map([[4, 1]]));
+    bp.undo();
+    expect(bp.layerAt(0, 0, 0)).toBe(1);
   });
 
   it('round-trips through .pawprint, moving the minimum corner to 0 and dropping unused palette entries', () => {
