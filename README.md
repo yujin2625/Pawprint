@@ -46,4 +46,4 @@ round trip in a fresh superflat world. Results are logged with the prefix `SELFT
 
 ## License
 
-[MIT](LICENSE)
+[PolyForm Noncommercial 1.0.0](LICENSE): noncommercial use, modification and redistribution are allowed, commercial use is not, and redistributions must keep the `Required Notice` line and the license terms.

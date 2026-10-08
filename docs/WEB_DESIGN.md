@@ -46,7 +46,7 @@ Pawprint 청사진을 웹 브라우저(와 데스크탑 앱)에서 3D/2D로 보�
 | Tauri | 데스크탑 앱 | Apache-2.0/MIT | |
 | UI 프레임워크 (Svelte 또는 React) | 패널·목록 UI | 둘 다 MIT | 미정 |
 
-- 모두 MIT/Apache 계열이라 Pawprint(MIT)에 넣어 공개·배포해도 문제없다. 각 라이선스 고지를 앱의 "오픈소스 라이선스" 화면과 저장소에 포함한다.
+- 모두 MIT/Apache 계열이라 Pawprint(PolyForm Noncommercial 1.0.0)에 넣어 공개·배포해도 문제없다. 각 라이선스 고지를 앱의 "오픈소스 라이선스" 화면과 저장소에 포함한다.
 - **Blockbench는 GPL-3.0**이라 코드를 가져오지 않는다(참고만).
 
 ### 2.2 마인크래프트 에셋
