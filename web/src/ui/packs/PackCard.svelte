@@ -25,7 +25,7 @@
       'MC ' + info.mcVersion,
       info.loader && info.loader !== 'vanilla' ? info.loader : null,
       info.mods?.length ? t('packs.mods', { count: info.mods.length }) : null,
-      info.languages.join(' · '),
+      info.languages.length > 4 ? t('packs.languages', { count: info.languages.length }) : info.languages.join(' · '),
       t('packs.source.' + info.source),
     ].filter((c): c is string => !!c),
   );

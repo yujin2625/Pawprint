@@ -16,7 +16,9 @@
     viewport = view;
     useViewport(view);
     if (import.meta.env.DEV) (window as unknown as { __viewport?: Viewport }).__viewport = view;
-    view.onStats = (s) => (ctx.stats = s);
+    view.onStats = (s) => {
+      ctx.stats = s;
+    };
     view.setHiddenLayers(editor.hiddenLayers);
     void view.show(bp);
     const edit = new Editor3D(view, bp, {

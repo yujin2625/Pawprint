@@ -36,11 +36,16 @@ export function dropViewport(view: Viewport): void {
   if (i >= 0) viewports.splice(i, 1);
 }
 
+let viewIds = 0;
+export function nextViewId(): number {
+  return ++viewIds;
+}
+
 /** Plane and layer of the 2D view used last; keyboard layer stepping and the 3D slice marker follow it. */
 export const activeSlice = $state({
   plane: 'y' as Plane,
   slice: 0,
-  /** The 2D view these values come from. */
-  owner: null as object | null,
+  /** The 2D view these values come from (a number: an object would be wrapped in a proxy and never compare equal). */
+  owner: null as number | null,
   set: null as ((slice: number) => void) | null,
 });

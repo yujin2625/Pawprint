@@ -2,6 +2,7 @@ import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint } from '../core/format/pawprint';
 import { getProject, putProject, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
+import { safeFileName, saveBytes } from '../platform/platform';
 
 /** Projects: blueprints kept in this browser, stored as whole `.pawprint` files. */
 
@@ -48,17 +49,10 @@ export async function saveProject(id: string, bp: EditableBlueprint, thumbnail: 
   });
 }
 
-/** Saves a `.pawprint` to the user's downloads. */
-export function download(bp: EditableBlueprint): void {
+/** Saves a `.pawprint` file: to the downloads on the web, wherever the user picks in the desktop app. */
+export function exportFile(bp: EditableBlueprint): Promise<boolean> {
   const bytes = writePawprint(bp.toBlueprint());
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/zip' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = (bp.meta.name || 'blueprint').replace(/[\\/:*?"<>|]+/g, '_') + '.pawprint';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return saveBytes(safeFileName(bp.meta.name, 'blueprint') + '.pawprint', bytes, { name: 'Pawprint', extensions: ['pawprint'] }, 'application/zip');
 }
 
 /** The whole blueprint of a project, ready to stamp. */

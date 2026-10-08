@@ -194,7 +194,7 @@ example.pawpack
   - 기본 상태는 각 속성의 첫 값으로 둔다. 실제 게임 기본값과 다를 수 있다.
   - 모델에 쓰이지 않는 속성(예: `waterlogged`)은 빠진다.
   - 그래서 `propertiesComplete: false`.
-- 언어는 jar에 든 `en_us`만. 데스크탑 앱은 `.minecraft/assets/indexes`·`objects`에서 다른 언어도 찾을 수 있다.
+- 언어: 웹은 jar에 든 `en_us`만. 데스크탑 앱은 `versions/<v>/<v>.json`의 `assetIndex.id`로 `assets/indexes/<id>.json`을 열어 `minecraft/lang/*.json`을 `assets/objects/<해시 앞 2자>/<해시>`에서 읽고, `block.minecraft.<경로>` 이름이 있는 언어를 모두 넣는다.
 - `item`은 같은 ID의 아이템 모델이 있으면 그 ID, 없으면 null. `tabs`는 비우고, `tint`는 알려진 바닐라 블럭 목록(웹에 내장한 표)으로 채운다.
 
 ---

@@ -43,6 +43,8 @@ export class SliceView {
   private readonly prepared = new Set<string>();
   private resourcesVersion = -1;
   private readonly resizeObserver: ResizeObserver;
+  /** The window the view is in: the main one, or a panel window of the desktop app. */
+  private readonly win: Window & typeof globalThis;
   private readonly unsubscribe: () => void;
   private readonly style: CSSStyleDeclaration;
 
@@ -52,7 +54,8 @@ export class SliceView {
     private readonly blueprint: EditableBlueprint,
     private readonly callbacks: SliceCallbacks,
   ) {
-    this.canvas = document.createElement('canvas');
+    this.win = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+    this.canvas = container.ownerDocument.createElement('canvas');
     this.canvas.tabIndex = 0;
     this.canvas.style.display = 'block';
     this.canvas.style.outline = 'none';
@@ -62,11 +65,11 @@ export class SliceView {
     this.style = getComputedStyle(container);
     this.unsubscribe = blueprint.onChange(() => (this.dirty = true));
     this.bind();
-    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver = new this.win.ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
     this.centerOnBlueprint();
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   }
 
   invalidate(): void {
@@ -300,7 +303,7 @@ export class SliceView {
       this.dirty = false;
       this.draw();
     }
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   };
 
   private icon(state: string, plane: Plane): HTMLCanvasElement | null {
@@ -434,7 +437,7 @@ export class SliceView {
   }
 
   private resize(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, this.win.devicePixelRatio || 1);
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.canvas.style.width = w + 'px';
@@ -445,7 +448,7 @@ export class SliceView {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.frameHandle);
+    this.win.cancelAnimationFrame(this.frameHandle);
     this.unsubscribe();
     this.resizeObserver.disconnect();
     this.canvas.remove();

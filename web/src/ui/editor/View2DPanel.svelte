@@ -3,7 +3,7 @@
   import { t } from '../../i18n/i18n.svelte';
   import type { Plane } from '../../core/edit/shapes';
   import { SliceView, type SliceSettings } from '../../view2d/sliceView';
-  import { ctx, activeSlice } from './context.svelte';
+  import { ctx, activeSlice, nextViewId } from './context.svelte';
   import { editor } from './editor.svelte';
 
   interface PanelApi {
@@ -17,7 +17,7 @@
   const local = $state({ plane: (initial.plane ?? 'y') as Plane, slice: initial.slice ?? 0, initialized: initial.slice !== undefined });
   let host: HTMLDivElement | undefined = $state();
   let view = $state.raw<SliceView | null>(null);
-  const me = {};
+  const me = nextViewId();
 
   // Tool settings come from the editor; plane and layer from this view.
   const settings = Object.setPrototypeOf(

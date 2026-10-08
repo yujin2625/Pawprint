@@ -3,6 +3,8 @@
   import EditorPage from './pages/EditorPage.svelte';
   import PacksPage from './pages/PacksPage.svelte';
   import ProjectsPage from './pages/ProjectsPage.svelte';
+  import { isDesktop } from '../platform/platform';
+  import { watchOpenFiles } from './openFiles';
 
   let hash = $state(location.hash);
 
@@ -10,6 +12,17 @@
     const update = () => (hash = location.hash);
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
+  });
+
+  $effect(() => {
+    if (!isDesktop) return;
+    let off: (() => void) | null = null;
+    let gone = false;
+    void watchOpenFiles().then((unlisten) => (gone ? unlisten() : (off = unlisten)));
+    return () => {
+      gone = true;
+      off?.();
+    };
   });
 
   const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor/') ? 'editor' : 'projects');

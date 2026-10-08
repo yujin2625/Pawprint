@@ -14,7 +14,8 @@
   } from '../../storage/db';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import PackCard from '../packs/PackCard.svelte';
-  import { packFromFile, packFromJar } from '../packs/addPack';
+  import { packFromFile, packFromJar, packFromJarBytes } from '../packs/addPack';
+  import { isDesktop, minecraftInstalls, minecraftLanguages, minecraftRoot, pickFolder, readFile, type MinecraftInstall } from '../../platform/platform';
 
   interface Question {
     message: string;
@@ -47,7 +48,35 @@
 
   $effect(() => {
     refresh();
+    if (isDesktop) void findInstalls();
   });
+
+  // Desktop: versions installed by the launcher (or in a folder the user picks, e.g. a CurseForge "Install" folder).
+  let gameRoot = $state<string | null>(null);
+  let installs = $state<MinecraftInstall[]>([]);
+  let searched = $state(false);
+
+  async function findInstalls(root?: string) {
+    try {
+      gameRoot = root ?? (await minecraftRoot());
+      installs = gameRoot ? await minecraftInstalls(gameRoot) : [];
+    } catch (e) {
+      error = describe(e);
+    }
+    searched = true;
+  }
+
+  async function chooseRoot() {
+    const root = await pickFolder();
+    if (root) await findInstalls(root);
+  }
+
+  function fromInstall(install: MinecraftInstall) {
+    add(install.version + '.jar', async () => {
+      const [jar, languages] = await Promise.all([readFile(install.jar), minecraftLanguages(install).catch(() => ({}))]);
+      return packFromJarBytes(jar, languages);
+    }, 'packs.busy.building');
+  }
 
   function ask(message: string, confirmLabel: string, danger = false): Promise<boolean> {
     return new Promise((resolve) => (question = { message, confirmLabel, danger, resolve }));
@@ -63,13 +92,13 @@
     return { key: 'error.unknown', params: { message: e instanceof Error ? e.message : String(e) } };
   }
 
-  async function add(file: File, make: (file: File) => Promise<StoredPack>, busyKey: string) {
+  async function add(name: string, make: () => Promise<StoredPack>, busyKey: string) {
     error = notice = null;
-    busy = { key: busyKey, params: { name: file.name } };
+    busy = { key: busyKey, params: { name } };
     // Let the busy message paint before the synchronous unzip blocks the page.
     await new Promise((r) => setTimeout(r, 30));
     try {
-      const pack = await make(file);
+      const pack = await make();
       const existing = await getPack(pack.id);
       if (existing) {
         busy = null;
@@ -93,7 +122,7 @@
   function picked(input: HTMLInputElement, make: (file: File) => Promise<StoredPack>, busyKey: string) {
     const file = input.files?.[0];
     input.value = '';
-    if (file) add(file, make, busyKey);
+    if (file) add(file.name, () => make(file), busyKey);
   }
 
   async function rename(pack: StoredPack, name: string) {
@@ -152,6 +181,23 @@
   </section>
 
   <aside>
+    {#if isDesktop}
+      <section class="add" aria-labelledby="installs-title">
+        <h2 id="installs-title">{t('packs.installs.title')}</h2>
+        {#if gameRoot}<p class="help path" title={gameRoot}>{gameRoot}</p>{/if}
+        {#each installs as install (install.jar)}
+          <div class="install">
+            <span class="version">{install.version}</span>
+            <button class="btn" type="button" disabled={!!busy} onclick={() => fromInstall(install)}>{t('packs.installs.make')}</button>
+          </div>
+        {:else}
+          {#if searched}<p class="help">{t('packs.installs.none')}</p>{/if}
+        {/each}
+        <button class="btn wide" type="button" disabled={!!busy} onclick={chooseRoot}>{t('packs.installs.choose')}</button>
+        <p class="help">{t('packs.installs.help')}</p>
+      </section>
+    {/if}
+
     <section class="add" aria-labelledby="add-title">
       <h2 id="add-title">{t('packs.add.title')}</h2>
       <button class="btn primary wide" type="button" disabled={!!busy} onclick={() => packInput.click()}>{t('packs.add.open')}</button>
@@ -216,6 +262,26 @@
 
   .wide {
     justify-content: flex-start;
+  }
+
+  .install {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .version {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .help {

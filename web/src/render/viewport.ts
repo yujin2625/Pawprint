@@ -44,6 +44,8 @@ export class Viewport {
   private frameHandle = 0;
   private lastTime = 0;
   private readonly resizeObserver: ResizeObserver;
+  /** The window the view is in: the main one, or a panel window of the desktop app. */
+  private readonly win: Window & typeof globalThis;
   private queue: string[] = [];
   private inFlight = 0;
 
@@ -51,9 +53,15 @@ export class Viewport {
     private readonly container: HTMLElement,
     private readonly resources: BlockResources,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+    this.win = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: container.ownerDocument.createElement('canvas'),
+      antialias: false,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true,
+    });
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    this.renderer.setPixelRatio(Math.min(2, this.win.devicePixelRatio));
     const canvas = this.renderer.domElement;
     canvas.tabIndex = 0;
     canvas.style.display = 'block';
@@ -75,10 +83,10 @@ export class Viewport {
     this.controls.onChange = () => (this.dirty = true);
     window.addEventListener('keydown', this.onKey);
 
-    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver = new this.win.ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   }
 
   async show(bp: EditableBlueprint): Promise<void> {
@@ -334,7 +342,7 @@ export class Viewport {
       this.dirty = false;
       this.renderer.render(this.scene, this.controls.camera);
     }
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   };
 
   private sized = false;
@@ -368,7 +376,7 @@ export class Viewport {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.frameHandle);
+    this.win.cancelAnimationFrame(this.frameHandle);
     this.clear();
     this.setSlice(null);
     this.resizeObserver.disconnect();

@@ -9,7 +9,8 @@
   import { hiddenLayers, moveCellsTo, protectedLayers, rows } from '../../core/blueprint/layers';
   import { getSetting, setSetting } from '../../storage/db';
   import { loadDefaultPack } from '../packs/activePack';
-  import { download, loadProject, saveProject, saveStamp } from '../projects';
+  import { exportFile, loadProject, saveProject, saveStamp } from '../projects';
+  import { isDesktop, saveBytes } from '../../platform/platform';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
   import { PANELS } from '../panels';
@@ -34,6 +35,8 @@
   let locked = $state(false);
   let presetName = $state('');
   let layoutInput: HTMLInputElement | undefined = $state();
+  /** Set while the desktop window closes: panel windows close with it, and that must not end up in the saved layout. */
+  let closing = false;
 
   const TOOLS: ({ id: Tool; key: string } | null)[] = [
     { id: 'select', key: 'V' }, null,
@@ -136,7 +139,7 @@
     let timer: ReturnType<typeof setTimeout> | undefined;
     api.onDidLayoutChange(() => {
       clearTimeout(timer);
-      timer = setTimeout(() => void saveCurrent(api.toJSON()), 400);
+      timer = setTimeout(() => closing || void saveCurrent(api.toJSON()), 400);
     });
   }
 
@@ -174,15 +177,38 @@
     await savePresets(presets);
   }
 
-  function exportLayout() {
+  async function exportLayout() {
     if (!dock) return;
-    const url = URL.createObjectURL(toFile({ name: t('layout.mine'), layout: dock.toJSON() }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'pawprint-layout.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    const bytes = new Uint8Array(await toFile({ name: t('layout.mine'), layout: dock.toJSON() }).arrayBuffer());
+    await saveBytes('pawprint-layout.json', bytes, { name: 'JSON', extensions: ['json'] }, 'application/json');
   }
+
+  /** Desktop: the active panel's group moves to its own window. */
+  function popOut() {
+    const group = dock?.activePanel?.group;
+    if (!dock || !group || group.api.location.type === 'popout') return;
+    void dock.addPopoutGroup(group);
+  }
+
+  // Desktop: before the window closes, keep the layout as it is (with its panel windows) and save the blueprint.
+  $effect(() => {
+    if (!isDesktop) return;
+    let off: (() => void) | null = null;
+    let gone = false;
+    void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+      const unlisten = await getCurrentWindow().onCloseRequested(async () => {
+        closing = true;
+        if (dock) await saveCurrent(dock.toJSON());
+        if (saveState !== 'saved') await save();
+      });
+      if (gone) unlisten();
+      else off = unlisten;
+    });
+    return () => {
+      gone = true;
+      off?.();
+    };
+  });
 
   async function importLayout() {
     const file = layoutInput?.files?.[0];
@@ -395,6 +421,10 @@
           {#each PANELS.filter((p) => !p.multiple) as p (p.id)}
             <button class="item" type="button" onclick={() => (dock && openPanel(dock, p.id), close())}>{t(p.title)}</button>
           {/each}
+          {#if isDesktop}
+            <div class="sep"></div>
+            <button class="item" type="button" title={t('window.popoutHelp')} onclick={() => (popOut(), close())}>⧉ {t('window.popout')}</button>
+          {/if}
         {/snippet}
       </Menu>
       <Menu label={t('layout.title')} align="right">
@@ -427,7 +457,7 @@
       </Menu>
       <input bind:this={layoutInput} type="file" accept=".json,application/json" hidden onchange={importLayout} />
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
-      <button class="btn primary" type="button" disabled={!ctx.blueprint} onclick={() => ctx.blueprint && download(ctx.blueprint)}>{t('editor.download')}</button>
+      <button class="btn primary" type="button" disabled={!ctx.blueprint} onclick={() => ctx.blueprint && exportFile(ctx.blueprint)}>{t(isDesktop ? 'editor.saveFile' : 'editor.download')}</button>
     </div>
 
     <div class="options">

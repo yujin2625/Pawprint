@@ -153,7 +153,10 @@ Pawprint/
   - 패키지에 CSS 파일이 없고 UMD 번들 안에만 있어서 `tools/extract-dockview-css.mjs`로 `src/ui/vendor/dockview.css`를 만든다(버전을 올리면 다시 실행).
   - 별도 창(Tauri)은 W9에서 확인한다.
 - 배치는 JSON(분할 트리, 각 칸의 탭 목록·크기, 떠 있는 패널 위치)으로 `settings`에 저장한다. 프리셋도 같은 JSON이다.
-- 별도 창(Tauri): 새 `WebviewWindow`에 같은 앱을 "패널 하나만" 모드로 띄우고, 상태는 주 창과 메시지로 맞춘다. 3D 보기를 별도 창에 띄우면 그 창이 자기 WebGL 컨텍스트를 가진다(모델 캐시는 다시 만든다).
+- 별도 창(Tauri, W9에서 확인): dockview의 popout(`addPopoutGroup`, `public/popout.html`)을 쓴다. 주 창의 `window.open`을 Tauri `on_new_window`가 같은 WebView2 환경의 앱 창으로 만들어 주므로, 별도 창은 **주 창과 같은 JavaScript를 공유**한다. 상태를 메시지로 맞출 필요가 없다.
+  - 패널이 별도 창으로 가거나 돌아오면 그 패널의 Svelte 컴포넌트를 다시 마운트한다. 3D·2D 보기는 캔버스·`ResizeObserver`·`requestAnimationFrame`을 자기가 들어 있는 창(`container.ownerDocument.defaultView`)에서 만든다. 3D 보기는 창마다 자기 WebGL 컨텍스트를 가진다.
+  - 별도 창에서 누른 키는 주 창으로 넘겨 단축키가 똑같이 동작한다.
+  - 배치 JSON에 별도 창(위치·크기)이 들어간다. 주 창을 닫을 때(`onCloseRequested`) 별도 창이 열린 배치를 먼저 저장하고, 주 창이 닫히면 앱이 끝나며 별도 창도 같이 닫힌다. 웹에서 이 배치를 불러오면 팝업이 막혀 그 패널이 격자로 돌아온다.
 
 ---
 

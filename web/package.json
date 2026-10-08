@@ -9,9 +9,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
     "deepslate": "^0.27.2",
     "dockview-core": "^8.4.1",
     "fflate": "^0.8.3",
@@ -19,6 +22,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tauri-apps/cli": "^2.12.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.19.1",
     "@types/three": "^0.186.0",

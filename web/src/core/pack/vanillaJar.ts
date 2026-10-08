@@ -4,7 +4,7 @@ import { DEFAULT_COLORS, PACK_FORMAT, type BlockDef, type PackInfo, type RenderL
 
 /**
  * Builds a `.pawpack` from a vanilla client jar (`.minecraft/versions/<v>/<v>.jar`). Only English names are in the
- * jar, and block properties are inferred from blockstate files, so the pack is marked `propertiesComplete: false`.
+ * jar (the desktop app passes other languages from the launcher's assets), and block properties are inferred from blockstate files, so the pack is marked `propertiesComplete: false`.
  * See docs/FORMAT_PAWPACK.md §8.
  */
 export interface JarPackOptions {
@@ -12,6 +12,8 @@ export interface JarPackOptions {
   now: string;
   name?: string;
   generator?: string;
+  /** More languages (code → the game's language table, at least its `block.*` keys); the jar itself only has `en_us`. */
+  languages?: Record<string, Record<string, string>>;
 }
 
 export interface JarPack {
@@ -41,6 +43,8 @@ export function buildPackFromJar(jar: Uint8Array, options: JarPackOptions): JarP
   const models = new ModelScanner(meta);
   const blocks: BlockDef[] = [];
   const names: Record<string, string> = {};
+  const extra = Object.entries(options.languages ?? {}).filter(([code]) => /^[a-z0-9_]+$/.test(code) && code !== 'en_us');
+  const extraNames = new Map<string, Record<string, string>>(extra.map(([code]) => [code, {}]));
   const out = new Map<string, Uint8Array>();
 
   const stateFiles = [...meta.keys()].filter((n) => n.startsWith(BLOCKSTATES) && n.endsWith('.json')).sort();
@@ -74,6 +78,10 @@ export function buildPackFromJar(jar: Uint8Array, options: JarPackOptions): JarP
       ...(fluid ? { fluid } : {}),
     });
     names[id] = lang['block.minecraft.' + path] ?? humanize(path);
+    for (const [code, table] of extra) {
+      const name = table['block.minecraft.' + path];
+      if (name) extraNames.get(code)![id] = name;
+    }
   }
   if (blocks.length === 0) throw new FileFormatError('error.jar.notMinecraft');
 
@@ -95,13 +103,14 @@ export function buildPackFromJar(jar: Uint8Array, options: JarPackOptions): JarP
     loader: 'vanilla',
     mods: [],
     resourcePacks: ['vanilla'],
-    languages: ['en_us'],
+    languages: ['en_us', ...[...extraNames.keys()].filter((c) => Object.keys(extraNames.get(c)!).length > 0)].sort(),
     blockCount: blocks.length,
     propertiesComplete: false,
   };
   out.set('pack.json', jsonBytes(info));
   out.set('blocks.json', jsonBytes(blocks));
   out.set('lang/en_us.json', jsonBytes(names));
+  for (const code of info.languages) if (code !== 'en_us') out.set(`lang/${code}.json`, jsonBytes(extraNames.get(code)!));
   out.set('colors.json', jsonBytes(DEFAULT_COLORS));
   return { bytes: writeZip(out), info };
 }
