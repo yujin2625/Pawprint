@@ -358,7 +358,7 @@ example.pawprint (zip)
 - **서버 규칙**: 프리캠, 맵 다운로드 금지 서버. 기능별 끄기로 대응한다.
 
 ## 10. 결정 사항
-- 라이선스: MIT
+- 라이선스: PolyForm Noncommercial 1.0.0 (상업적 사용 금지)
 - 설정: 자체 JSON (`config/pawprint.json`). 설정 라이브러리를 런타임 의존성으로 두지 않는다.
 - 이름: Pawprint (CurseForge의 1.12.2 동물 모드 "Pawprints"와는 다른 이름으로 본다)
 
