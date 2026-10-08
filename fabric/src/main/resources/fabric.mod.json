@@ -13,6 +13,7 @@
     "issues": "https://github.com/yujin2625/Pawprint/issues"
   },
   "license": "${license}",
+  "icon": "assets/pawprint/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [
