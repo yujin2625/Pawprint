@@ -337,11 +337,18 @@ export class Viewport {
     this.frameHandle = requestAnimationFrame(this.loop);
   };
 
+  private sized = false;
+
   private resize(): void {
     const { clientWidth: w, clientHeight: h } = this.container;
     if (w === 0 || h === 0) return;
     this.renderer.setSize(w, h);
     this.controls.resize(w, h);
+    // A view created before its panel had a size framed the blueprint for the wrong shape: frame again once.
+    if (!this.sized) {
+      this.sized = true;
+      if (this.blueprint) this.frame();
+    }
     this.dirty = true;
   }
 
