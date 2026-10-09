@@ -28,11 +28,11 @@
   dialog {
     max-width: min(520px, calc(100vw - 32px));
     padding: 20px 22px;
-    box-shadow: 8px 8px 0 rgba(18, 71, 125, 0.55);
+    box-shadow: 8px 8px 0 var(--shadow);
   }
 
   dialog::backdrop {
-    background: rgba(18, 71, 125, 0.55);
+    background: var(--shadow);
   }
 
   p {

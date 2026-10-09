@@ -1,0 +1,70 @@
+name: Mod release
+
+# Pushing a tag mod-v<version> builds the mod from both branches (main: 1.21.1 NeoForge + Fabric, mc/1.20.1: Forge +
+# Fabric) and puts the jars in one draft release to check and publish by hand. The version in gradle.properties must
+# match the tag on both branches.
+on:
+  push:
+    tags: ['mod-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - ref: main
+            java: 21
+            loaders: fabric neoforge
+          - ref: mc/1.20.1
+            java: 17
+            loaders: fabric forge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - name: Check the version
+        run: |
+          want="${GITHUB_REF_NAME#mod-v}"
+          have="$(grep -E '^version=' gradle.properties | cut -d= -f2)"
+          if [ "$want" != "$have" ]; then echo "::error::${{ matrix.ref }} has version $have, tag says $want"; exit 1; fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - run: ./gradlew build --console=plain
+      - name: Collect jars
+        run: |
+          mkdir out
+          for loader in ${{ matrix.loaders }}; do
+            find "$loader/build/libs" -name 'pawprint-*.jar' ! -name '*-sources.jar' -exec cp {} out/ \;
+          done
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jars-${{ strategy.job-index }}
+          path: out/*.jar
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: jars
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -l jars
+          version="${GITHUB_REF_NAME#mod-v}"
+          gh release create "$GITHUB_REF_NAME" jars/*.jar --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Pawprint mod $version" \
+            --notes "Client-only mod. Pick the jar for your Minecraft version and loader. The Fabric versions need Fabric API."

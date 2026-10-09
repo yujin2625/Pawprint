@@ -1,3 +1,4 @@
+import { parseColor } from '../render/sceneColors';
 import { EMPTY, REMOVAL, type EditableBlueprint } from '../core/blueprint/editable';
 import { toSlice, toWorld, type Cell2, type Plane } from '../core/edit/shapes';
 import { fillPlane, hoverCells, Stroke, type PlaneRef, type World } from '../core/edit/tools';
@@ -43,6 +44,8 @@ export class SliceView {
   private readonly prepared = new Set<string>();
   private resourcesVersion = -1;
   private readonly resizeObserver: ResizeObserver;
+  /** The window the view is in: the main one, or a panel window of the desktop app. */
+  private readonly win: Window & typeof globalThis;
   private readonly unsubscribe: () => void;
   private readonly style: CSSStyleDeclaration;
 
@@ -52,7 +55,8 @@ export class SliceView {
     private readonly blueprint: EditableBlueprint,
     private readonly callbacks: SliceCallbacks,
   ) {
-    this.canvas = document.createElement('canvas');
+    this.win = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+    this.canvas = container.ownerDocument.createElement('canvas');
     this.canvas.tabIndex = 0;
     this.canvas.style.display = 'block';
     this.canvas.style.outline = 'none';
@@ -62,11 +66,11 @@ export class SliceView {
     this.style = getComputedStyle(container);
     this.unsubscribe = blueprint.onChange(() => (this.dirty = true));
     this.bind();
-    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver = new this.win.ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
     this.centerOnBlueprint();
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   }
 
   invalidate(): void {
@@ -300,7 +304,7 @@ export class SliceView {
       this.dirty = false;
       this.draw();
     }
-    this.frameHandle = requestAnimationFrame(this.loop);
+    this.frameHandle = this.win.requestAnimationFrame(this.loop);
   };
 
   private icon(state: string, plane: Plane): HTMLCanvasElement | null {
@@ -317,6 +321,11 @@ export class SliceView {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     const s = this.callbacks.settings();
     const color = (name: string, fallback: string) => this.style.getPropertyValue(name).trim() || fallback;
+    /** A theme color with its alpha scaled (theme colors may carry their own alpha). */
+    const faded = (name: string, fallback: string, scale: number) => {
+      const { color: c, alpha } = parseColor(this.style.getPropertyValue(name), fallback);
+      return `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${Math.min(1, alpha * scale)})`;
+    };
     ctx.setTransform(this.canvas.width / Math.max(1, w), 0, 0, this.canvas.height / Math.max(1, h), 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = color('--viewport-bg', '#2a6fb5');
@@ -355,7 +364,7 @@ export class SliceView {
       }
     }
     if (s.onionAbove) {
-      ctx.strokeStyle = `rgba(250, 238, 218, ${Math.min(0.9, s.onionOpacity + 0.25)})`;
+      ctx.strokeStyle = faded('--selection', '#faeeda', Math.min(0.9, s.onionOpacity + 0.25));
       ctx.lineWidth = 1;
       ctx.setLineDash([Math.max(2, z / 6), Math.max(2, z / 6)]);
       for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) {
@@ -369,10 +378,12 @@ export class SliceView {
 
     // Grid: every block when zoomed in enough, every 16 always.
     ctx.lineWidth = 1;
+    const gridMajor = faded('--grid', 'rgba(255, 255, 255, 0.22)', 1.6);
+    const gridMinor = faded('--grid', 'rgba(255, 255, 255, 0.22)', 0.6);
     for (let u = u0; u <= u1; u++) {
       const major = u % 16 === 0;
       if (!major && z < 8) continue;
-      ctx.strokeStyle = major ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.13)';
+      ctx.strokeStyle = major ? gridMajor : gridMinor;
       const [x] = this.screenOf(u, 0);
       ctx.beginPath();
       ctx.moveTo(x + 0.5, 0);
@@ -382,7 +393,7 @@ export class SliceView {
     for (let v = v0; v <= v1; v++) {
       const major = v % 16 === 0;
       if (!major && z < 8) continue;
-      ctx.strokeStyle = major ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.13)';
+      ctx.strokeStyle = major ? gridMajor : gridMinor;
       const [, y] = this.screenOf(0, v);
       ctx.beginPath();
       ctx.moveTo(0, y + 0.5);
@@ -407,8 +418,8 @@ export class SliceView {
 
     // Tool preview and hovered cell.
     const erase = s.tool === 'eraser';
-    ctx.fillStyle = erase ? 'rgba(163, 58, 44, 0.35)' : 'rgba(239, 159, 39, 0.35)';
-    ctx.strokeStyle = erase ? '#E86A5C' : '#FAC775';
+    ctx.fillStyle = erase ? faded('--erase', '#e86a5c', 0.35) : faded('--preview', '#ef9f27', 0.35);
+    ctx.strokeStyle = erase ? color('--erase', '#e86a5c') : color('--preview', '#ef9f27');
     ctx.lineWidth = Math.max(1, Math.min(2, z / 12));
     for (const [u, v] of this.preview) {
       const [x, y] = this.screenOf(u, v);
@@ -428,13 +439,15 @@ export class SliceView {
     const icon = this.icon(state, plane);
     if (icon) ctx.drawImage(icon, x, y, size, size);
     else {
-      ctx.fillStyle = 'rgba(250, 238, 218, 0.5)';
+      ctx.fillStyle = this.style.getPropertyValue('--panel').trim() || '#faeeda';
+      ctx.globalAlpha *= 0.5;
       ctx.fillRect(x, y, size, size);
+      ctx.globalAlpha /= 0.5;
     }
   }
 
   private resize(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, this.win.devicePixelRatio || 1);
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.canvas.style.width = w + 'px';
@@ -445,7 +458,7 @@ export class SliceView {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.frameHandle);
+    this.win.cancelAnimationFrame(this.frameHandle);
     this.unsubscribe();
     this.resizeObserver.disconnect();
     this.canvas.remove();

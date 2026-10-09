@@ -15,7 +15,7 @@
   let manualId = $state('');
 
   const blocks = $derived(new Map<string, BlockDef>(pack ? pack.blocks.map((b) => [b.id, b]) : []));
-  const index = $derived(pack ? buildIndex(pack.blocks.filter((b) => b.renderShape !== 'invisible' && !b.id.endsWith(':air')), pack.languages) : []);
+  const index = $derived(pack ? buildIndex(pack.blocks.filter((b) => (b.renderShape !== 'invisible' || pack.icons?.icons[b.id] !== undefined) && !b.id.endsWith(':air')), pack.languages) : []);
   const tabs = $derived.by(() => {
     const seen = new Map<string, number>();
     for (const b of pack?.blocks ?? []) for (const id of b.tabs) seen.set(id, (seen.get(id) ?? 0) + 1);

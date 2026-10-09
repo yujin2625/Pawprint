@@ -43,11 +43,15 @@ export interface BakedModel {
 export interface ModelSource {
   file(path: string): Uint8Array | undefined;
   block(id: string): BlockDef | undefined;
+  /** Whether the pack has an item icon for the block (icons.png). */
+  hasIcon?(id: string): boolean;
 }
 
 export const MISSING_TEXTURE = 'pawprint:missing';
 /** Generated flat color texture: `pawprint:color/#RRGGBB`. */
 export const colorTexture = (hex: string): string => 'pawprint:color/' + hex;
+/** A block's item icon from the pack's icons.png: `pawprint:icon/<block id>`. */
+export const iconTexture = (id: string): string => 'pawprint:icon/' + id;
 
 interface ModelElement {
   from: number[];
@@ -88,7 +92,12 @@ export class ModelBaker {
     const full = { ...def.default, ...props };
     const tint = tintFor(def.tint, full);
 
-    if (def.renderShape === 'invisible') return { quads: [], fullFaces: new Set(), layer: def.renderLayer, blockId: id, missing: false };
+    if (def.renderShape === 'invisible') {
+      // Signs and some other block-entity blocks are "invisible" to the chunk renderer; their icon still says what
+      // they are. Air and the like have no icon.
+      if (this.source.hasIcon?.(id)) return insetBox(id, iconTexture(id), 'cutout');
+      return { quads: [], fullFaces: new Set(), layer: def.renderLayer, blockId: id, missing: false };
+    }
     if (def.fluid) return fluidBox(def, tint, this.particle(id, full));
 
     const definition = this.definition(id);
@@ -103,7 +112,9 @@ export class ModelBaker {
       }
     }
     if (quads.length === 0) {
-      // Chests, signs, beds… are drawn by the game in code. Show a slightly inset box with the particle texture.
+      // Chests, signs, beds… are drawn by the game in code. Show a slightly inset box with the item icon the mod
+      // exported, or else the particle texture.
+      if (this.source.hasIcon?.(id)) return insetBox(id, iconTexture(id), 'cutout');
       const particle = this.particle(id, full);
       if (def.renderShape === 'entity' && particle) return insetBox(id, particle, def.renderLayer);
       return colorBox(id, true);

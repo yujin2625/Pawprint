@@ -14,7 +14,12 @@
   } from '../../storage/db';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import PackCard from '../packs/PackCard.svelte';
-  import { packFromFile, packFromJar } from '../packs/addPack';
+  import { packFromFile, packFromJar, packFromJarBytes } from '../packs/addPack';
+  import {
+    baseName, instanceInfo, isDesktop, jarDataVersion, minecraftInstalls, minecraftLanguages, minecraftRoot, pickFile, pickFolder, readFile,
+    type InstanceInfo, type MinecraftInstall,
+  } from '../../platform/platform';
+  import { packFromInstance } from '../packs/instancePack';
 
   interface Question {
     message: string;
@@ -47,7 +52,65 @@
 
   $effect(() => {
     refresh();
+    if (isDesktop) void findInstalls();
   });
+
+  // Desktop: versions installed by the launcher (or in a folder the user picks, e.g. a CurseForge "Install" folder).
+  let gameRoot = $state<string | null>(null);
+  let installs = $state<MinecraftInstall[]>([]);
+  let searched = $state(false);
+
+  async function findInstalls(root?: string) {
+    try {
+      gameRoot = root ?? (await minecraftRoot());
+      installs = gameRoot ? await minecraftInstalls(gameRoot) : [];
+    } catch (e) {
+      error = describe(e);
+    }
+    searched = true;
+  }
+
+  async function chooseRoot() {
+    const root = await pickFolder();
+    if (root) await findInstalls(root);
+  }
+
+  // Desktop: a modded game folder (instance), read without starting the game.
+  let instance = $state<{ dir: string; info: InstanceInfo } | null>(null);
+
+  async function chooseInstance() {
+    const dir = await pickFolder();
+    if (!dir) return;
+    error = notice = null;
+    try {
+      instance = { dir, info: await instanceInfo(dir) };
+    } catch (e) {
+      error = describe(e);
+    }
+  }
+
+  async function chooseVanillaJar() {
+    if (!instance) return;
+    const jar = await pickFile({ name: 'Minecraft jar', extensions: ['jar'] });
+    if (!jar) return;
+    instance.info.vanillaJar = jar;
+    instance.info.dataVersion = (await jarDataVersion(jar).catch(() => null)) ?? instance.info.dataVersion;
+  }
+
+  function fromInstance() {
+    const current = instance;
+    const jar = current?.info.vanillaJar;
+    if (!current || !jar) return;
+    const name = baseName(current.dir);
+    add(name, () => packFromInstance(current.dir, current.info, jar, (step) => (busy = { key: 'packs.busy.instance.' + step, params: { name } })), 'packs.busy.instance.index');
+  }
+
+  function fromInstall(install: MinecraftInstall) {
+    add(install.version + '.jar', async () => {
+      const [jar, languages] = await Promise.all([readFile(install.jar), minecraftLanguages(install).catch(() => ({}))]);
+      return packFromJarBytes(jar, languages);
+    }, 'packs.busy.building');
+  }
 
   function ask(message: string, confirmLabel: string, danger = false): Promise<boolean> {
     return new Promise((resolve) => (question = { message, confirmLabel, danger, resolve }));
@@ -63,13 +126,13 @@
     return { key: 'error.unknown', params: { message: e instanceof Error ? e.message : String(e) } };
   }
 
-  async function add(file: File, make: (file: File) => Promise<StoredPack>, busyKey: string) {
+  async function add(name: string, make: () => Promise<StoredPack>, busyKey: string) {
     error = notice = null;
-    busy = { key: busyKey, params: { name: file.name } };
+    busy = { key: busyKey, params: { name } };
     // Let the busy message paint before the synchronous unzip blocks the page.
     await new Promise((r) => setTimeout(r, 30));
     try {
-      const pack = await make(file);
+      const pack = await make();
       const existing = await getPack(pack.id);
       if (existing) {
         busy = null;
@@ -93,7 +156,7 @@
   function picked(input: HTMLInputElement, make: (file: File) => Promise<StoredPack>, busyKey: string) {
     const file = input.files?.[0];
     input.value = '';
-    if (file) add(file, make, busyKey);
+    if (file) add(file.name, () => make(file), busyKey);
   }
 
   async function rename(pack: StoredPack, name: string) {
@@ -152,6 +215,43 @@
   </section>
 
   <aside>
+    {#if isDesktop}
+      <section class="add" aria-labelledby="instance-title">
+        <h2 id="instance-title">{t('packs.instance.title')}</h2>
+        <p class="help">{t('packs.instance.help')}</p>
+        <button class="btn primary wide" type="button" disabled={!!busy} onclick={chooseInstance}>{t('packs.instance.choose')}</button>
+        {#if instance}
+          <p class="help path" title={instance.dir}>{instance.dir}</p>
+          <dl class="facts">
+            <dt>{t('packs.instance.version')}</dt><dd>{instance.info.mcVersion ?? '?'} · {instance.info.loader ?? '?'}</dd>
+            <dt>{t('packs.instance.mods')}</dt><dd>{t('packs.instance.modFiles', { count: instance.info.modFiles })}</dd>
+            <dt>{t('packs.instance.resourcePacks')}</dt><dd>{instance.info.resourcePacks.filter((p) => p.startsWith('file/')).length}</dd>
+            <dt>{t('packs.instance.vanilla')}</dt><dd title={instance.info.vanillaJar ?? ''}>{instance.info.vanillaJar ? baseName(instance.info.vanillaJar) : t('packs.instance.noJar')}</dd>
+          </dl>
+          {#if !instance.info.vanillaJar}
+            <button class="btn wide" type="button" disabled={!!busy} onclick={chooseVanillaJar}>{t('packs.instance.pickJar')}</button>
+          {/if}
+          <button class="btn primary wide" type="button" disabled={!!busy || !instance.info.vanillaJar} onclick={fromInstance}>{t('packs.instance.make')}</button>
+          <p class="help">{t('packs.instance.limits')}</p>
+        {/if}
+      </section>
+
+      <section class="add" aria-labelledby="installs-title">
+        <h2 id="installs-title">{t('packs.installs.title')}</h2>
+        {#if gameRoot}<p class="help path" title={gameRoot}>{gameRoot}</p>{/if}
+        {#each installs as install (install.jar)}
+          <div class="install">
+            <span class="version">{install.version}</span>
+            <button class="btn" type="button" disabled={!!busy} onclick={() => fromInstall(install)}>{t('packs.installs.make')}</button>
+          </div>
+        {:else}
+          {#if searched}<p class="help">{t('packs.installs.none')}</p>{/if}
+        {/each}
+        <button class="btn wide" type="button" disabled={!!busy} onclick={chooseRoot}>{t('packs.installs.choose')}</button>
+        <p class="help">{t('packs.installs.help')}</p>
+      </section>
+    {/if}
+
     <section class="add" aria-labelledby="add-title">
       <h2 id="add-title">{t('packs.add.title')}</h2>
       <button class="btn primary wide" type="button" disabled={!!busy} onclick={() => packInput.click()}>{t('packs.add.open')}</button>
@@ -218,6 +318,45 @@
     justify-content: flex-start;
   }
 
+  .install {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .version {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    margin: 0;
+  }
+
+  .facts dt {
+    color: var(--chrome-muted);
+  }
+
+  .facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .help {
     color: var(--chrome-muted);
     line-height: 1.3;
@@ -256,7 +395,7 @@
     align-items: center;
     gap: 18px;
     padding: 16px;
-    border: 2px dashed rgba(250, 238, 218, 0.5);
+    border: 2px dashed var(--dashed);
   }
 
   .empty p {

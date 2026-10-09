@@ -1,7 +1,7 @@
 # Pawprint Web 구현 계획
 
-> 상태: 구현 중. W1(형식 명세), W2(모드), W3(웹 기반), W4(3D 뷰어), W5(2D 편집), W6(3D 편집), W7(레이어) 완료. 모드 팩 내보내기에 아이템 아이콘(icons.png)은 아직 없음.
-> 최종 수정: 2026-10-08
+> 상태: 구현 중. W1(형식 명세), W2(모드), W3(웹 기반), W4(3D 뷰어), W5(2D 편집), W6(3D 편집), W7(레이어), W8(화면 배치), W9(데스크탑) 완료. W10 진행 중: 설정·크레딧·첫 방문 소개, 테마, 듀얼 모니터 배치·배치 단축키, 모드팩 폴더로 팩 만들기(데스크탑). 모드 팩 내보내기에 아이템 아이콘(icons.png)은 아직 없음.
+> 최종 수정: 2026-10-09
 > 설계: [WEB_DESIGN.md](WEB_DESIGN.md)
 
 ---
@@ -149,9 +149,14 @@ Pawprint/
 ### 4.11 화면 배치 (도킹)
 - **처음(W3)부터 모든 패널을 "도킹 가능한 패널"로 만든다.** 패널은 `id`, 제목(i18n 키), 아이콘, Svelte 컴포넌트, 최소 크기, 여러 개 열기 가능 여부를 가진 등록표(`ui/panels.ts`)에 올린다. 패널끼리는 직접 참조하지 않고 공용 상태(store)로만 통신한다. 그래야 나중에 어디로 옮기거나 여러 개 열어도 동작한다.
 - W3~W7은 고정 배치(목업의 기본 배치)를 이 등록표로 그린다. W8에서 웹·데스크탑 공통으로 도킹 UI를 켜고, 별도 창은 W9(데스크탑)에서 붙인다.
-- 도킹 라이브러리 후보: **dockview**(`dockview-core`, MIT, 프레임워크 무관, 분할·탭·떠 있는 그룹·별도 창 지원). 도입 전에 라이선스·Svelte 연결·Tauri 창에서 별도 창 동작을 확인한다. 안 맞으면 직접 구현(분할 트리 + 탭 그룹)한다.
+- 도킹 라이브러리: **dockview**(`dockview-core` 8.x, MIT)를 쓴다(W8에서 확인: 분할·탭·떠 있는 그룹·잠금·`toJSON`/`fromJSON`). Svelte 패널은 `createComponent`에서 `mount()`로 붙인다(`ui/editor/Dock.svelte`).
+  - 패키지에 CSS 파일이 없고 UMD 번들 안에만 있어서 `tools/extract-dockview-css.mjs`로 `src/ui/vendor/dockview.css`를 만든다(버전을 올리면 다시 실행).
+  - 별도 창(Tauri)은 W9에서 확인한다.
 - 배치는 JSON(분할 트리, 각 칸의 탭 목록·크기, 떠 있는 패널 위치)으로 `settings`에 저장한다. 프리셋도 같은 JSON이다.
-- 별도 창(Tauri): 새 `WebviewWindow`에 같은 앱을 "패널 하나만" 모드로 띄우고, 상태는 주 창과 메시지로 맞춘다. 3D 보기를 별도 창에 띄우면 그 창이 자기 WebGL 컨텍스트를 가진다(모델 캐시는 다시 만든다).
+- 별도 창(Tauri, W9에서 확인): dockview의 popout(`addPopoutGroup`, `public/popout.html`)을 쓴다. 주 창의 `window.open`을 Tauri `on_new_window`가 같은 WebView2 환경의 앱 창으로 만들어 주므로, 별도 창은 **주 창과 같은 JavaScript를 공유**한다. 상태를 메시지로 맞출 필요가 없다.
+  - 패널이 별도 창으로 가거나 돌아오면 그 패널의 Svelte 컴포넌트를 다시 마운트한다. 3D·2D 보기는 캔버스·`ResizeObserver`·`requestAnimationFrame`을 자기가 들어 있는 창(`container.ownerDocument.defaultView`)에서 만든다. 3D 보기는 창마다 자기 WebGL 컨텍스트를 가진다.
+  - 별도 창에서 누른 키는 주 창으로 넘겨 단축키가 똑같이 동작한다.
+  - 배치 JSON에 별도 창(위치·크기)이 들어간다. 주 창을 닫을 때(`onCloseRequested`) 별도 창이 열린 배치를 먼저 저장하고, 주 창이 닫히면 앱이 끝나며 별도 창도 같이 닫힌다. 웹에서 이 배치를 불러오면 팝업이 막혀 그 패널이 격자로 돌아온다.
 
 ---
 

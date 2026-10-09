@@ -151,3 +151,27 @@ describe('ModelBaker', () => {
     expect(noPack.quads[0]!.texture).toMatch(/^pawprint:color\/#[0-9A-F]{6}$/);
   });
 });
+
+describe('item icons from the pack', () => {
+  const base = source();
+  const defs: Record<string, BlockDef> = {
+    'minecraft:sign': block('minecraft:sign', { renderShape: 'invisible' }),
+    'minecraft:air': block('minecraft:air', { renderShape: 'invisible', item: null }),
+  };
+  const baker = new ModelBaker({
+    file: base.file,
+    block: (id) => defs[id] ?? base.block(id),
+    hasIcon: (id) => id === 'minecraft:chest' || id === 'minecraft:sign',
+  });
+
+  it('shows code-drawn blocks with their icon instead of the particle texture', () => {
+    const chest = baker.bake('minecraft:chest');
+    expect(new Set(chest.quads.map((q) => q.texture))).toEqual(new Set(['pawprint:icon/minecraft:chest']));
+    expect(chest.missing).toBe(false);
+  });
+
+  it('draws "invisible" blocks that have an icon, not the ones without', () => {
+    expect(baker.bake('minecraft:sign').quads[0]?.texture).toBe('pawprint:icon/minecraft:sign');
+    expect(baker.bake('minecraft:air').quads).toHaveLength(0);
+  });
+});

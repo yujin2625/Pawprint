@@ -2,7 +2,7 @@
 
 export const PACK_FORMAT = 1;
 
-export type PackSource = 'mod-export' | 'vanilla-jar';
+export type PackSource = 'mod-export' | 'vanilla-jar' | 'instance-folder';
 export type RenderLayer = 'solid' | 'cutout' | 'cutout_mipped' | 'translucent';
 export type RenderShape = 'model' | 'entity' | 'invisible';
 

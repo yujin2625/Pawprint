@@ -45,8 +45,9 @@ function fakeJar(): Uint8Array {
   });
 }
 
+const pack = await buildPackFromJar(fakeJar(), { id: 'test-id', now: '2026-10-08T00:00:00Z' });
+
 describe('vanilla jar → pack', () => {
-  const pack = buildPackFromJar(fakeJar(), { id: 'test-id', now: '2026-10-08T00:00:00Z' });
   const loaded = readPawpack(pack.bytes);
   const byId = Object.fromEntries(loaded.blocks.map((b) => [b.id, b]));
 
@@ -57,6 +58,23 @@ describe('vanilla jar → pack', () => {
     expect(loaded.info.propertiesComplete).toBe(false);
     expect(loaded.info.blockCount).toBe(5);
     expect(loaded.info.languages).toEqual(['en_us']);
+  });
+
+  it('adds languages from the launcher assets, keeping only known blocks', async () => {
+    const multi = readPawpack(
+      (await buildPackFromJar(fakeJar(), {
+        id: 'test-id',
+        now: '2026-10-08T00:00:00Z',
+        languages: {
+          ko_kr: { 'block.minecraft.test_stone': '시험 돌', 'block.minecraft.gone': '없는 블럭', 'item.minecraft.x': '아이템' },
+          de_de: {},
+          '../bad': { 'block.minecraft.test_stone': 'x' },
+        },
+      })).bytes,
+    );
+    expect(multi.info.languages).toEqual(['en_us', 'ko_kr']);
+    expect(multi.languages.ko_kr).toEqual({ 'minecraft:test_stone': '시험 돌' });
+    expect(blockName(multi.languages, 'minecraft:test_stairs', 'ko_kr')).toBe('Test Stairs');
   });
 
   it('infers properties from variants and multipart', () => {

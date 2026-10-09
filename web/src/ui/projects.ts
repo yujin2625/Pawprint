@@ -1,7 +1,9 @@
 import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint } from '../core/format/pawprint';
-import { getProject, putProject, type StoredProject } from '../storage/db';
+import { getProject, listProjects, putProject, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
+import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
+import { t } from '../i18n/i18n.svelte';
 
 /** Projects: blueprints kept in this browser, stored as whole `.pawprint` files. */
 
@@ -45,20 +47,63 @@ export async function saveProject(id: string, bp: EditableBlueprint, thumbnail: 
     size: b ? [b.max[0] - b.min[0] + 1, b.max[1] - b.min[1] + 1, b.max[2] - b.min[2] + 1] : [0, 0, 0],
     thumbnail: thumbnail ?? existing?.thumbnail ?? null,
     file: new Blob([bytes as BlobPart], { type: 'application/zip' }),
+    filePath: existing?.filePath,
+    fileSynced: existing?.fileSynced,
   });
 }
 
-/** Saves a `.pawprint` to the user's downloads. */
-export function download(bp: EditableBlueprint): void {
+const PAWPRINT = { name: 'Pawprint', extensions: ['pawprint'] };
+const samePath = (a: string, b: string) => a.replaceAll('\\', '/').toLowerCase() === b.replaceAll('\\', '/').toLowerCase();
+
+/**
+ * Desktop: opens a `.pawprint` from disk. A file opened before goes back to its project; if the file changed since
+ * (saved by the mod, say), the user picks the file or the app's copy. Returns the project id.
+ */
+export async function openPath(path: string): Promise<string> {
+  const [bytes, mtime] = await Promise.all([readFile(path), fileModified(path)]);
+  const existing = (await listProjects()).find((p) => p.filePath && samePath(p.filePath, path));
+  if (existing) {
+    const changed = mtime !== null && existing.fileSynced !== undefined && mtime > existing.fileSynced + 1000;
+    if (changed && (await askYesNo(t('projects.fileChanged', { name: baseName(path) }), t('projects.useFile'), t('projects.keepApp')))) {
+      // An editor open on this project would save its copy when it closes: close it first.
+      if (location.hash === '#/editor/' + existing.id) {
+        location.hash = '#/projects';
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const bp = EditableBlueprint.fromBlueprint(readPawprint(bytes));
+      bp.meta.name ||= existing.name;
+      await saveProject(existing.id, bp, null);
+      await linkFile(existing.id, path, mtime);
+    }
+    return existing.id;
+  }
+  const id = await importFile(bytes, baseName(path).replace(/\.pawprint$/i, ''));
+  await linkFile(id, path, mtime);
+  return id;
+}
+
+async function linkFile(id: string, path: string, mtime: number | null): Promise<void> {
+  const project = await getProject(id);
+  if (project) await putProject({ ...project, filePath: path, fileSynced: mtime ?? Date.now() });
+}
+
+/**
+ * Desktop: writes the blueprint to its linked file, or asks where (always when `saveAs`). Returns the path written,
+ * or null if the user cancelled.
+ */
+export async function saveToFile(id: string, bp: EditableBlueprint, saveAs = false): Promise<string | null> {
+  const project = await getProject(id);
+  const path = !saveAs && project?.filePath ? project.filePath : await pickSavePath(safeFileName(bp.meta.name, 'blueprint') + '.pawprint', PAWPRINT);
+  if (!path) return null;
+  await writeFile(path, writePawprint(bp.toBlueprint()));
+  await linkFile(id, path, await fileModified(path));
+  return path;
+}
+
+/** Saves a `.pawprint` file: to the downloads on the web, wherever the user picks in the desktop app. */
+export function exportFile(bp: EditableBlueprint): Promise<boolean> {
   const bytes = writePawprint(bp.toBlueprint());
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/zip' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = (bp.meta.name || 'blueprint').replace(/[\\/:*?"<>|]+/g, '_') + '.pawprint';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return saveBytes(safeFileName(bp.meta.name, 'blueprint') + '.pawprint', bytes, { name: 'Pawprint', extensions: ['pawprint'] }, 'application/zip');
 }
 
 /** The whole blueprint of a project, ready to stamp. */

@@ -2,7 +2,8 @@
   import { formatDate, t } from '../../i18n/i18n.svelte';
   import { FileFormatError } from '../../core/zip';
   import { deleteProject, listProjects, type StoredProject } from '../../storage/db';
-  import { createProject, importFile, newBlueprint } from '../projects';
+  import { createProject, importFile, newBlueprint, openPath } from '../projects';
+  import { isDesktop, pickFile } from '../../platform/platform';
   import { openProject } from '../session.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
 
@@ -47,6 +48,21 @@
     }
   }
 
+  /** Desktop: a file dialog, so the project stays linked to the file. */
+  async function openFromDisk() {
+    const path = await pickFile({ name: 'Pawprint', extensions: ['pawprint'] });
+    if (!path) return;
+    error = null;
+    busy = true;
+    try {
+      openProject(await openPath(path));
+    } catch (e) {
+      error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
+    } finally {
+      busy = false;
+    }
+  }
+
   function picked() {
     const file = input.files?.[0];
     input.value = '';
@@ -75,7 +91,7 @@
 <div class="head">
   <h1>{t('projects.title')}</h1>
   <button class="btn primary" type="button" disabled={busy} onclick={create}>{t('projects.new')}</button>
-  <button class="btn" type="button" disabled={busy} onclick={() => input.click()}>{t('projects.open')}</button>
+  <button class="btn" type="button" disabled={busy} onclick={() => (isDesktop ? openFromDisk() : input.click())}>{t('projects.open')}</button>
   <input bind:this={input} type="file" accept=".pawprint" hidden onchange={picked} />
 </div>
 
@@ -236,12 +252,12 @@
     margin-top: 20px;
     padding: 18px;
     text-align: center;
-    border: 2px dashed rgba(250, 238, 218, 0.45);
+    border: 2px dashed var(--dashed);
     color: var(--chrome-muted);
   }
 
   .dragging {
     border-color: var(--accent);
-    background: rgba(239, 159, 39, 0.15);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
   }
 </style>

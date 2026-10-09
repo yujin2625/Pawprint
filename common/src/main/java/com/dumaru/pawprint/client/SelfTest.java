@@ -279,6 +279,12 @@ public final class SelfTest {
             Pawprint.LOG.info("SELFTEST pack: {} in {} ms, {} blocks ({} in creative tabs, {} tinted), {} blockstates, {} models, {} textures, {} missing files",
                     result.file().getFileName(), System.currentTimeMillis() - started, blocks.size(), withTabs, tinted, blockstates,
                     result.models(), result.textures(), result.missingFiles());
+            var icons = zip.getEntry("icons.json") == null ? null
+                    : com.google.gson.JsonParser.parseString(text.apply("icons.json")).getAsJsonObject().getAsJsonObject("icons");
+            var sheet = zip.getEntry("icons.png");
+            Pawprint.LOG.info("SELFTEST pack icons: {} (chest {}, oak_sign {}), icons.png {} bytes", result.icons(),
+                    icons != null && icons.has("minecraft:chest"), icons != null && icons.has("minecraft:oak_sign"),
+                    sheet == null ? -1 : sheet.getSize());
             Pawprint.LOG.info("SELFTEST pack names: en {} ({}), ko {} ({}); oak_stairs {}", english.size(),
                     english.has("minecraft:oak_stairs") ? english.get("minecraft:oak_stairs").getAsString() : "-",
                     korean.size(), korean.has("minecraft:oak_stairs") ? korean.get("minecraft:oak_stairs").getAsString() : "-",

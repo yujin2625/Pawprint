@@ -25,7 +25,9 @@ export class BlockResources {
 
   constructor(readonly pack: LoadedPack | null, maxTextureSize: number) {
     const blocks = pack ? new Map(pack.blocks.map((b) => [b.id, b])) : null;
-    this.baker = new ModelBaker(pack && blocks ? { file: (p) => pack.files.get(p), block: (id) => blocks.get(id) } : null);
+    this.baker = new ModelBaker(
+      pack && blocks ? { file: (p) => pack.files.get(p), block: (id) => blocks.get(id), hasIcon: (id) => pack.icons?.icons[id] !== undefined } : null,
+    );
 
     // Size the atlas for every texture in the pack up front, so it never has to be rebuilt.
     let count = 64;
@@ -125,6 +127,19 @@ export class BlockResources {
         this.ctx.fillRect(x + this.cell - edge, y, edge, this.cell);
         return;
       }
+      if (key.startsWith('pawprint:icon/')) {
+        const sheet = await this.iconSheet();
+        const icons = this.pack?.icons;
+        const index = icons?.icons[key.slice('pawprint:icon/'.length)];
+        this.ctx.clearRect(x, y, this.cell, this.cell);
+        if (sheet && icons && index !== undefined) {
+          const sx = (index % icons.columns) * icons.cell, sy = Math.floor(index / icons.columns) * icons.cell;
+          this.ctx.drawImage(sheet, sx, sy, icons.cell, icons.cell, x, y, this.cell, this.cell);
+        } else {
+          drawMissing(this.ctx, x, y, this.cell);
+        }
+        return;
+      }
       const bytes = this.pack?.files.get(key);
       let image: ImageBitmap | null = null;
       try {
@@ -143,6 +158,15 @@ export class BlockResources {
     })();
     this.loading.set(key, done);
     return done.finally(() => this.loading.delete(key));
+  }
+
+  private sheet: Promise<ImageBitmap | null> | null = null;
+
+  /** icons.png, decoded once. */
+  private iconSheet(): Promise<ImageBitmap | null> {
+    const bytes = this.pack?.files.get('icons.png');
+    this.sheet ??= bytes ? createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/png' })).catch(() => null) : Promise.resolve(null);
+    return this.sheet;
   }
 
   /**
