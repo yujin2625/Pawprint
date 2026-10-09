@@ -148,6 +148,11 @@
     if (dock) retitle(dock);
   });
 
+  function shortcut(preset: BuiltIn | SavedLayout): string {
+    const i = layoutKeys.indexOf(preset);
+    return i >= 0 && i < 9 ? 'Alt+' + (i + 1) : '';
+  }
+
   function usePreset(preset: BuiltIn | SavedLayout, close: () => void) {
     if (!dock) return;
     if (typeof preset === 'string') applyBuiltIn(dock, preset);
@@ -321,9 +326,21 @@
     activeSlice.set?.(activeSlice.slice + delta);
   }
 
+  /** Alt+1… switches layouts: the built-in ones first, then your own, in menu order. */
+  const layoutKeys = $derived([...BUILT_IN, ...presets]);
+
   function onKey(e: KeyboardEvent) {
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
+    const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      const preset = layoutKeys[Number(digit[1]) - 1];
+      if (preset && !locked) {
+        e.preventDefault();
+        usePreset(preset, () => {});
+      }
+      return;
+    }
     const key = e.key.toLowerCase();
     const bp = ctx.blueprint;
     // While the right button is held in 3D, letters move the camera.
@@ -431,14 +448,14 @@
         {#snippet children(close)}
           <div class="heading">{t('layout.builtIn')}</div>
           {#each BUILT_IN as preset (preset)}
-            <button class="item" type="button" onclick={() => usePreset(preset, close)}>{t('layout.preset.' + preset)}</button>
+            <button class="item" type="button" onclick={() => usePreset(preset, close)}>{t('layout.preset.' + preset)}<span class="key">{shortcut(preset)}</span></button>
           {/each}
           {#if presets.length}
             <div class="sep"></div>
             <div class="heading">{t('layout.mine')}</div>
             {#each presets as preset (preset.name)}
               <div class="row">
-                <button class="item" type="button" onclick={() => usePreset(preset, close)}>{preset.name}</button>
+                <button class="item" type="button" onclick={() => usePreset(preset, close)}>{preset.name}<span class="key">{shortcut(preset)}</span></button>
                 <button class="mini" type="button" title={t('packs.rename')} aria-label={t('packs.rename')} onclick={() => renamePreset(preset)}>✎</button>
                 <button class="mini" type="button" title={t('packs.delete')} aria-label={t('packs.delete')} onclick={() => deletePreset(preset)}>×</button>
               </div>

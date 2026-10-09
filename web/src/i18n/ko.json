@@ -213,6 +213,7 @@
   "layout.preset.default": "기본",
   "layout.preset.wide": "넓은 뷰포트",
   "layout.preset.drawing": "2D 작업",
+  "layout.preset.dual": "듀얼 모니터",
   "layout.namePlaceholder": "이 배치의 이름",
   "layout.save": "저장",
   "layout.saved": "배치를 저장했어요.",

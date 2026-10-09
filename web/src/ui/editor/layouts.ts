@@ -2,10 +2,11 @@ import type { DockviewApi, SerializedDockview } from 'dockview-core';
 import { t } from '../../i18n/i18n.svelte';
 import { getSetting, setSetting } from '../../storage/db';
 import { panelDef } from '../panels';
+import { isDesktop } from '../../platform/platform';
 
 /** Built-in layouts, the user's saved ones, and the last layout used (restored on reload). */
 
-export const BUILT_IN = ['default', 'wide', 'drawing'] as const;
+export const BUILT_IN = ['default', 'wide', 'drawing', 'dual'] as const;
 export type BuiltIn = (typeof BUILT_IN)[number];
 
 export interface SavedLayout {
@@ -59,6 +60,21 @@ export function applyBuiltIn(api: DockviewApi, preset: BuiltIn): void {
     const v3 = panelId('view3d');
     api.addPanel({ id: v3, component: 'view3d', title: title('view3d') });
     addSide(api, v3, 'right', 300);
+  } else if (preset === 'dual') {
+    // Two monitors: 3D and the side panels here, plan and front views in a second window to drag to the other
+    // screen (desktop app), or in a floating group on the web.
+    const v3 = panelId('view3d');
+    api.addPanel({ id: v3, component: 'view3d', title: title('view3d') });
+    addSide(api, v3, 'right', 300);
+    const plan = panelId('view2d');
+    api.addPanel({ id: plan, component: 'view2d', title: title('view2d'), params: { plane: 'y' }, position: { referencePanel: v3, direction: 'below' } });
+    const front = panelId('view2d');
+    // Tabs in one group: a floating group cannot be split.
+    api.addPanel({ id: front, component: 'view2d', title: title('view2d', 1), params: { plane: 'z' }, inactive: true, position: { referencePanel: plan, direction: 'within' } });
+    const group = api.getPanel(plan)!.group;
+    const box = { width: 900, height: 600 };
+    if (isDesktop) void api.addPopoutGroup(group, { position: { top: 80, left: 80, ...box } });
+    else api.addFloatingGroup(group, { position: { top: 60, left: 60, ...box } });
   } else {
     // Drawing: a big plan view, a front elevation and a small 3D view beside it.
     const plan = panelId('view2d');

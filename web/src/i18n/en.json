@@ -213,6 +213,7 @@
   "layout.preset.default": "Default",
   "layout.preset.wide": "Wide viewport",
   "layout.preset.drawing": "2D drawing",
+  "layout.preset.dual": "Two monitors",
   "layout.namePlaceholder": "Name for this layout",
   "layout.save": "Save",
   "layout.saved": "Layout saved.",

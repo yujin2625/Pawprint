@@ -76,6 +76,12 @@
     background: var(--accent-soft);
   }
 
+  .popup :global(.key) {
+    margin-left: auto;
+    padding-left: 16px;
+    color: var(--text-muted);
+  }
+
   .popup :global(.heading) {
     padding: 4px 12px;
     color: var(--text-muted);
