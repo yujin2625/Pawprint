@@ -5,13 +5,13 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -46,11 +46,12 @@ public final class IconRenderer {
         Map<String, Integer> icons = new LinkedHashMap<>();
         TextureTarget target = new TextureTarget(PAGE, PAGE, true, Minecraft.ON_OSX);
         RenderSystem.backupProjectionMatrix();
-        Matrix4fStack modelView = RenderSystem.getModelViewStack();
-        modelView.pushMatrix();
+        PoseStack modelView = RenderSystem.getModelViewStack();
+        modelView.pushPose();
         try (NativeImage sheet = new NativeImage(PAGE, rows * CELL, true)) {
             RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0f, PAGE, PAGE, 0f, 1000f, FAR), VertexSorting.ORTHOGRAPHIC_Z);
-            modelView.translation(0f, 0f, 10000f - FAR);
+            modelView.setIdentity();
+            modelView.translate(0f, 0f, 10000f - FAR);
             RenderSystem.applyModelViewMatrix();
             for (int start = 0; start < items.size(); start += PER_PAGE) {
                 int end = Math.min(items.size(), start + PER_PAGE);
@@ -77,7 +78,7 @@ public final class IconRenderer {
             Pawprint.LOG.warn("Could not encode the icon sheet", e);
             return null;
         } finally {
-            modelView.popMatrix();
+            modelView.popPose();
             RenderSystem.applyModelViewMatrix();
             RenderSystem.restoreProjectionMatrix();
             minecraft.getMainRenderTarget().bindWrite(true);
