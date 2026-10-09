@@ -12,6 +12,7 @@
   import { exportFile, loadProject, saveProject, saveStamp, saveToFile } from '../projects';
   import { isDesktop, saveBytes } from '../../platform/platform';
   import { findGames, sendToGame } from '../gameLink';
+  import { exportViewer } from '../viewerExport';
   import { writePawprint } from '../../core/format/pawprint';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
@@ -522,6 +523,7 @@
       <input bind:this={layoutInput} type="file" accept=".json,application/json" hidden onchange={importLayout} />
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
       <button class="btn" type="button" disabled={!ctx.blueprint || sending} title={t('editor.sendGameHelp')} onclick={sendGame}>{t('editor.sendGame')}</button>
+      <button class="btn" type="button" disabled={!ctx.blueprint} title={t('editor.viewerHelp')} onclick={() => ctx.blueprint && exportViewer(ctx.blueprint, ctx.pack)}>{t('editor.viewer')}</button>
       {#if isDesktop}
         {#if filePath}
           <button class="btn" type="button" disabled={!ctx.blueprint} onclick={() => saveFile(true)}>{t('editor.saveAs')}</button>

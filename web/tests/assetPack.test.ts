@@ -11,7 +11,7 @@ function source(): AssetSource & { reads: number } {
     ['assets/minecraft/blockstates/stone.json', json({ variants: { '': { model: 'minecraft:block/stone' } } })],
     ['assets/minecraft/models/block/cube.json', json({ elements: [{ from: [0, 0, 0], to: [16, 16, 16], faces: { up: {} } }] })],
     ['assets/minecraft/models/block/stone.json', json({ parent: 'block/cube', textures: { all: 'block/stone' } })],
-    ['assets/minecraft/models/block/leaves.json', json({ elements: [{ from: [0, 0, 0], to: [16, 16, 16], faces: { up: { tintindex: 0 } } }] })],
+    ['assets/minecraft/models/block/leaves.json', json({ elements: [{ from: [0, 0, 0], to: [16, 16, 16], faces: { up: { texture: '#all', tintindex: 0 } } }] })],
     ['assets/minecraft/textures/block/stone.png', png],
     ['assets/mymod/blockstates/maple_leaves.json', json({ variants: { 'persistent=false': { model: 'mymod:block/maple_leaves' }, 'persistent=true': { model: 'mymod:block/maple_leaves' } } })],
     ['assets/mymod/models/block/maple_leaves.json', json({ parent: 'minecraft:block/leaves', textures: { all: 'mymod:block/maple' } })],
@@ -73,5 +73,25 @@ describe('pack from game assets', async () => {
 
   it('reads models in a few waves, not one by one', () => {
     expect(src.reads).toBeLessThanOrEqual(6);
+  });
+});
+
+describe('pack subset for one blueprint', async () => {
+  const { subsetPack } = await import('../src/core/pack/subset');
+  const full = readPawpack((await buildPackFromAssets(source(), {
+    id: 'i', now: '', name: 'Full', source: 'instance-folder', mcVersion: '1.21.1', dataVersion: 1, loader: 'neoforge',
+    languages: { en_us: { 'block.mymod.maple_leaves': 'Maple Leaves' }, ko_kr: { 'block.mymod.maple_leaves': '단풍잎' } },
+  })).bytes);
+  const small = readPawpack(subsetPack(full, ['mymod:maple_leaves[persistent=true]']));
+
+  it('keeps only the blocks used, with their files and names', () => {
+    expect(small.blocks.map((b) => b.id)).toEqual(['mymod:maple_leaves']);
+    expect(small.files.has('assets/mymod/blockstates/maple_leaves.json')).toBe(true);
+    expect(small.files.has('assets/mymod/models/block/maple_leaves.json')).toBe(true);
+    expect(small.files.has('assets/minecraft/models/block/leaves.json')).toBe(true); // a parent
+    expect(small.files.has('assets/mymod/textures/block/maple.png')).toBe(true);
+    expect(small.files.has('assets/minecraft/blockstates/stone.json')).toBe(false);
+    expect(small.files.has('assets/minecraft/textures/block/stone.png')).toBe(false);
+    expect(small.languages.ko_kr).toEqual({ 'mymod:maple_leaves': '단풍잎' });
   });
 });

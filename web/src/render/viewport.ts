@@ -51,6 +51,9 @@ export class Viewport {
   private queue: string[] = [];
   private inFlight = 0;
 
+  /** Starts a mesher worker; the single-file HTML viewer swaps in an inlined one. */
+  static createWorker = (): Worker => new Worker(new URL('../workers/mesher.worker.ts', import.meta.url), { type: 'module' });
+
   constructor(
     private readonly container: HTMLElement,
     private readonly resources: BlockResources,
@@ -101,7 +104,7 @@ export class Viewport {
     this.updateHelpers();
     this.frame();
 
-    this.worker = new Worker(new URL('../workers/mesher.worker.ts', import.meta.url), { type: 'module' });
+    this.worker = Viewport.createWorker();
     this.worker.onmessage = (event: MessageEvent<MesherResponse>) => this.onWorker(event.data);
     this.load(entries);
     this.unsubscribe = bp.onChange((changed) => {

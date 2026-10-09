@@ -371,5 +371,7 @@
   "receive.title": "Open from the game",
   "receive.loading": "Getting the blueprint from the game…",
   "receive.expired": "This link has expired (they last 10 minutes). Press \"Open in web editor\" in the game again.",
-  "receive.failed": "Could not reach the game. It must be running on this computer with the Pawprint mod."
+  "receive.failed": "Could not reach the game. It must be running on this computer with the Pawprint mod.",
+  "editor.viewer": "HTML viewer…",
+  "editor.viewerHelp": "Save a single .html file anyone can open in a browser to look around this blueprint in 3D, with its materials. No install needed."
 }

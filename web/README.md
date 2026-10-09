@@ -37,6 +37,12 @@ npm run tauri build   # installer in src-tauri/target/release/bundle/nsis/
   (for example `app-v0.1.0`). `.github/workflows/desktop.yml` builds Windows, macOS and Linux installers into a
   draft release; check it and publish it on GitHub.
 
+## HTML viewer
+
+"HTML viewer…" in the editor saves one .html file with the blueprint, the part of the block pack it uses and a viewer
+runtime (`src/viewer/main.ts`, built by `npm run viewer` into `viewer-dist/viewer.js`; `dev` and `build` run it
+first). It opens offline in any browser.
+
 ## Notes
 
 - `src/core/` has no browser or Svelte dependencies and is tested in Node.

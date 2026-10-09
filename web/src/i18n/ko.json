@@ -371,5 +371,7 @@
   "receive.title": "게임에서 열기",
   "receive.loading": "게임에서 청사진을 받는 중…",
   "receive.expired": "링크가 만료됐어요(10분). 게임에서 \"웹 편집기에서 열기\"를 다시 눌러 주세요.",
-  "receive.failed": "게임에 연결하지 못했어요. 이 컴퓨터에서 Pawprint 모드를 넣은 게임이 켜져 있어야 해요."
+  "receive.failed": "게임에 연결하지 못했어요. 이 컴퓨터에서 Pawprint 모드를 넣은 게임이 켜져 있어야 해요.",
+  "editor.viewer": "HTML 뷰어…",
+  "editor.viewerHelp": "브라우저로 열기만 하면 이 청사진을 3D로 둘러보고 재료를 볼 수 있는 .html 파일 하나로 저장해요. 설치가 필요 없어요."
 }
