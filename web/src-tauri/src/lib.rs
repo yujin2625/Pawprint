@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_opener::OpenerExt;
 
 /// Files given on the command line (a double-clicked `.pawprint` / `.pawpack`) that the page has not picked up yet.
 #[derive(Default)]
@@ -73,13 +74,21 @@ async fn minecraft_languages(root: String, asset_index: String) -> Result<HashMa
 
 static POPOUTS: AtomicU32 = AtomicU32::new(0);
 
-/// The main window. Its `window.open` calls (panels moved to their own window) become app windows that share
-/// the page's JavaScript, so those panels keep working on the same blueprint.
+/// The main window. Its `window.open` calls for panels (moved to their own window) become app windows that share
+/// the page's JavaScript, so those panels keep working on the same blueprint. Other links (downloads, GitHub) open
+/// in the system browser.
 fn main_window(app: &AppHandle) -> tauri::Result<()> {
   let config = app.config().app.windows.iter().find(|w| w.label == "main").cloned().expect("main window config");
   let handle = app.clone();
   WebviewWindowBuilder::from_config(app, &config)?
-    .on_new_window(move |_url, features| {
+    .on_new_window(move |url, features| {
+      let local = matches!(url.host_str(), Some("tauri.localhost" | "localhost")) || url.scheme() == "tauri";
+      if !(local && url.path().ends_with("/popout.html")) {
+        if matches!(url.scheme(), "http" | "https") {
+          let _ = handle.opener().open_url(url.as_str(), None::<&str>);
+        }
+        return tauri::webview::NewWindowResponse::Deny;
+      }
       let label = format!("panel-{}", POPOUTS.fetch_add(1, Ordering::Relaxed));
       let built = WebviewWindowBuilder::new(&handle, label, WebviewUrl::External("about:blank".parse().unwrap()))
         .window_features(features)
@@ -111,6 +120,7 @@ pub fn run() {
       }
     }))
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_opener::init())
     .plugin(
       // Only the main window: panel windows are placed by the saved panel layout.
       tauri_plugin_window_state::Builder::default().with_filter(|label| label == "main").build(),

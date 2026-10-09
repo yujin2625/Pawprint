@@ -2,6 +2,7 @@
   import { languages, locale, setLanguage, t } from '../i18n/i18n.svelte';
   import EditorPage from './pages/EditorPage.svelte';
   import PacksPage from './pages/PacksPage.svelte';
+  import DownloadPage from './pages/DownloadPage.svelte';
   import ProjectsPage from './pages/ProjectsPage.svelte';
   import { isDesktop } from '../platform/platform';
   import { watchOpenFiles } from './openFiles';
@@ -25,7 +26,9 @@
     };
   });
 
-  const page = $derived(hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/editor/') ? 'editor' : 'projects');
+  const page = $derived(
+    hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/download') ? 'download' : hash.startsWith('#/editor/') ? 'editor' : 'projects',
+  );
   const projectId = $derived(page === 'editor' ? decodeURIComponent(hash.slice('#/editor/'.length)) : '');
 </script>
 
@@ -35,6 +38,7 @@
     <nav aria-label={t('nav.main')}>
       <a href="#/projects" aria-current={page === 'projects' ? 'page' : undefined}>{t('nav.projects')}</a>
       <a href="#/packs" aria-current={page === 'packs' ? 'page' : undefined}>{t('nav.packs')}</a>
+      <a href="#/download" aria-current={page === 'download' ? 'page' : undefined}>{t('nav.download')}</a>
     </nav>
     <div class="spacer"></div>
     <label>
@@ -50,6 +54,8 @@
   <main>
     {#if page === 'packs'}
       <PacksPage />
+    {:else if page === 'download'}
+      <DownloadPage />
     {:else if page === 'editor'}
       {#key projectId}<EditorPage {projectId} />{/key}
     {:else}
