@@ -2,6 +2,7 @@
   import { mount, unmount } from 'svelte';
   import { createDockview, themeDark, type DockviewApi, type IContentRenderer } from 'dockview-core';
   import { panelDef } from '../panels';
+  import { themeDocument } from '../theme/theme.svelte';
   import '../vendor/dockview.css';
 
   let { onready, locked = false }: { onready: (api: DockviewApi) => void; locked?: boolean } = $props();
@@ -72,6 +73,8 @@
     });
     dock.onDidAddPopoutGroup((popout) => {
       forwardKeys(popout.window);
+      const untheme = themeDocument(popout.window.document);
+      popout.window.addEventListener('pagehide', untheme);
       popout.window.document.title = 'Pawprint · ' + (popout.group.activePanel?.title ?? '');
     });
     api = dock;
@@ -117,10 +120,10 @@
     --dv-paneview-header-border-color: var(--outline);
     --dv-sash-color: var(--outline);
     --dv-active-sash-color: var(--accent);
-    --dv-drag-over-background-color: rgba(239, 159, 39, 0.3);
+    --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 30%, transparent);
     --dv-drag-over-border-color: var(--accent);
     --dv-floating-border: 2px solid var(--outline);
-    --dv-floating-box-shadow: 6px 6px 0 rgba(18, 71, 125, 0.55);
+    --dv-floating-box-shadow: 6px 6px 0 var(--shadow);
     --dv-floating-titlebar-background-color: var(--chrome);
     --dv-icon-hover-background-color: var(--chrome-raised);
     font-family: var(--font);

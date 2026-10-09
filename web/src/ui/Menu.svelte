@@ -47,7 +47,7 @@
     display: flex;
     flex-direction: column;
     padding: 4px 0;
-    box-shadow: 6px 6px 0 rgba(18, 71, 125, 0.55);
+    box-shadow: 6px 6px 0 var(--shadow);
   }
 
   .left {

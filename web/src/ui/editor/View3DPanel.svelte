@@ -4,6 +4,7 @@
   import { Editor3D } from '../../render/editor3d';
   import { ctx, activeSlice, dropViewport, useViewport } from './context.svelte';
   import { editor } from './editor.svelte';
+  import { themes } from '../theme/theme.svelte';
 
   let host: HTMLDivElement | undefined = $state();
   let viewport = $state.raw<Viewport | null>(null);
@@ -58,6 +59,12 @@
   });
 
   $effect(() => {
+    void themes.version;
+    viewport?.applyTheme();
+    editing?.refresh();
+  });
+
+  $effect(() => {
     void ctx.revision;
     const show = ctx.slicePanels > 0;
     viewport?.setSlice(show ? activeSlice.plane : null, activeSlice.slice);
@@ -109,7 +116,7 @@
     width: fit-content;
     max-width: calc(100% - 20px);
     padding: 2px 8px;
-    background: rgba(26, 86, 148, 0.85);
+    background: var(--hint-bg);
     color: var(--chrome-muted);
   }
 

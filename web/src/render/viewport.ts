@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { readSceneColors, type SceneColors } from './sceneColors';
 import type { EditableBlueprint } from '../core/blueprint/editable';
 import type { SectionMesh } from '../core/mesh/mesher';
 import type { Plane } from '../core/edit/shapes';
@@ -44,6 +45,7 @@ export class Viewport {
   private frameHandle = 0;
   private lastTime = 0;
   private readonly resizeObserver: ResizeObserver;
+  private colors: SceneColors;
   /** The window the view is in: the main one, or a panel window of the desktop app. */
   private readonly win: Window & typeof globalThis;
   private queue: string[] = [];
@@ -68,8 +70,8 @@ export class Viewport {
     canvas.style.outline = 'none';
     container.appendChild(canvas);
 
-    const bg = getComputedStyle(container).getPropertyValue('--viewport-bg').trim() || '#2a6fb5';
-    this.scene.background = new THREE.Color(bg);
+    this.colors = readSceneColors(container);
+    this.scene.background = this.colors.background.clone();
     this.scene.add(this.world, this.helpers);
 
     const map = resources.texture;
@@ -184,7 +186,7 @@ export class Viewport {
       const size = [max[0]! - min[0]! + 1 + pad * 2, max[1]! - min[1]! + 1 + pad * 2, max[2]! - min[2]! + 1 + pad * 2];
       const center = [(min[0]! + max[0]! + 1) / 2, (min[1]! + max[1]! + 1) / 2, (min[2]! + max[2]! + 1) / 2];
       const geometry = new THREE.PlaneGeometry(plane === 'x' ? size[2]! : size[0]!, plane === 'y' ? size[2]! : size[1]!);
-      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xef9f27, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: this.colors.accent, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
       if (plane === 'y') {
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.set(center[0]!, slice + 0.5, center[2]!);
@@ -310,14 +312,14 @@ export class Viewport {
       this.helpers.remove(child);
       if (child instanceof THREE.LineSegments) (child.geometry.dispose(), (child.material as THREE.Material).dispose());
     }
-    const grid = groundGrid(min[0]!, min[2]!, max[0]! + 1, max[2]! + 1, min[1]!);
+    const grid = groundGrid(min[0]!, min[2]!, max[0]! + 1, max[2]! + 1, min[1]!, this.colors);
     grid.userData.helper = true;
     this.helpers.add(grid);
     if (b) {
       const size = [max[0]! - min[0]! + 1, max[1]! - min[1]! + 1, max[2]! - min[2]! + 1];
       const box = new THREE.LineSegments(
         new THREE.EdgesGeometry(new THREE.BoxGeometry(size[0], size[1], size[2])),
-        new THREE.LineBasicMaterial({ color: 0xfac775, transparent: true, opacity: 0.6 }),
+        new THREE.LineBasicMaterial({ color: this.colors.accent, transparent: true, opacity: 0.6 }),
       );
       box.position.set(min[0]! + size[0]! / 2, min[1]! + size[1]! / 2, min[2]! + size[2]! / 2);
       box.userData.helper = true;
@@ -332,6 +334,21 @@ export class Viewport {
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     this.frame();
   };
+
+  /** After a theme change: background, grid, bounds and the slice marker take the new colors. */
+  applyTheme(): void {
+    this.colors = readSceneColors(this.container);
+    (this.scene.background as THREE.Color).copy(this.colors.background);
+    this.gridKey = '';
+    this.updateHelpers();
+    if (this.slicePlane) (this.slicePlane.material as THREE.MeshBasicMaterial).color.copy(this.colors.accent);
+    this.dirty = true;
+  }
+
+  /** Theme colors for overlays drawn by the editing tools. */
+  get themeColors(): SceneColors {
+    return this.colors;
+  }
 
   private loop = (time: number): void => {
     const dt = Math.min(0.1, (time - (this.lastTime || time)) / 1000);
@@ -389,7 +406,7 @@ export class Viewport {
 }
 
 /** Blueprint-paper grid on the ground: a line every block, a stronger one every 16. */
-function groundGrid(x0b: number, z0b: number, x1b: number, z1b: number, y: number): THREE.LineSegments {
+function groundGrid(x0b: number, z0b: number, x1b: number, z1b: number, y: number, theme: SceneColors): THREE.LineSegments {
   const margin = 8;
   const x0 = x0b - margin, x1 = x1b + margin, z0 = z0b - margin, z1 = z1b + margin;
   const minor: number[] = [];
@@ -399,10 +416,13 @@ function groundGrid(x0b: number, z0b: number, x1b: number, z1b: number, y: numbe
   const all = [...minor, ...major];
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(all, 3));
+  // Major lines in the theme's grid color, minor ones halfway to the background.
+  const majorColor = theme.background.clone().lerp(theme.grid, Math.min(1, theme.gridAlpha * 3));
+  const minorColor = theme.background.clone().lerp(majorColor, 0.5);
   const colors = new Float32Array(all.length);
-  for (let i = 0; i < all.length / 3; i++) colors.set(i >= minor.length / 3 ? [0.72, 0.84, 0.96] : [0.45, 0.62, 0.84], i * 3);
+  for (let i = 0; i < all.length / 3; i++) colors.set((i >= minor.length / 3 ? majorColor : minorColor).toArray(), i * 3);
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const grid = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5 }));
+  const grid = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 }));
   grid.position.y = y - 0.002;
   return grid;
 }

@@ -322,7 +322,7 @@
     align-items: center;
     gap: 18px;
     padding: 16px;
-    border: 2px dashed rgba(250, 238, 218, 0.5);
+    border: 2px dashed var(--dashed);
   }
 
   .empty p {

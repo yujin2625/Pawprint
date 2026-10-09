@@ -44,14 +44,14 @@ export class Editor3D {
     private readonly bp: EditableBlueprint,
     private readonly callbacks: Edit3DCallbacks,
   ) {
-    this.previewMaterial = new THREE.MeshBasicMaterial({ color: 0xef9f27, transparent: true, opacity: 0.35, depthWrite: false });
+    this.previewMaterial = new THREE.MeshBasicMaterial({ color: view.themeColors.preview, transparent: true, opacity: 0.35, depthWrite: false });
     this.preview = new THREE.InstancedMesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), this.previewMaterial, MAX_PREVIEW);
     this.preview.count = 0;
     this.preview.renderOrder = 20;
     this.preview.frustumCulled = false;
     view.addOverlay(this.preview);
 
-    this.selectionBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xfaeeda }));
+    this.selectionBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: view.themeColors.selection }));
     this.selectionBox.visible = false;
     this.selectionBox.renderOrder = 21;
     view.addOverlay(this.selectionBox);
@@ -73,6 +73,7 @@ export class Editor3D {
 
   /** Re-evaluates the cursor after settings or the blueprint changed. */
   refresh(): void {
+    (this.selectionBox.material as THREE.LineBasicMaterial).color.copy(this.view.themeColors.selection);
     this.updateSelection();
     if (this.lastPointer && !this.stroke) this.hover(this.lastPointer.x, this.lastPointer.y);
   }
@@ -119,9 +120,9 @@ export class Editor3D {
       const clip = s.clip;
       this.showPreview(clip ? clip.cells.map(({ p }) => [target[0] + p[0], target[1] + p[1], target[2] + p[2]] as World) : [target]);
     } else if (s.tool === 'select' || s.tool === 'picker' || s.tool === 'fill') {
-      this.showPreview([target], 0xfaeeda);
+      this.showPreview([target], 'selection');
     } else {
-      this.showPreview(hoverCells(s, ref, uv), s.tool === 'eraser' ? 0xe86a5c : 0xef9f27);
+      this.showPreview(hoverCells(s, ref, uv), s.tool === 'eraser' ? 'erase' : 'preview');
     }
   }
 
@@ -134,7 +135,7 @@ export class Editor3D {
       if (uv) {
         this.stroke.move(uv);
         const preview = this.stroke.preview();
-        this.showPreview(preview, s.tool === 'eraser' ? 0xe86a5c : 0xef9f27);
+        this.showPreview(preview, s.tool === 'eraser' ? 'erase' : 'preview');
       }
       return;
     }
@@ -207,8 +208,8 @@ export class Editor3D {
     this.hover(e.clientX, e.clientY);
   }
 
-  private showPreview(cells: World[], color = 0xef9f27): void {
-    this.previewMaterial.color.setHex(color);
+  private showPreview(cells: World[], color: 'preview' | 'erase' | 'selection' = 'preview'): void {
+    this.previewMaterial.color.copy(this.view.themeColors[color]);
     const n = Math.min(cells.length, MAX_PREVIEW);
     for (let i = 0; i < n; i++) {
       const [x, y, z] = cells[i]!;

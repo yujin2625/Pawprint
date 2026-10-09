@@ -1,5 +1,6 @@
 /*
- * Theme "Blueprint" (default). Every color is a CSS variable so the theme editor can change it.
+ * Theme "Blueprint" (default). Every color is a CSS variable so the theme editor can change it; the values here are
+ * only the first paint, src/ui/theme/themes.ts has the themes.
  * Keys follow WEB_DESIGN.md §11.1; chrome-* are the top bar and tool strips.
  */
 :root {
@@ -24,6 +25,7 @@
   --viewport-bg: #2a6fb5;
   --selection: #faeeda;
   --preview: #ef9f27;
+  --erase: #e86a5c;
   --danger: #a33a2c;
   --warning: #7a3e00;
   --warning-bg: #fce3b8;
@@ -33,6 +35,10 @@
   --font: 'Silver Pawprint', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
   --text-size: 19px;
   --title-size: 38px;
+  /* Derived from the theme colors. */
+  --shadow: color-mix(in srgb, var(--outline) 55%, transparent);
+  --hint-bg: color-mix(in srgb, var(--chrome) 85%, transparent);
+  --dashed: color-mix(in srgb, var(--chrome-text) 50%, transparent);
   --notch: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px), 0 2px);
 }
 

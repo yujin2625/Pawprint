@@ -5,6 +5,7 @@
   import { SliceView, type SliceSettings } from '../../view2d/sliceView';
   import { ctx, activeSlice, nextViewId } from './context.svelte';
   import { editor } from './editor.svelte';
+  import { themes } from '../theme/theme.svelte';
 
   interface PanelApi {
     updateParameters(params: Record<string, unknown>): void;
@@ -98,7 +99,7 @@
   });
 
   $effect(() => {
-    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.height, editor.selection, editor.clip, editor.hiddenLayers, editor.onionBelow, editor.onionAbove, editor.onionOpacity, ctx.revision];
+    void [editor.tool, editor.block, editor.brushShape, editor.brushSize, editor.filled, editor.height, editor.selection, editor.clip, editor.hiddenLayers, editor.onionBelow, editor.onionAbove, editor.onionOpacity, ctx.revision, themes.version];
     view?.settingsChanged();
   });
 
@@ -218,7 +219,7 @@
     bottom: 8px;
     max-width: calc(100% - 20px);
     padding: 2px 8px;
-    background: rgba(26, 86, 148, 0.85);
+    background: var(--hint-bg);
     color: var(--chrome-muted);
     pointer-events: none;
   }

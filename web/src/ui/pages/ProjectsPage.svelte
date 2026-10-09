@@ -236,12 +236,12 @@
     margin-top: 20px;
     padding: 18px;
     text-align: center;
-    border: 2px dashed rgba(250, 238, 218, 0.45);
+    border: 2px dashed var(--dashed);
     color: var(--chrome-muted);
   }
 
   .dragging {
     border-color: var(--accent);
-    background: rgba(239, 159, 39, 0.15);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
   }
 </style>

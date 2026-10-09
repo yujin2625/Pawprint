@@ -8,6 +8,7 @@
   import Intro from './Intro.svelte';
   import PixelIcon from './editor/PixelIcon.svelte';
   import { intro } from './tour.svelte';
+  import { colorsOf, isLight, themes } from './theme/theme.svelte';
   import ProjectsPage from './pages/ProjectsPage.svelte';
   import { isDesktop } from '../platform/platform';
   import { watchOpenFiles } from './openFiles';
@@ -31,6 +32,7 @@
     };
   });
 
+  const lightBars = $derived((void themes.version, isLight(colorsOf(themes.current).chrome)));
   const ROUTES = ['packs', 'download', 'settings', 'credits'] as const;
   const page = $derived(hash.startsWith('#/editor/') ? 'editor' : (ROUTES.find((r) => hash.startsWith('#/' + r)) ?? 'projects'));
   const projectId = $derived(page === 'editor' ? decodeURIComponent(hash.slice('#/editor/'.length)) : '');
@@ -38,7 +40,7 @@
 
 <div class={["shell", { full: page === "editor" }]}>
   <header>
-    <a class="logo" href="#/projects"><img class="pixel" src="./brand/logo-horizontal-dark@2x.png" alt={t('app.name')} width="108" height="24" /></a>
+    <a class="logo" href="#/projects"><img class="pixel" src={lightBars ? './brand/logo-horizontal-light@2x.png' : './brand/logo-horizontal-dark@2x.png'} alt={t('app.name')} width="108" height="24" /></a>
     <nav aria-label={t('nav.main')}>
       <a href="#/projects" aria-current={page === 'projects' ? 'page' : undefined}>{t('nav.projects')}</a>
       <a href="#/packs" aria-current={page === 'packs' ? 'page' : undefined}>{t('nav.packs')}</a>
