@@ -15,7 +15,11 @@
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import PackCard from '../packs/PackCard.svelte';
   import { packFromFile, packFromJar, packFromJarBytes } from '../packs/addPack';
-  import { isDesktop, minecraftInstalls, minecraftLanguages, minecraftRoot, pickFolder, readFile, type MinecraftInstall } from '../../platform/platform';
+  import {
+    baseName, instanceInfo, isDesktop, jarDataVersion, minecraftInstalls, minecraftLanguages, minecraftRoot, pickFile, pickFolder, readFile,
+    type InstanceInfo, type MinecraftInstall,
+  } from '../../platform/platform';
+  import { packFromInstance } from '../packs/instancePack';
 
   interface Question {
     message: string;
@@ -69,6 +73,36 @@
   async function chooseRoot() {
     const root = await pickFolder();
     if (root) await findInstalls(root);
+  }
+
+  // Desktop: a modded game folder (instance), read without starting the game.
+  let instance = $state<{ dir: string; info: InstanceInfo } | null>(null);
+
+  async function chooseInstance() {
+    const dir = await pickFolder();
+    if (!dir) return;
+    error = notice = null;
+    try {
+      instance = { dir, info: await instanceInfo(dir) };
+    } catch (e) {
+      error = describe(e);
+    }
+  }
+
+  async function chooseVanillaJar() {
+    if (!instance) return;
+    const jar = await pickFile({ name: 'Minecraft jar', extensions: ['jar'] });
+    if (!jar) return;
+    instance.info.vanillaJar = jar;
+    instance.info.dataVersion = (await jarDataVersion(jar).catch(() => null)) ?? instance.info.dataVersion;
+  }
+
+  function fromInstance() {
+    const current = instance;
+    const jar = current?.info.vanillaJar;
+    if (!current || !jar) return;
+    const name = baseName(current.dir);
+    add(name, () => packFromInstance(current.dir, current.info, jar, (step) => (busy = { key: 'packs.busy.instance.' + step, params: { name } })), 'packs.busy.instance.index');
   }
 
   function fromInstall(install: MinecraftInstall) {
@@ -182,6 +216,26 @@
 
   <aside>
     {#if isDesktop}
+      <section class="add" aria-labelledby="instance-title">
+        <h2 id="instance-title">{t('packs.instance.title')}</h2>
+        <p class="help">{t('packs.instance.help')}</p>
+        <button class="btn primary wide" type="button" disabled={!!busy} onclick={chooseInstance}>{t('packs.instance.choose')}</button>
+        {#if instance}
+          <p class="help path" title={instance.dir}>{instance.dir}</p>
+          <dl class="facts">
+            <dt>{t('packs.instance.version')}</dt><dd>{instance.info.mcVersion ?? '?'} · {instance.info.loader ?? '?'}</dd>
+            <dt>{t('packs.instance.mods')}</dt><dd>{t('packs.instance.modFiles', { count: instance.info.modFiles })}</dd>
+            <dt>{t('packs.instance.resourcePacks')}</dt><dd>{instance.info.resourcePacks.filter((p) => p.startsWith('file/')).length}</dd>
+            <dt>{t('packs.instance.vanilla')}</dt><dd title={instance.info.vanillaJar ?? ''}>{instance.info.vanillaJar ? baseName(instance.info.vanillaJar) : t('packs.instance.noJar')}</dd>
+          </dl>
+          {#if !instance.info.vanillaJar}
+            <button class="btn wide" type="button" disabled={!!busy} onclick={chooseVanillaJar}>{t('packs.instance.pickJar')}</button>
+          {/if}
+          <button class="btn primary wide" type="button" disabled={!!busy || !instance.info.vanillaJar} onclick={fromInstance}>{t('packs.instance.make')}</button>
+          <p class="help">{t('packs.instance.limits')}</p>
+        {/if}
+      </section>
+
       <section class="add" aria-labelledby="installs-title">
         <h2 id="installs-title">{t('packs.installs.title')}</h2>
         {#if gameRoot}<p class="help path" title={gameRoot}>{gameRoot}</p>{/if}
@@ -272,6 +326,25 @@
   }
 
   .version {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    margin: 0;
+  }
+
+  .facts dt {
+    color: var(--chrome-muted);
+  }
+
+  .facts dd {
+    margin: 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

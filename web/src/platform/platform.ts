@@ -94,3 +94,55 @@ export async function minecraftLanguages(install: MinecraftInstall): Promise<Rec
   if (!install.assetIndex) return {};
   return invoke('minecraft_languages', { root: install.root, assetIndex: install.assetIndex });
 }
+
+export interface InstanceInfo {
+  mcVersion: string | null;
+  loader: string | null;
+  vanillaJar: string | null;
+  dataVersion: number | null;
+  /** Where the launcher keeps `assets/` for the vanilla jar, and its asset index (non-English names). */
+  launcherRoot: string | null;
+  assetIndex: string | null;
+  resourcePacks: string[];
+  modFiles: number;
+}
+
+export interface InstanceIndexStats {
+  sources: number;
+  files: number;
+  mods: { id: string; name: string; version: string }[];
+  names: string[];
+}
+
+/** What a modded game folder holds: game version, loader, the vanilla jar (if found), mods and resource packs. */
+export async function instanceInfo(dir: string): Promise<InstanceInfo> {
+  return invoke('instance_info', { dir });
+}
+
+export async function jarDataVersion(jar: string): Promise<number | null> {
+  return invoke('jar_data_version', { jar });
+}
+
+export async function pickFile(filter: FileFilter): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open({ filters: [filter] });
+  return typeof picked === 'string' ? picked : null;
+}
+
+/** Indexes the instance's assets in the app; then `instanceRead` / `instanceLanguages` read from that index. */
+export async function instanceIndex(dir: string, vanillaJar: string): Promise<InstanceIndexStats> {
+  return invoke('instance_index', { dir, vanillaJar });
+}
+
+/** The indexed files as an uncompressed zip. */
+export async function instanceRead(paths: string[]): Promise<Uint8Array> {
+  return new Uint8Array(await invoke<ArrayBuffer>('instance_read', { paths }));
+}
+
+export async function instanceLanguages(): Promise<Record<string, Record<string, string>>> {
+  return invoke('instance_languages');
+}
+
+export async function instanceDone(): Promise<void> {
+  await invoke('instance_done');
+}

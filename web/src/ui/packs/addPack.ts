@@ -26,8 +26,8 @@ export async function packFromJar(file: File): Promise<StoredPack> {
 }
 
 /** `languages`: names in other languages (the desktop app reads them from the launcher's assets). */
-export function packFromJarBytes(jar: Uint8Array, languages?: Record<string, Record<string, string>>): StoredPack {
-  const built = buildPackFromJar(jar, {
+export async function packFromJarBytes(jar: Uint8Array, languages?: Record<string, Record<string, string>>): Promise<StoredPack> {
+  const built = await buildPackFromJar(jar, {
     id: crypto.randomUUID(),
     now: new Date().toISOString(),
     generator: 'pawprint-web',

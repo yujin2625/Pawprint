@@ -7,7 +7,7 @@ import { pickPreviews } from '../src/core/pack/previews';
 
 for (const path of process.argv.slice(2)) {
   const started = Date.now();
-  const pack = buildPackFromJar(new Uint8Array(readFileSync(path)), { id: 'check', now: new Date().toISOString() });
+  const pack = await buildPackFromJar(new Uint8Array(readFileSync(path)), { id: 'check', now: new Date().toISOString() });
   const loaded = readPawpack(pack.bytes);
   const shapes: Record<string, number> = {};
   for (const block of loaded.blocks) shapes[block.renderShape] = (shapes[block.renderShape] ?? 0) + 1;

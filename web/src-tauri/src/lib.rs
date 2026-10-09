@@ -1,3 +1,4 @@
+mod instance;
 mod minecraft;
 
 use std::collections::HashMap;
@@ -72,6 +73,45 @@ async fn minecraft_languages(root: String, asset_index: String) -> Result<HashMa
   minecraft::languages(&PathBuf::from(root), &asset_index)
 }
 
+/// The last instance folder indexed for making a block pack (dropped after the pack is built).
+#[derive(Default)]
+struct InstanceIndex(Mutex<Option<instance::Index>>);
+
+#[tauri::command]
+fn instance_info(dir: String) -> instance::InstanceInfo {
+  instance::info(&PathBuf::from(dir))
+}
+
+#[tauri::command]
+async fn instance_index(state: State<'_, InstanceIndex>, dir: String, vanilla_jar: String) -> Result<instance::IndexStats, String> {
+  let (index, stats) = instance::build(&PathBuf::from(dir), &PathBuf::from(vanilla_jar));
+  *state.0.lock().unwrap() = Some(index);
+  Ok(stats)
+}
+
+#[tauri::command]
+async fn instance_read(state: State<'_, InstanceIndex>, paths: Vec<String>) -> Result<Response, String> {
+  let guard = state.0.lock().unwrap();
+  let index = guard.as_ref().ok_or("no instance indexed")?;
+  index.read(&paths).map(Response::new)
+}
+
+#[tauri::command]
+async fn instance_languages(state: State<'_, InstanceIndex>) -> Result<HashMap<String, HashMap<String, String>>, String> {
+  let guard = state.0.lock().unwrap();
+  Ok(guard.as_ref().ok_or("no instance indexed")?.languages())
+}
+
+#[tauri::command]
+fn jar_data_version(jar: String) -> Option<u64> {
+  instance::data_version(&PathBuf::from(jar))
+}
+
+#[tauri::command]
+fn instance_done(state: State<InstanceIndex>) {
+  *state.0.lock().unwrap() = None;
+}
+
 static POPOUTS: AtomicU32 = AtomicU32::new(0);
 
 /// The main window. Its `window.open` calls for panels (moved to their own window) become app windows that share
@@ -125,6 +165,7 @@ pub fn run() {
       // Only the main window: panel windows are placed by the saved panel layout.
       tauri_plugin_window_state::Builder::default().with_filter(|label| label == "main").build(),
     )
+    .manage(InstanceIndex::default())
     .manage(OpenFiles(Mutex::new(file_args(std::env::args().skip(1)))))
     .invoke_handler(tauri::generate_handler![
       take_open_files,
@@ -132,7 +173,13 @@ pub fn run() {
       write_file,
       minecraft_default_root,
       minecraft_installs,
-      minecraft_languages
+      minecraft_languages,
+      instance_info,
+      instance_index,
+      instance_read,
+      instance_languages,
+      instance_done,
+      jar_data_version
     ])
     .setup(|app| {
       main_window(app.handle())?;

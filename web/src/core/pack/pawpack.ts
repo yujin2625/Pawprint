@@ -70,7 +70,7 @@ function checkInfo(raw: Record<string, unknown>): PackInfo {
     name: raw.name as string,
     created: typeof raw.created === 'string' ? raw.created : '',
     generator: typeof raw.generator === 'string' ? raw.generator : undefined,
-    source: raw.source === 'vanilla-jar' ? 'vanilla-jar' : 'mod-export',
+    source: raw.source === 'vanilla-jar' || raw.source === 'instance-folder' ? raw.source : 'mod-export',
     mcVersion: raw.mcVersion as string,
     dataVersion: typeof raw.dataVersion === 'number' ? raw.dataVersion : 0,
     loader: typeof raw.loader === 'string' ? raw.loader : undefined,

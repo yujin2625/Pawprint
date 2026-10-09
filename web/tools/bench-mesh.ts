@@ -9,7 +9,7 @@ import { toMeshPalette, texturesOf } from '../src/core/mesh/prepare';
 import { buildSection, VoxelMap } from '../src/core/mesh/mesher';
 
 const [jarPath, bpPath] = process.argv.slice(2);
-const pack = readPawpack(buildPackFromJar(new Uint8Array(readFileSync(jarPath!)), { id: 'b', now: '' }).bytes);
+const pack = readPawpack((await buildPackFromJar(new Uint8Array(readFileSync(jarPath!)), { id: 'b', now: '' })).bytes);
 const blocks = new Map(pack.blocks.map((b) => [b.id, b]));
 const bp = readPawprint(new Uint8Array(readFileSync(bpPath!)));
 

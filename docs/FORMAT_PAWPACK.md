@@ -66,7 +66,7 @@ example.pawpack
 | `name` | 문자열 | 예 | 표시 이름 |
 | `created` | 문자열 | 예 | ISO-8601 UTC |
 | `generator` | 문자열 | 아니오 | 만든 프로그램과 버전 |
-| `source` | 문자열 | 예 | `mod-export`(모드), `vanilla-jar`(웹·앱이 jar로 만듦) |
+| `source` | 문자열 | 예 | `mod-export`(모드), `vanilla-jar`(웹·앱이 jar로 만듦), `instance-folder`(앱이 모드팩 폴더로 만듦) |
 | `mcVersion`, `dataVersion` | 문자열, 정수 | 예 | 게임 버전 |
 | `loader` | 문자열 | 아니오 | `neoforge`, `forge`, `fabric`, `vanilla` |
 | `mods` | 배열 | 아니오 | 블럭을 가진 모드 목록 (`minecraft` 제외) |
@@ -198,6 +198,15 @@ example.pawpack
 - `item`은 같은 ID의 아이템 모델이 있으면 그 ID, 없으면 null. `tabs`는 비우고, `tint`는 알려진 바닐라 블럭 목록(웹에 내장한 표)으로 채운다.
 
 ---
+
+## 8.1 모드팩 폴더로 만든 팩 (`source: "instance-folder"`)
+
+- 데스크탑 앱이 게임을 켜지 않고 모드팩(인스턴스) 폴더에서 만든다. 블럭 추론은 8장과 같고, 모든 네임스페이스(`assets/<ns>/blockstates/**.json`)를 읽는다. 블럭 ID는 `<ns>:<경로>`.
+- 파일을 겹치는 순서(뒤가 우선)는 게임과 같다: 바닐라 jar → `options.txt`의 `resourcePacks` 순서. 그 안의 `mod_resources` 자리에 모드 jar(안에 든 `META-INF/jarjar/`·`META-INF/jars/` jar 포함), 모드가 실행 중에 만들어 디스크에 남긴 에셋(`dynamic-resource-pack-cache/*/`), `kubejs/assets`가 온다. `file/<이름>`은 `resourcepacks/<이름>`(zip 또는 폴더).
+- 언어: 런처 에셋(바닐라 jar 옆 `versions/<v>/<v>.json`의 asset index)의 언어 위에 모든 출처의 언어 파일을 키 단위로 합친다(게임과 같음). 이름 키는 `block.<ns>.<경로의 / 를 . 으로>`.
+- `mods`: 모드 jar의 `neoforge.mods.toml`·`mods.toml`·`fabric.mod.json`에서 읽은 것 중 블럭 네임스페이스와 같은 ID.
+- 틴트: 바닐라는 8장의 표. 모드 블럭은 모델 면에 `tintindex`가 있으면 이름으로 추측한다(풀·잎·물). 렌더 레이어도 이름으로 추측한다.
+- 한계: 게임 실행 중에만 등록되는 블럭(예: Diagonal Walls), 코드로만 정의된 블럭(blockstate 파일이 없음), 코드로 그리는 모양(연결 텍스처, 특수 렌더러)은 빠지거나 다르게 보인다. Better MC 5(모드 352개)에서 게임 블럭 목록의 95%를 찾았다(2026-10-09).
 
 ## 9. 버전 정책
 

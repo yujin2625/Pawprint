@@ -45,8 +45,9 @@ function fakeJar(): Uint8Array {
   });
 }
 
+const pack = await buildPackFromJar(fakeJar(), { id: 'test-id', now: '2026-10-08T00:00:00Z' });
+
 describe('vanilla jar → pack', () => {
-  const pack = buildPackFromJar(fakeJar(), { id: 'test-id', now: '2026-10-08T00:00:00Z' });
   const loaded = readPawpack(pack.bytes);
   const byId = Object.fromEntries(loaded.blocks.map((b) => [b.id, b]));
 
@@ -59,9 +60,9 @@ describe('vanilla jar → pack', () => {
     expect(loaded.info.languages).toEqual(['en_us']);
   });
 
-  it('adds languages from the launcher assets, keeping only known blocks', () => {
+  it('adds languages from the launcher assets, keeping only known blocks', async () => {
     const multi = readPawpack(
-      buildPackFromJar(fakeJar(), {
+      (await buildPackFromJar(fakeJar(), {
         id: 'test-id',
         now: '2026-10-08T00:00:00Z',
         languages: {
@@ -69,7 +70,7 @@ describe('vanilla jar → pack', () => {
           de_de: {},
           '../bad': { 'block.minecraft.test_stone': 'x' },
         },
-      }).bytes,
+      })).bytes,
     );
     expect(multi.info.languages).toEqual(['en_us', 'ko_kr']);
     expect(multi.languages.ko_kr).toEqual({ 'minecraft:test_stone': '시험 돌' });
