@@ -11,6 +11,8 @@
   import { loadDefaultPack } from '../packs/activePack';
   import { exportFile, loadProject, saveProject, saveStamp, saveToFile } from '../projects';
   import { isDesktop, saveBytes } from '../../platform/platform';
+  import { findGames, sendToGame } from '../gameLink';
+  import { writePawprint } from '../../core/format/pawprint';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
   import { PANELS } from '../panels';
@@ -255,6 +257,30 @@
     }
   }
 
+  let sending = $state(false);
+
+  /** Sends the blueprint to the Pawprint mod in a running game on this computer (its library, group "web"). */
+  async function sendGame() {
+    const bp = ctx.blueprint;
+    if (!bp || sending) return;
+    sending = true;
+    try {
+      await save();
+      const games = await findGames();
+      if (!games.length) {
+        editor.message = 'editor.noGame';
+        return;
+      }
+      await sendToGame(games[0]!.port, bp.meta.name || t('projects.untitled'), writePawprint(bp.toBlueprint()));
+      editor.message = 'editor.sentToGame';
+    } catch (e) {
+      console.error(e);
+      editor.message = 'editor.sendFailed';
+    } finally {
+      sending = false;
+    }
+  }
+
   /** Desktop: saves the project, then writes the linked file (or asks where). */
   async function saveFile(saveAs = false) {
     const bp = ctx.blueprint;
@@ -495,6 +521,7 @@
       </Menu>
       <input bind:this={layoutInput} type="file" accept=".json,application/json" hidden onchange={importLayout} />
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
+      <button class="btn" type="button" disabled={!ctx.blueprint || sending} title={t('editor.sendGameHelp')} onclick={sendGame}>{t('editor.sendGame')}</button>
       {#if isDesktop}
         {#if filePath}
           <button class="btn" type="button" disabled={!ctx.blueprint} onclick={() => saveFile(true)}>{t('editor.saveAs')}</button>

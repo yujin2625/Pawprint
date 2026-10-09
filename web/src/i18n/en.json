@@ -362,5 +362,14 @@
   "fonts.family": "Font family name",
   "fonts.addUrl": "Add link",
   "fonts.badUrl": "Give an https link and the font family name it defines.",
-  "fonts.tooLarge": "That font file is over 30 MB."
+  "fonts.tooLarge": "That font file is over 30 MB.",
+  "editor.sendGame": "Send to game",
+  "editor.sendGameHelp": "Puts this blueprint in the Pawprint library of a game running on this computer (group \"web\").",
+  "editor.noGame": "No game found: start Minecraft with the Pawprint mod on this computer, then try again.",
+  "editor.sentToGame": "Sent to the game: find it in the library, group \"web\".",
+  "editor.sendFailed": "The game did not take the blueprint.",
+  "receive.title": "Open from the game",
+  "receive.loading": "Getting the blueprint from the game…",
+  "receive.expired": "This link has expired (they last 10 minutes). Press \"Open in web editor\" in the game again.",
+  "receive.failed": "Could not reach the game. It must be running on this computer with the Pawprint mod."
 }

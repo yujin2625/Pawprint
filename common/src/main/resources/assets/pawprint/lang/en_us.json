@@ -247,5 +247,10 @@
   "pawprint.edit.drop_hint": "Drop a .pawprint file here to edit it as the draft",
   "pawprint.edit.imported": "Loaded %s into the draft (%s blocks)",
   "pawprint.edit.import_failed": "Could not load %s: %s",
-  "pawprint.edit.import_need_empty": "Clear the draft first, then drop the file again."
+  "pawprint.edit.import_need_empty": "Clear the draft first, then drop the file again.",
+  "pawprint.library.open_web": "Open in web editor",
+  "pawprint.library.open_web_tooltip": "Opens the Pawprint web editor in your browser with this blueprint. Edit it there and \"Send to game\" to bring it back.",
+  "pawprint.library.open_web_off": "The web link is off (enableWebLink in config/pawprint.json) or its ports are taken.",
+  "pawprint.library.open_web_done": "Opened in the browser.",
+  "pawprint.web.received": "Received \"%s\" from the web editor (library group \"web\")."
 }

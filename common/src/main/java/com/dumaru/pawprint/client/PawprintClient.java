@@ -36,6 +36,7 @@ public final class PawprintClient {
         BlueprintLibrary.addPathListener(PlacementManager::pathChanged);
         BlueprintLibrary.addPathListener(Draft::pathChanged);
         BlueprintLibrary.addContentListener(PlacementManager::contentChanged);
+        com.dumaru.pawprint.client.web.WebLink.start();
     }
 
     public static void onClientTick(Minecraft minecraft) {
