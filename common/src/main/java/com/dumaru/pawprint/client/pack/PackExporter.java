@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import org.jetbrains.annotations.Nullable;
 
+import com.dumaru.pawprint.client.render.IconRenderer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -75,7 +76,7 @@ public final class PackExporter {
     public record Options(String name, List<String> languages, boolean resourcePacks) {
     }
 
-    public record Result(Path file, int blocks, int models, int textures, int missingFiles) {
+    public record Result(Path file, int blocks, int models, int textures, int missingFiles, int icons) {
     }
 
     private PackExporter() {
@@ -112,7 +113,8 @@ public final class PackExporter {
     }
 
     /** Everything that must be read on the game thread. */
-    private record Catalog(JsonObject pack, JsonArray blocks, Map<String, JsonObject> names, List<ResourceLocation> blockstates) {
+    private record Catalog(JsonObject pack, JsonArray blocks, Map<String, JsonObject> names, List<ResourceLocation> blockstates,
+                           IconRenderer.@Nullable Sheet icons) {
         static Catalog collect(Minecraft minecraft, Options options) {
             Map<String, List<String>> tabsByBlock = new HashMap<>();
             Map<String, Integer> order = new HashMap<>();
@@ -130,6 +132,8 @@ public final class PackExporter {
             JsonArray blocks = new JsonArray();
             List<ResourceLocation> blockstates = new ArrayList<>();
             Set<String> mods = new TreeSet<>();
+            // Blocks the game draws in code (chests, signs…) or without a blockstate file: the web shows their icons.
+            List<Map.Entry<String, ItemStack>> iconItems = new ArrayList<>();
             int index = 0;
             for (Block block : BuiltInRegistries.BLOCK) {
                 index++;
@@ -162,7 +166,11 @@ public final class PackExporter {
                     entry.addProperty("fluid", BuiltInRegistries.FLUID.getKey(state.getFluidState().getType()).toString());
                 }
                 blocks.add(entry);
-                blockstates.add(ResourceLocation.tryParse(key.getNamespace() + ":blockstates/" + key.getPath() + ".json"));
+                ResourceLocation blockstate = ResourceLocation.tryParse(key.getNamespace() + ":blockstates/" + key.getPath() + ".json");
+                blockstates.add(blockstate);
+                if (block.asItem() != Items.AIR && (!renderShape(state).equals("model") || resources.getResource(blockstate).isEmpty())) {
+                    iconItems.add(Map.entry(id, new ItemStack(block)));
+                }
                 if (!key.getNamespace().equals("minecraft")) {
                     mods.add(key.getNamespace());
                 }
@@ -205,7 +213,7 @@ public final class PackExporter {
             pack.add("languages", languageCodes);
             pack.addProperty("blockCount", blocks.size());
             pack.addProperty("propertiesComplete", true);
-            return new Catalog(pack, blocks, names, blockstates);
+            return new Catalog(pack, blocks, names, blockstates, IconRenderer.render(iconItems));
         }
     }
 
@@ -416,9 +424,20 @@ public final class PackExporter {
             for (Map.Entry<String, byte[]> entry : files.entrySet()) {
                 put(zip, entry.getKey(), entry.getValue());
             }
+            if (catalog.icons() != null) {
+                JsonObject icons = new JsonObject();
+                icons.addProperty("cell", IconRenderer.CELL);
+                icons.addProperty("columns", IconRenderer.COLUMNS);
+                JsonObject cells = new JsonObject();
+                catalog.icons().icons().forEach(cells::addProperty);
+                icons.add("icons", cells);
+                put(zip, "icons.json", GSON.toJson(icons).getBytes(StandardCharsets.UTF_8));
+                put(zip, "icons.png", catalog.icons().png());
+            }
         }
         Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-        return new Result(file, catalog.blocks().size(), modelCount, textureCount, missing);
+        return new Result(file, catalog.blocks().size(), modelCount, textureCount, missing,
+                catalog.icons() == null ? 0 : catalog.icons().icons().size());
     }
 
     private static void collectModels(JsonElement blockstate, Set<ResourceLocation> out) {
