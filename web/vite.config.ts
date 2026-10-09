@@ -1,4 +1,4 @@
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig, type Plugin } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -16,6 +16,9 @@ export default defineConfig({
   // Relative paths so the same build works on GitHub Pages (/Pawprint/) and inside the desktop app.
   base: './',
   plugins: [svelte(), dropLocal],
+  define: {
+    __APP_VERSION__: JSON.stringify((JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version),
+  },
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',

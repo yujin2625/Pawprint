@@ -3,6 +3,11 @@
   import EditorPage from './pages/EditorPage.svelte';
   import PacksPage from './pages/PacksPage.svelte';
   import DownloadPage from './pages/DownloadPage.svelte';
+  import SettingsPage from './pages/SettingsPage.svelte';
+  import CreditsPage from './pages/CreditsPage.svelte';
+  import Intro from './Intro.svelte';
+  import PixelIcon from './editor/PixelIcon.svelte';
+  import { intro } from './tour.svelte';
   import ProjectsPage from './pages/ProjectsPage.svelte';
   import { isDesktop } from '../platform/platform';
   import { watchOpenFiles } from './openFiles';
@@ -26,9 +31,8 @@
     };
   });
 
-  const page = $derived(
-    hash.startsWith('#/packs') ? 'packs' : hash.startsWith('#/download') ? 'download' : hash.startsWith('#/editor/') ? 'editor' : 'projects',
-  );
+  const ROUTES = ['packs', 'download', 'settings', 'credits'] as const;
+  const page = $derived(hash.startsWith('#/editor/') ? 'editor' : (ROUTES.find((r) => hash.startsWith('#/' + r)) ?? 'projects'));
   const projectId = $derived(page === 'editor' ? decodeURIComponent(hash.slice('#/editor/'.length)) : '');
 </script>
 
@@ -41,6 +45,7 @@
       <a href="#/download" aria-current={page === 'download' ? 'page' : undefined}>{t('nav.download')}</a>
     </nav>
     <div class="spacer"></div>
+    <a class="settings" href="#/settings" title={t('settings.title')} aria-label={t('settings.title')} aria-current={page === 'settings' ? 'page' : undefined}><PixelIcon name="gear" /></a>
     <label>
       <span class="visually-hidden">{t('app.language')}</span>
       <select class="lang" value={locale.code} onchange={(e) => setLanguage(e.currentTarget.value)}>
@@ -56,6 +61,10 @@
       <PacksPage />
     {:else if page === 'download'}
       <DownloadPage />
+    {:else if page === 'settings'}
+      <SettingsPage />
+    {:else if page === 'credits'}
+      <CreditsPage />
     {:else if page === 'editor'}
       {#key projectId}<EditorPage {projectId} />{/key}
     {:else}
@@ -66,11 +75,14 @@
   {#if page !== 'editor'}
   <footer>
     <span>{t('app.disclaimer')}</span>
+    <a href="#/credits">{t('app.credits')}</a>
     <span class="spacer"></span>
     <span>{t('app.localOnly')}</span>
   </footer>
   {/if}
 </div>
+
+{#if intro.open}<Intro />{/if}
 
 <style>
   .shell {
@@ -133,6 +145,21 @@
 
   .spacer {
     flex: 1;
+  }
+
+  .settings {
+    display: flex;
+    padding: 6px;
+    color: var(--chrome-muted);
+  }
+
+  .settings:hover,
+  .settings[aria-current='page'] {
+    color: var(--chrome-text);
+  }
+
+  footer a {
+    color: inherit;
   }
 
   .lang {
