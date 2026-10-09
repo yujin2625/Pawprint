@@ -350,5 +350,17 @@
   "editor.savedToFile": "파일에 저장했어요.",
   "projects.fileChanged": "\"{name}\" 파일이 Pawprint에서 마지막으로 열거나 저장한 뒤 바깥에서 바뀌었어요. 지금 파일 내용으로 열까요, Pawprint에 있는 버전을 열까요?",
   "projects.useFile": "파일 내용으로",
-  "projects.keepApp": "Pawprint 버전으로"
+  "projects.keepApp": "Pawprint 버전으로",
+  "fonts.title": "글꼴",
+  "fonts.help": "{language} 순서: 글자마다 그 글자가 있는 첫 글꼴을 쓰고, 없으면 Silver, 그다음 시스템 글꼴을 써요.",
+  "fonts.sample": "Aa 가나 123",
+  "fonts.builtIn": "기본",
+  "fonts.up": "위로",
+  "fonts.down": "아래로",
+  "fonts.addFile": "글꼴 파일 추가(.ttf, .otf, .woff2)…",
+  "fonts.url": "웹 글꼴 링크",
+  "fonts.family": "글꼴 이름(font-family)",
+  "fonts.addUrl": "링크 추가",
+  "fonts.badUrl": "https 링크와, 그 링크가 정의하는 글꼴 이름을 적어 주세요.",
+  "fonts.tooLarge": "글꼴 파일이 30MB를 넘어요."
 }

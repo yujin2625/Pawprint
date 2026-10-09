@@ -350,5 +350,17 @@
   "editor.savedToFile": "Saved to the file.",
   "projects.fileChanged": "\"{name}\" changed outside Pawprint since it was last opened or saved here. Open the file as it is now, or keep the version in Pawprint?",
   "projects.useFile": "Use the file",
-  "projects.keepApp": "Keep Pawprint's"
+  "projects.keepApp": "Keep Pawprint's",
+  "fonts.title": "Fonts",
+  "fonts.help": "Order for {language}: each character uses the first font that has it, then Silver, then system fonts.",
+  "fonts.sample": "Aa 가나 123",
+  "fonts.builtIn": "built in",
+  "fonts.up": "Move up",
+  "fonts.down": "Move down",
+  "fonts.addFile": "Add font files (.ttf, .otf, .woff2)…",
+  "fonts.url": "Web font link",
+  "fonts.family": "Font family name",
+  "fonts.addUrl": "Add link",
+  "fonts.badUrl": "Give an https link and the font family name it defines.",
+  "fonts.tooLarge": "That font file is over 30 MB."
 }

@@ -2,6 +2,7 @@
   import { languages, locale, setLanguage, t } from '../../i18n/i18n.svelte';
   import { showIntro } from '../tour.svelte';
   import ThemeSettings from '../theme/ThemeSettings.svelte';
+  import FontSettings from '../fonts/FontSettings.svelte';
 </script>
 
 <h1>{t('settings.title')}</h1>
@@ -20,6 +21,11 @@
   <section class="panel box" aria-labelledby="set-theme">
     <h2 id="set-theme">{t('theme.title')}</h2>
     <ThemeSettings />
+  </section>
+
+  <section class="panel box" aria-labelledby="set-fonts">
+    <h2 id="set-fonts">{t('fonts.title')}</h2>
+    <FontSettings />
   </section>
 
   <section class="panel box" aria-labelledby="set-help">
