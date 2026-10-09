@@ -42,6 +42,11 @@ import java.nio.file.Path;
  */
 public final class SelfTest {
     private static final boolean ENABLED = Boolean.getBoolean("pawprint.selftest");
+
+    /** True only when the game was started with {@code -Dpawprint.selftest=true}. */
+    public static boolean enabled() {
+        return ENABLED;
+    }
     private static boolean done;
 
     private static final String SAMPLE = """
