@@ -29,6 +29,14 @@ npm run tauri build   # installer in src-tauri/target/release/bundle/nsis/
   vanilla packs.
 - `public/_local/` (ignored by git) is for local test files; builds leave it out.
 
+## Publishing
+
+- Web: every push to `main` that changes `web/` is tested, built and published to GitHub Pages
+  (`.github/workflows/web.yml`): https://yujin2625.github.io/Pawprint/
+- Desktop: set the same version in `src-tauri/tauri.conf.json` and `package.json`, then push a tag `app-v<version>`
+  (for example `app-v0.1.0`). `.github/workflows/desktop.yml` builds Windows, macOS and Linux installers into a
+  draft release; check it and publish it on GitHub.
+
 ## Notes
 
 - `src/core/` has no browser or Svelte dependencies and is tested in Node.
