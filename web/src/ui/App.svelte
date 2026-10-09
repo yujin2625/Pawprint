@@ -5,6 +5,7 @@
   import DownloadPage from './pages/DownloadPage.svelte';
   import SettingsPage from './pages/SettingsPage.svelte';
   import CreditsPage from './pages/CreditsPage.svelte';
+  import ReceivePage from './pages/ReceivePage.svelte';
   import Intro from './Intro.svelte';
   import PixelIcon from './editor/PixelIcon.svelte';
   import { intro } from './tour.svelte';
@@ -33,7 +34,7 @@
   });
 
   const lightBars = $derived((void themes.version, isLight(colorsOf(themes.current).chrome)));
-  const ROUTES = ['packs', 'download', 'settings', 'credits'] as const;
+  const ROUTES = ['packs', 'download', 'settings', 'credits', 'receive'] as const;
   const page = $derived(hash.startsWith('#/editor/') ? 'editor' : (ROUTES.find((r) => hash.startsWith('#/' + r)) ?? 'projects'));
   const projectId = $derived(page === 'editor' ? decodeURIComponent(hash.slice('#/editor/'.length)) : '');
 </script>
@@ -67,6 +68,8 @@
       <SettingsPage />
     {:else if page === 'credits'}
       <CreditsPage />
+    {:else if page === 'receive'}
+      {#key hash}<ReceivePage query={hash.split('?')[1] ?? ''} />{/key}
     {:else if page === 'editor'}
       {#key projectId}<EditorPage {projectId} />{/key}
     {:else}

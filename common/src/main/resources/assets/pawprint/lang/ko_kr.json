@@ -247,5 +247,10 @@
   "pawprint.edit.drop_hint": ".pawprint 파일을 여기로 끌어다 놓으면 초안으로 편집할 수 있어요",
   "pawprint.edit.imported": "%s을(를) 초안으로 불러옴 (블럭 %s개)",
   "pawprint.edit.import_failed": "%s을(를) 불러오지 못함: %s",
-  "pawprint.edit.import_need_empty": "먼저 초안을 비운 다음 파일을 다시 끌어다 놓으세요."
+  "pawprint.edit.import_need_empty": "먼저 초안을 비운 다음 파일을 다시 끌어다 놓으세요.",
+  "pawprint.library.open_web": "웹 편집기에서 열기",
+  "pawprint.library.open_web_tooltip": "브라우저에서 Pawprint 웹 편집기로 이 청사진을 엽니다. 거기서 고친 뒤 \"게임으로 보내기\"를 누르면 다시 들어와요.",
+  "pawprint.library.open_web_off": "웹 연결이 꺼져 있거나(config/pawprint.json의 enableWebLink) 포트를 쓸 수 없어요.",
+  "pawprint.library.open_web_done": "브라우저에서 열었어요.",
+  "pawprint.web.received": "웹 편집기에서 \"%s\"을(를) 받았어요 (라이브러리 \"web\" 그룹)."
 }

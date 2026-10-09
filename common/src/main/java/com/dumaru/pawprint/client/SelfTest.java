@@ -130,6 +130,11 @@ public final class SelfTest {
             }
             Pawprint.LOG.info("SELFTEST thumbnail: {}", image != null ? file.toAbsolutePath() : "none");
             formatRoundTrips(blueprint);
+            // The web link: the editor test fetches this token and sends blueprints back (see web/README.md).
+            Path shareFile = Pawprint.dataDir().resolve("selftest-share" + com.dumaru.pawprint.format.BlueprintIO.EXTENSION);
+            com.dumaru.pawprint.format.BlueprintIO.write(blueprint, shareFile);
+            Pawprint.LOG.info("SELFTEST web link: port {}, token {}", com.dumaru.pawprint.client.web.WebLink.port(),
+                    com.dumaru.pawprint.client.web.WebLink.share(shareFile, "Selftest share"));
             // Loads every mixin target now, so injection errors show up without joining a world.
             org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().audit();
             Pawprint.LOG.info("SELFTEST mixin audit finished");

@@ -16,6 +16,7 @@ import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.format.text.TextBlueprintReader;
+import com.dumaru.pawprint.client.web.WebLink;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.dumaru.pawprint.library.LibraryState;
 import net.minecraft.ChatFormatting;
@@ -75,6 +76,7 @@ public class LibraryScreen extends Screen {
     private Button placeAtOrigin;
     private Button favorite;
     private Button manage;
+    private Button openWeb;
     private Button materials;
     private Button removePlacement;
     private Button captureSelection;
@@ -138,6 +140,7 @@ public class LibraryScreen extends Screen {
                 detailX + starWidth + GAP, buttonY + 44, third));
         manage = addRenderableWidget(button("pawprint.library.manage", this::openManage,
                 detailX + starWidth + GAP * 2 + third, buttonY + 44, third));
+        openWeb = addRenderableWidget(button("pawprint.library.open_web", this::openInWeb, detailX, buttonY + 66, DETAIL_WIDTH));
 
         // Bottom bar: global actions in two rows of five.
         int buttonWidth = Math.min(104, (width - MARGIN * 2 - GAP * 4) / 5);
@@ -222,6 +225,9 @@ public class LibraryScreen extends Screen {
         favorite.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("pawprint.library.favorite_tooltip")));
         materials.active = selected != null;
         manage.active = selected != null;
+        openWeb.active = selected != null && WebLink.port() >= 0;
+        openWeb.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable(
+                WebLink.port() >= 0 ? "pawprint.library.open_web_tooltip" : "pawprint.library.open_web_off")));
         removePlacement.active = PlacementManager.active() != null;
         captureSelection.active = Selection.box() != null;
     }
@@ -326,6 +332,30 @@ public class LibraryScreen extends Screen {
         if (selected != null) {
             LibraryState.toggleFavorite(selected.relativePath());
             applyFilter();
+        }
+    }
+
+    /** Opens the selected blueprint in the web editor, which fetches it from this game over the local web link. */
+    private void openInWeb() {
+        BlueprintLibrary.Entry selected = browser.selected();
+        if (selected == null) {
+            return;
+        }
+        try {
+            Path file = selected.file();
+            if (BlueprintLibrary.isTextFile(file)) {
+                // The editor reads .pawprint files: convert text blueprints first.
+                Path cache = com.dumaru.pawprint.Pawprint.dataDir().resolve("cache").resolve("web");
+                java.nio.file.Files.createDirectories(cache);
+                Path converted = cache.resolve("open" + com.dumaru.pawprint.format.BlueprintIO.EXTENSION);
+                com.dumaru.pawprint.format.BlueprintIO.write(BlueprintLibrary.read(file), converted);
+                file = converted;
+            }
+            if (WebLink.openInWeb(file, selected.meta().name)) {
+                setStatus(Component.translatable("pawprint.library.open_web_done"), SUCCESS_COLOR);
+            }
+        } catch (IOException e) {
+            setStatus(Component.translatable("pawprint.library.action_failed", e.getMessage()), ERROR_COLOR);
         }
     }
 

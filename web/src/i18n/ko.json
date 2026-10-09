@@ -362,5 +362,14 @@
   "fonts.family": "글꼴 이름(font-family)",
   "fonts.addUrl": "링크 추가",
   "fonts.badUrl": "https 링크와, 그 링크가 정의하는 글꼴 이름을 적어 주세요.",
-  "fonts.tooLarge": "글꼴 파일이 30MB를 넘어요."
+  "fonts.tooLarge": "글꼴 파일이 30MB를 넘어요.",
+  "editor.sendGame": "게임으로 보내기",
+  "editor.sendGameHelp": "이 컴퓨터에서 실행 중인 게임의 Pawprint 라이브러리(\"web\" 그룹)에 이 청사진을 넣어요.",
+  "editor.noGame": "게임을 찾지 못했어요. 이 컴퓨터에서 Pawprint 모드를 넣은 마인크래프트를 켜고 다시 해 보세요.",
+  "editor.sentToGame": "게임으로 보냈어요. 라이브러리의 \"web\" 그룹에 있어요.",
+  "editor.sendFailed": "게임이 청사진을 받지 못했어요.",
+  "receive.title": "게임에서 열기",
+  "receive.loading": "게임에서 청사진을 받는 중…",
+  "receive.expired": "링크가 만료됐어요(10분). 게임에서 \"웹 편집기에서 열기\"를 다시 눌러 주세요.",
+  "receive.failed": "게임에 연결하지 못했어요. 이 컴퓨터에서 Pawprint 모드를 넣은 게임이 켜져 있어야 해요."
 }

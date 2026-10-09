@@ -42,6 +42,16 @@ public final class PawprintConfig {
     /** Surface mode copies this many blocks below the surface. */
     public int snapshotSurfaceDepth = 4;
 
+    /**
+     * Lets the Pawprint web editor and desktop app on this computer talk to the game: open a blueprint on the web,
+     * send one back into the library. Listens on 127.0.0.1 only and answers only the Pawprint editor pages.
+     */
+    public boolean enableWebLink = true;
+    /** First port tried for the web link; the next four are tried if it is taken. The editor looks there too. */
+    public int webLinkPort = 25599;
+    /** Where "Open in web editor" sends the browser. */
+    public String webEditorUrl = "https://yujin2625.github.io/Pawprint/";
+
     /** Block search matches names in all of these languages, whatever the game language is. */
     public List<String> searchLanguages = new ArrayList<>(List.of("en_us", "ko_kr"));
 
