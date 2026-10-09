@@ -55,7 +55,7 @@ public abstract class MinecraftMixin {
         }
     }
 
-    @Inject(method = "pickBlock", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "pickBlockOrEntity", at = @At("HEAD"), cancellable = true)
     private void pawprint$pickBlock(CallbackInfo ci) {
         if (AdjustMode.isActive()) {
             AdjustMode.mirror();

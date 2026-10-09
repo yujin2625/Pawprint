@@ -9,7 +9,7 @@ import com.dumaru.pawprint.shape.Shape;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
@@ -25,9 +25,9 @@ public final class EditHud {
     private EditHud() {
     }
 
-    public static void render(GuiGraphics graphics) {
+    public static void render(GuiGraphicsExtractor graphics) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.options.hideGui || minecraft.player == null) {
+        if (minecraft.gameRenderer.gameRenderState().guiRenderState.isHudHidden || minecraft.player == null) {
             return;
         }
         List<Component> lines = new ArrayList<>();
@@ -75,11 +75,11 @@ public final class EditHud {
         draw(graphics, minecraft, lines);
     }
 
-    private static void draw(GuiGraphics graphics, Minecraft minecraft, List<Component> lines) {
+    private static void draw(GuiGraphicsExtractor graphics, Minecraft minecraft, List<Component> lines) {
         Font font = minecraft.font;
         int y = 4;
         for (Component line : lines) {
-            graphics.drawString(font, line, 4, y, 0xFFFFFF, true);
+            graphics.text(font, line, 4, y, 0xFFFFFFFF, true);
             y += font.lineHeight + 1;
         }
     }

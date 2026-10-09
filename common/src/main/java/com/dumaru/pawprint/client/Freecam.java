@@ -2,7 +2,8 @@ package com.dumaru.pawprint.client;
 
 import com.dumaru.pawprint.Pawprint;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.Input;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -41,7 +42,7 @@ public final class Freecam {
         if (minecraft.player == null) {
             return;
         }
-        Vec3 eye = minecraft.gameRenderer.getMainCamera().getPosition();
+        Vec3 eye = minecraft.gameRenderer.mainCamera().position();
         x = prevX = eye.x;
         y = prevY = eye.y;
         z = prevZ = eye.z;
@@ -72,20 +73,19 @@ public final class Freecam {
         y += ((up ? 1 : 0) - (down ? 1 : 0)) * speed;
     }
 
-    /** Called after the keyboard input is read: keeps the movement for the camera and stops the player. */
-    public static void captureInput(Input input) {
+    /**
+     * Called after the keyboard input is read: keeps the movement for the camera. Returns true when the player should
+     * stand still (the caller then clears the input).
+     */
+    public static boolean captureInput(Input keys, Vec2 move) {
         if (!active) {
-            return;
+            return false;
         }
-        forward = input.forwardImpulse;
-        strafe = input.leftImpulse;
-        up = input.jumping;
-        down = input.shiftKeyDown;
-        input.forwardImpulse = 0;
-        input.leftImpulse = 0;
-        input.up = input.down = input.left = input.right = false;
-        input.jumping = false;
-        input.shiftKeyDown = false;
+        forward = move.y;
+        strafe = move.x;
+        up = keys.jump();
+        down = keys.shift();
+        return true;
     }
 
     /** Mouse look, with the same sensitivity factor as {@code Entity.turn}. */

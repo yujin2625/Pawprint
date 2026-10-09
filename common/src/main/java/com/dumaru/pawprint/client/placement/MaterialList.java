@@ -159,7 +159,7 @@ public final class MaterialList {
             Component status = missing == 0
                     ? Component.translatable("pawprint.materials.text.enough", line.have())
                     : Component.translatable("pawprint.materials.text.missing", line.have(), missing);
-            text.append(Component.translatable("pawprint.materials.text.line", line.item().getDescription(), id(line),
+            text.append(Component.translatable("pawprint.materials.text.line", line.item().getName(new net.minecraft.world.item.ItemStack(line.item())), id(line),
                     amount(count, line.item().getDefaultMaxStackSize()), status).getString()).append('\n');
         }
         if (needed.isEmpty()) {

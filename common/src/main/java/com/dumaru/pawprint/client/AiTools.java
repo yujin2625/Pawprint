@@ -4,7 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.palette.BlockSearchIndex;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -48,7 +48,7 @@ public final class AiTools {
     /** The instructions with this game's version and installed block mods filled in. */
     public static String prompt() {
         TreeSet<String> mods = new TreeSet<>();
-        for (ResourceLocation id : BuiltInRegistries.BLOCK.keySet()) {
+        for (Identifier id : BuiltInRegistries.BLOCK.keySet()) {
             if (!id.getNamespace().equals("minecraft")) {
                 mods.add(id.getNamespace());
             }
@@ -57,7 +57,7 @@ public final class AiTools {
                 ? ""
                 : " and these mods (namespaces): " + String.join(", ", mods)
                 + ". If unsure whether a modded block ID exists, prefer vanilla blocks";
-        return PROMPT.formatted(SharedConstants.getCurrentVersion().getName(), modText);
+        return PROMPT.formatted(SharedConstants.getCurrentVersion().name(), modText);
     }
 
     /**

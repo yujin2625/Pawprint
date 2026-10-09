@@ -18,24 +18,24 @@ final class StructureFormat {
     }
 
     static Blueprint read(CompoundTag root, String name) throws IOException {
-        int dataVersion = root.getInt("DataVersion");
-        ListTag paletteTag = root.contains("palettes", Tag.TAG_LIST)
-                ? root.getList("palettes", Tag.TAG_LIST).getList(0)
-                : root.getList("palette", Tag.TAG_COMPOUND);
+        int dataVersion = root.getIntOr("DataVersion", 0);
+        ListTag paletteTag = root.contains("palettes")
+                ? root.getListOrEmpty("palettes").getListOrEmpty(0)
+                : root.getListOrEmpty("palette");
         String[] palette = new String[paletteTag.size()];
         for (int i = 0; i < palette.length; i++) {
-            palette[i] = StateTags.toString(paletteTag.getCompound(i), dataVersion);
+            palette[i] = StateTags.toString(paletteTag.getCompoundOrEmpty(i), dataVersion);
         }
         Formats.Collector collector = new Formats.Collector();
-        ListTag blocks = root.getList("blocks", Tag.TAG_COMPOUND);
+        ListTag blocks = root.getListOrEmpty("blocks");
         for (int i = 0; i < blocks.size(); i++) {
-            CompoundTag block = blocks.getCompound(i);
-            ListTag pos = block.getList("pos", Tag.TAG_INT);
-            int state = block.getInt("state");
+            CompoundTag block = blocks.getCompoundOrEmpty(i);
+            ListTag pos = block.getListOrEmpty("pos");
+            int state = block.getIntOr("state", 0);
             if (pos.size() != 3 || state < 0 || state >= palette.length || StateTags.isAirLike(palette[state])) {
                 continue;
             }
-            collector.put(pos.getInt(0), pos.getInt(1), pos.getInt(2), palette[state]);
+            collector.put(pos.getIntOr(0, 0), pos.getIntOr(1, 0), pos.getIntOr(2, 0), palette[state]);
         }
         return collector.build(name, "", "");
     }

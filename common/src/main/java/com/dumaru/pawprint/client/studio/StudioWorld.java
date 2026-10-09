@@ -5,7 +5,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -31,29 +31,33 @@ public final class StudioWorld {
                 && CONTEXT.equals(com.dumaru.pawprint.client.ClientContext.server());
     }
 
+    /** A still world for building: no time, weather, mobs, fire or random ticks. Call on the server thread. */
+    public static void applyRules(net.minecraft.server.MinecraftServer server) {
+        GameRules rules = server.getGameRules();
+        rules.set(GameRules.RANDOM_TICK_SPEED, 0, server);
+        rules.set(GameRules.ADVANCE_TIME, false, server);
+        rules.set(GameRules.ADVANCE_WEATHER, false, server);
+        rules.set(GameRules.SPAWN_MOBS, false, server);
+        rules.set(GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0, server);
+        rules.set(GameRules.MOB_GRIEFING, false, server);
+        rules.set(GameRules.SPAWN_PATROLS, false, server);
+        rules.set(GameRules.SPAWN_WANDERING_TRADERS, false, server);
+        rules.set(GameRules.SPAWN_WARDENS, false, server);
+    }
+
     /** Opens the studio world, creating it first if needed. The caller must have left any world already. */
     public static void open(Minecraft minecraft) {
         Screen fallback = new TitleScreen();
         if (minecraft.getLevelSource().levelExists(FOLDER)) {
-            minecraft.createWorldOpenFlows().openWorld(FOLDER, () -> minecraft.setScreen(fallback));
+            minecraft.createWorldOpenFlows().openWorld(FOLDER, () -> minecraft.gui.setScreen(fallback));
             return;
         }
-        GameRules rules = new GameRules();
-        rules.getRule(GameRules.RULE_RANDOMTICKING).set(0, null);
-        rules.getRule(GameRules.RULE_DAYLIGHT).set(false, null);
-        rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, null);
-        rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, null);
-        rules.getRule(GameRules.RULE_DOFIRETICK).set(false, null);
-        rules.getRule(GameRules.RULE_MOBGRIEFING).set(false, null);
-        rules.getRule(GameRules.RULE_DO_PATROL_SPAWNING).set(false, null);
-        rules.getRule(GameRules.RULE_DO_TRADER_SPAWNING).set(false, null);
-        rules.getRule(GameRules.RULE_DO_WARDEN_SPAWNING).set(false, null);
-        LevelSettings settings = new LevelSettings("Pawprint Studio", GameType.CREATIVE, false, Difficulty.PEACEFUL,
-                true, rules, WorldDataConfiguration.DEFAULT);
+        LevelSettings settings = new LevelSettings("Pawprint Studio", GameType.CREATIVE,
+                new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT);
         minecraft.createWorldOpenFlows().createFreshLevel(FOLDER, settings, new WorldOptions(0L, false, false),
                 registries -> {
-                    var voidSettings = registries.registryOrThrow(Registries.FLAT_LEVEL_GENERATOR_PRESET)
-                            .getHolderOrThrow(FlatLevelGeneratorPresets.THE_VOID).value().settings();
+                    var voidSettings = registries.lookupOrThrow(Registries.FLAT_LEVEL_GENERATOR_PRESET)
+                            .getOrThrow(FlatLevelGeneratorPresets.THE_VOID).value().settings();
                     return WorldPresets.createNormalWorldDimensions(registries)
                             .replaceOverworldGenerator(registries, new FlatLevelSource(voidSettings));
                 }, fallback);

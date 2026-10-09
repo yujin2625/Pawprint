@@ -19,7 +19,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.function.LongConsumer;
 
@@ -115,17 +114,16 @@ public final class EditMode {
         if (!minecraft.options.keyUse.isDown()) {
             useHandled = false;
         }
-        if (minecraft.screen == null) {
+        if (minecraft.gui.screen() == null) {
             handleUndoRedo(minecraft);
         }
     }
 
     private static void handleUndoRedo(Minecraft minecraft) {
-        long window = minecraft.getWindow().getWindow();
-        boolean ctrl = Screen.hasControlDown();
-        boolean undoDown = ctrl && !Screen.hasShiftDown() && InputConstants.isKeyDown(window, GLFW.GLFW_KEY_Z);
-        boolean redoDown = ctrl && (InputConstants.isKeyDown(window, GLFW.GLFW_KEY_Y)
-                || (Screen.hasShiftDown() && InputConstants.isKeyDown(window, GLFW.GLFW_KEY_Z)));
+        boolean ctrl = net.minecraft.client.Minecraft.getInstance().hasControlDown();
+        boolean undoDown = ctrl && !net.minecraft.client.Minecraft.getInstance().hasShiftDown() && InputConstants.isKeyDown(InputConstants.KEY_Z);
+        boolean redoDown = ctrl && (InputConstants.isKeyDown(InputConstants.KEY_Y)
+                || (net.minecraft.client.Minecraft.getInstance().hasShiftDown() && InputConstants.isKeyDown(InputConstants.KEY_Z)));
         if (undoDown && !undoKeyDown) {
             undo(minecraft);
         }

@@ -45,7 +45,7 @@ public record EditTarget(@Nullable BlockPos hovered, boolean ghost, Direction fa
             return new EditTarget(hit, false, real.getDirection(), hit.relative(real.getDirection()), real.getLocation());
         }
         Vec3 point = eye.add(look.scale(AIR_DISTANCE));
-        Direction toward = Direction.getNearest(-look.x, -look.y, -look.z);
+        Direction toward = Direction.getApproximateNearest(-look.x, -look.y, -look.z);
         return new EditTarget(null, false, toward, BlockPos.containing(point), point);
     }
 

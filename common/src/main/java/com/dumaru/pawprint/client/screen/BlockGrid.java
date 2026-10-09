@@ -1,9 +1,11 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.client.palette.BlockSearchIndex;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
@@ -68,7 +70,7 @@ final class BlockGrid extends AbstractWidget {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         int columns = columns();
         int first = scrollRow * columns;
         int last = Math.min(results.size(), first + visibleRows() * columns);
@@ -82,16 +84,16 @@ final class BlockGrid extends AbstractWidget {
             if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
                 graphics.fill(x, y, x + CELL, y + CELL, 0x40FFFFFF);
             }
-            graphics.renderItem(entry.icon(), x + 2, y + 2);
+            graphics.item(entry.icon(), x + 2, y + 2);
         }
         if (results.isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.screen.edit.no_results"),
-                    getX() + width / 2, getY() + 20, 0xA0A0A0);
+            graphics.centeredText(font, Component.translatable("pawprint.screen.edit.no_results"),
+                    getX() + width / 2, getY() + 20, 0xFFA0A0A0);
         }
     }
 
     /** Names in all search languages and the ID of the hovered block. */
-    void renderTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+    void renderTooltip(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         BlockSearchIndex.Entry hovered = entryAt(mouseX, mouseY);
         if (hovered == null) {
             return;
@@ -101,11 +103,14 @@ final class BlockGrid extends AbstractWidget {
             tooltip.add(Component.literal(name));
         }
         tooltip.add(Component.literal(hovered.id().toString()).withStyle(ChatFormatting.DARK_GRAY));
-        graphics.renderComponentTooltip(font, tooltip, mouseX, mouseY);
+        graphics.setComponentTooltipForNextFrame(font, tooltip, mouseX, mouseY);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         BlockSearchIndex.Entry entry = entryAt(mouseX, mouseY);
         if (entry != null && button == 0) {
             onPick.accept(entry.block());

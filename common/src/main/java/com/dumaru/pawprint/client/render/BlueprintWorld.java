@@ -3,8 +3,8 @@ package com.dumaru.pawprint.client.render;
 import com.dumaru.pawprint.format.Blueprint;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.CardinalLighting;
+import net.minecraft.client.renderer.block.BlockAndTintGetter;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
@@ -48,16 +48,8 @@ final class BlueprintWorld implements BlockAndTintGetter {
 
     /** Same face shading as the overworld. */
     @Override
-    public float getShade(Direction direction, boolean shade) {
-        if (!shade) {
-            return 1f;
-        }
-        return switch (direction) {
-            case DOWN -> 0.5f;
-            case UP -> 1f;
-            case NORTH, SOUTH -> 0.8f;
-            case WEST, EAST -> 0.6f;
-        };
+    public CardinalLighting cardinalLighting() {
+        return CardinalLighting.DEFAULT;
     }
 
     /** Full daylight everywhere; with this override the light engine is never consulted. */
@@ -94,7 +86,7 @@ final class BlueprintWorld implements BlockAndTintGetter {
     }
 
     @Override
-    public int getMinBuildHeight() {
+    public int getMinY() {
         return -2048;
     }
 }

@@ -13,8 +13,8 @@ import com.dumaru.pawprint.format.convert.Formats;
 import com.dumaru.pawprint.shape.Shape;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.util.Util;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -96,7 +96,7 @@ public class EditMenuScreen extends Screen {
         int row = height - 28;
         int left = (width - (buttonWidth * 5 + 16)) / 2;
         saveDraft = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.save_draft"),
-                b -> minecraft.setScreen(new SaveDraftScreen(this))).bounds(left, row, buttonWidth, 20).build());
+                b -> minecraft.gui.setScreen(new SaveDraftScreen(this))).bounds(left, row, buttonWidth, 20).build());
         editPlacement = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.edit_placement"),
                 b -> editActivePlacement()).bounds(left + buttonWidth + 4, row, buttonWidth, 20).build());
         clearDraft = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.edit.clear_draft"),
@@ -159,11 +159,11 @@ public class EditMenuScreen extends Screen {
         try {
             Path file = Pawprint.dataDir().resolve("exports").resolve(ClientContext.fileSafe(name) + BlueprintIO.EXTENSION);
             BlueprintIO.write(blueprint, file);
-            Util.getPlatform().openPath(file.getParent());
-            setStatus(Component.translatable("pawprint.edit.exported", file.getFileName().toString()), 0x80FF80);
+            com.mojang.blaze3d.Blaze3D.openPath(file.getParent());
+            setStatus(Component.translatable("pawprint.edit.exported", file.getFileName().toString()), 0xFF80FF80);
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not export the draft", e);
-            setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), 0xFF5555);
+            setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), 0xFFFF5555);
         }
     }
 
@@ -178,7 +178,7 @@ public class EditMenuScreen extends Screen {
         }
         Path file = files.get(0);
         if (!Draft.isEmpty()) {
-            setStatus(Component.translatable("pawprint.edit.import_need_empty"), 0xFF5555);
+            setStatus(Component.translatable("pawprint.edit.import_need_empty"), 0xFFFF5555);
             return;
         }
         try {
@@ -199,7 +199,7 @@ public class EditMenuScreen extends Screen {
             onClose();
         } catch (IOException | RuntimeException e) {
             Pawprint.LOG.warn("Could not load {} as the draft", file, e);
-            setStatus(Component.translatable("pawprint.edit.import_failed", file.getFileName().toString(), String.valueOf(e.getMessage())), 0xFF5555);
+            setStatus(Component.translatable("pawprint.edit.import_failed", file.getFileName().toString(), String.valueOf(e.getMessage())), 0xFFFF5555);
         }
     }
 
@@ -209,12 +209,12 @@ public class EditMenuScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 10, 0xFFFFFF);
-        graphics.drawCenteredString(font, status != null ? status : Component.translatable("pawprint.edit.drop_hint"),
-                width / 2, height - 40, status != null ? statusColor : 0x808080);
-        graphics.drawString(font, Component.translatable("pawprint.screen.edit.tools"), MARGIN, 20, 0xA0A0A0);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, 10, 0xFFFFFFFF);
+        graphics.centeredText(font, status != null ? status : Component.translatable("pawprint.edit.drop_hint"),
+                width / 2, height - 40, status != null ? statusColor : 0xFF808080);
+        graphics.text(font, Component.translatable("pawprint.screen.edit.tools"), MARGIN, 20, 0xFFA0A0A0);
         grid.renderTooltip(graphics, mouseX, mouseY);
     }
 

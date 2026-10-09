@@ -1,19 +1,21 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.client.render.ThumbnailCache;
 import com.dumaru.pawprint.client.render.ThumbnailRenderer;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.dumaru.pawprint.library.LibraryState;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
@@ -120,7 +122,7 @@ final class BlueprintBrowser extends AbstractWidget {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(getX(), getY(), getX() + width, getY() + height, 0x60000000);
         graphics.enableScissor(getX(), getY(), getX() + width, getY() + height);
         int hovered = indexAt(mouseX, mouseY);
@@ -153,53 +155,54 @@ final class BlueprintBrowser extends AbstractWidget {
         }
     }
 
-    private void renderRow(GuiGraphics graphics, BlueprintLibrary.Entry entry, int x, int y, int rowWidth) {
+    private void renderRow(GuiGraphicsExtractor graphics, BlueprintLibrary.Entry entry, int x, int y, int rowWidth) {
         BlueprintMeta meta = entry.meta();
         renderThumbnail(graphics, entry, x + 2, y + 2, THUMB_LIST);
         int textX = x + THUMB_LIST + 8;
         int textWidth = rowWidth - THUMB_LIST - 12;
         String star = LibraryState.isFavorite(entry.relativePath()) ? "★ " : "";
-        graphics.drawString(font, font.plainSubstrByWidth(star + meta.name, textWidth), textX, y + 6, 0xFFFFFF);
+        graphics.text(font, font.plainSubstrByWidth(star + meta.name, textWidth), textX, y + 6, 0xFFFFFFFF);
         String details = Component.translatable("pawprint.screen.library.details",
                 meta.size[0], meta.size[1], meta.size[2], meta.blockCount).getString();
         if (!entry.group().isEmpty()) {
             details += " · " + entry.group();
         }
-        graphics.drawString(font, font.plainSubstrByWidth(details, textWidth), textX, y + 18, 0xA0A0A0);
+        graphics.text(font, font.plainSubstrByWidth(details, textWidth), textX, y + 18, 0xFFA0A0A0);
     }
 
-    private void renderTile(GuiGraphics graphics, BlueprintLibrary.Entry entry, int x, int y) {
+    private void renderTile(GuiGraphicsExtractor graphics, BlueprintLibrary.Entry entry, int x, int y) {
         renderThumbnail(graphics, entry, x + (TILE_WIDTH - THUMB_GRID) / 2, y + 3, THUMB_GRID);
         String star = LibraryState.isFavorite(entry.relativePath()) ? "★" : "";
         String name = font.plainSubstrByWidth(star + entry.meta().name, TILE_WIDTH - 4);
-        graphics.drawCenteredString(font, name, x + TILE_WIDTH / 2, y + THUMB_GRID + 7, 0xFFFFFF);
+        graphics.centeredText(font, name, x + TILE_WIDTH / 2, y + THUMB_GRID + 7, 0xFFFFFFFF);
     }
 
-    static void renderThumbnail(GuiGraphics graphics, BlueprintLibrary.Entry entry, int x, int y, int size) {
+    static void renderThumbnail(GuiGraphicsExtractor graphics, BlueprintLibrary.Entry entry, int x, int y, int size) {
         graphics.fill(x, y, x + size, y + size, 0x40000000);
-        ResourceLocation texture = ThumbnailCache.get(entry);
+        Identifier texture = ThumbnailCache.get(entry);
         if (texture == null) {
             return;
         }
-        RenderSystem.enableBlend();
-        graphics.blit(texture, x, y, size, size, 0f, 0f, ThumbnailRenderer.SIZE, ThumbnailRenderer.SIZE,
-                ThumbnailRenderer.SIZE, ThumbnailRenderer.SIZE);
-        RenderSystem.disableBlend();
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, texture, x, y, 0f, 0f, size, size,
+                ThumbnailRenderer.SIZE, ThumbnailRenderer.SIZE, ThumbnailRenderer.SIZE, ThumbnailRenderer.SIZE);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         int index = indexAt(mouseX, mouseY);
         if (index < 0 || button != 0) {
             return false;
         }
         BlueprintLibrary.Entry entry = entries.get(index);
         long now = Util.getMillis();
-        boolean doubleClick = entry == selected && now - lastClick < DOUBLE_CLICK_MS;
+        boolean twice = entry == selected && now - lastClick < DOUBLE_CLICK_MS;
         lastClick = now;
         selected = entry;
         onSelect.accept(entry);
-        if (doubleClick) {
+        if (twice) {
             onActivate.accept(entry);
         }
         return true;

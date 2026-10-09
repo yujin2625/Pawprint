@@ -1,11 +1,13 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.pack.PackExporter;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
@@ -38,7 +40,7 @@ public class PackExportScreen extends Screen {
     private @Nullable LanguageList list;
     private @Nullable Button export;
     private @Nullable Component status;
-    private int statusColor = 0xA0A0A0;
+    private int statusColor = 0xFFA0A0A0;
     private boolean working;
     private String nameValue;
 
@@ -74,8 +76,7 @@ public class PackExportScreen extends Screen {
 
         addRenderableWidget(CycleButton.booleanBuilder(
                         Component.translatable("pawprint.screen.pack.resource_packs.on"),
-                        Component.translatable("pawprint.screen.pack.resource_packs.off"))
-                .withInitialValue(resourcePacks)
+                        Component.translatable("pawprint.screen.pack.resource_packs.off"), resourcePacks)
                 .displayOnlyValue()
                 .create(left, height - 58, panel, 20, Component.empty(), (button, value) -> resourcePacks = value));
         export = addRenderableWidget(Button.builder(Component.translatable("pawprint.screen.pack.export"), b -> export())
@@ -117,7 +118,7 @@ public class PackExportScreen extends Screen {
         working = true;
         updateButtons();
         status = Component.translatable("pawprint.screen.pack.working");
-        statusColor = 0xFFFFA0;
+        statusColor = 0xFFFFFFA0;
         PackExporter.Options options = new PackExporter.Options(nameValue.strip(), List.copyOf(chosen), resourcePacks);
         PackExporter.export(minecraft, options).whenComplete((result, error) -> minecraft.execute(() -> {
             working = false;
@@ -125,32 +126,32 @@ public class PackExportScreen extends Screen {
                 Pawprint.LOG.warn("Block pack export failed", error);
                 Throwable cause = error.getCause() != null ? error.getCause() : error;
                 status = Component.translatable("pawprint.screen.pack.failed", String.valueOf(cause.getMessage()));
-                statusColor = 0xFF5555;
+                statusColor = 0xFFFF5555;
             } else {
                 status = Component.translatable("pawprint.screen.pack.done", result.file().getFileName().toString(),
                         result.blocks(), result.textures());
-                statusColor = 0x80FF80;
-                Util.getPlatform().openPath(result.file().getParent());
+                statusColor = 0xFF80FF80;
+                com.mojang.blaze3d.Blaze3D.openPath(result.file().getParent());
             }
             updateButtons();
         }));
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         int panel = Math.min(320, width - 20);
         int left = (width - panel) / 2;
-        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
-        graphics.drawString(font, Component.translatable("pawprint.screen.pack.name"), left, 30, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.screen.pack.languages", chosen.size()), left, 64, 0xA0A0A0);
+        graphics.centeredText(font, title, width / 2, 12, 0xFFFFFFFF);
+        graphics.text(font, Component.translatable("pawprint.screen.pack.name"), left, 30, 0xFFA0A0A0);
+        graphics.text(font, Component.translatable("pawprint.screen.pack.languages", chosen.size()), left, 64, 0xFFA0A0A0);
         Component line = status != null ? status : Component.translatable("pawprint.screen.pack.hint");
-        graphics.drawCenteredString(font, line, width / 2, height - 10 - font.lineHeight + 2, status != null ? statusColor : 0x808080);
+        graphics.centeredText(font, line, width / 2, height - 10 - font.lineHeight + 2, status != null ? statusColor : 0xFF808080);
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     /** Languages installed in the game, each a checkbox row. */
@@ -171,7 +172,7 @@ public class PackExportScreen extends Screen {
         }
 
         @Override
-        protected int getScrollbarPosition() {
+        protected int scrollBarX() {
             return getX() + width - 6;
         }
 
@@ -185,19 +186,25 @@ public class PackExportScreen extends Screen {
             }
 
             @Override
-            public void render(GuiGraphics graphics, int index, int top, int left, int rowWidth, int rowHeight,
-                               int mouseX, int mouseY, boolean hovering, float partialTick) {
+            public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovering, float partialTick) {
+                int top = getContentY();
+                int left = getContentX();
+                int rowWidth = getContentWidth();
+                int rowHeight = getContentHeight();
                 boolean on = chosen.contains(code);
                 graphics.fill(left + 2, top + 2, left + 11, top + 11, 0xFF000000);
-                graphics.renderOutline(left + 2, top + 2, 9, 9, hovering ? 0xFFFFFFFF : 0xFFA0A0A0);
+                graphics.outline(left + 2, top + 2, 9, 9, hovering ? 0xFFFFFFFF : 0xFFA0A0A0);
                 if (on) {
                     graphics.fill(left + 4, top + 4, left + 9, top + 9, 0xFFEF9F27);
                 }
-                graphics.drawString(font, label, left + 16, top + 3, on ? 0xFFFFFF : 0xC0C0C0);
+                graphics.text(font, label, left + 16, top + 3, on ? 0xFFFFFFFF : 0xFFC0C0C0);
             }
 
             @Override
-            public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+                double mouseX = event.x();
+                double mouseY = event.y();
+                int button = event.button();
                 if (!chosen.remove(code)) {
                     chosen.add(code);
                 }

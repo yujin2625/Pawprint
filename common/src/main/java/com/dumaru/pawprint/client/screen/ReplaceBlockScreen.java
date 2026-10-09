@@ -4,7 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.BlockReplace;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -50,7 +50,7 @@ final class ReplaceBlockScreen extends Screen {
 
     static void start(Screen back, BlueprintLibrary.Entry entry, Item from, BiConsumer<BlueprintLibrary.Entry, Boolean> done) {
         Minecraft minecraft = Minecraft.getInstance();
-        minecraft.setScreen(new BlockPickerScreen(back, Component.translatable("pawprint.replace.pick", from.getDescription()),
+        minecraft.gui.setScreen(new BlockPickerScreen(back, Component.translatable("pawprint.replace.pick", from.getName(new net.minecraft.world.item.ItemStack(from))),
                 block -> {
                     int count;
                     try {
@@ -58,7 +58,7 @@ final class ReplaceBlockScreen extends Screen {
                     } catch (IOException e) {
                         count = 0;
                     }
-                    minecraft.setScreen(new ReplaceBlockScreen(back, entry, from, block, count, done));
+                    minecraft.gui.setScreen(new ReplaceBlockScreen(back, entry, from, block, count, done));
                 }));
     }
 
@@ -78,7 +78,7 @@ final class ReplaceBlockScreen extends Screen {
         try {
             BlueprintLibrary.Entry changed = BlueprintLibrary.replaceBlocks(entry, matching(from), to, asCopy,
                     Component.translatable("pawprint.library.copy_suffix").getString());
-            minecraft.setScreen(back);
+            minecraft.gui.setScreen(back);
             done.accept(changed, asCopy);
         } catch (IOException e) {
             Pawprint.LOG.warn("Replacing blocks in {} failed", entry.file(), e);
@@ -87,26 +87,26 @@ final class ReplaceBlockScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
-        Component summary = Component.translatable("pawprint.replace.summary", from.getDescription(), count,
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 60, 0xFFFFFFFF);
+        Component summary = Component.translatable("pawprint.replace.summary", from.getName(new net.minecraft.world.item.ItemStack(from)), count,
                 to.getName(), entry.meta().name);
         int y = height / 2 - 40;
         for (FormattedCharSequence line : font.split(summary, Math.min(width - 40, 320))) {
-            graphics.drawCenteredString(font, line, width / 2, y, 0xC0C0C0);
+            graphics.centeredText(font, line, width / 2, y, 0xFFC0C0C0);
             y += 10;
         }
         if (entry.isText()) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.replace.text_file"), width / 2, y + 2, 0x909090);
+            graphics.centeredText(font, Component.translatable("pawprint.replace.text_file"), width / 2, y + 2, 0xFF909090);
         }
         if (error != null) {
-            graphics.drawCenteredString(font, error, width / 2, height / 2 + 74, 0xFF5555);
+            graphics.centeredText(font, error, width / 2, height / 2 + 74, 0xFFFF5555);
         }
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(back);
+        minecraft.gui.setScreen(back);
     }
 }

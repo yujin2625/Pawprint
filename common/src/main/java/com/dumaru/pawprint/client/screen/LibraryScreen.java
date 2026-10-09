@@ -20,9 +20,9 @@ import com.dumaru.pawprint.client.web.WebLink;
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import com.dumaru.pawprint.library.LibraryState;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -57,9 +57,9 @@ public class LibraryScreen extends Screen {
     private static final int TOP = 32;
     private static final int BOTTOM = 66;
     private static final int DETAIL_THUMB = 96;
-    private static final int SUCCESS_COLOR = 0x55FF55;
-    private static final int WARNING_COLOR = 0xFFFF55;
-    private static final int ERROR_COLOR = 0xFF5555;
+    private static final int SUCCESS_COLOR = 0xFF55FF55;
+    private static final int WARNING_COLOR = 0xFFFFFF55;
+    private static final int ERROR_COLOR = 0xFFFF5555;
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     private static String lastSearch = "";
@@ -154,7 +154,7 @@ public class LibraryScreen extends Screen {
                 rowLeft + (buttonWidth + GAP) * 2, row1, buttonWidth));
         addRenderableWidget(button("pawprint.screen.library.export_blocks", this::exportBlockList,
                 rowLeft + (buttonWidth + GAP) * 3, row1, buttonWidth));
-        addRenderableWidget(button("pawprint.screen.library.export_pack", () -> minecraft.setScreen(new PackExportScreen(this)),
+        addRenderableWidget(button("pawprint.screen.library.export_pack", () -> minecraft.gui.setScreen(new PackExportScreen(this)),
                 rowLeft + (buttonWidth + GAP) * 4, row1, buttonWidth));
         removePlacement = addRenderableWidget(button("pawprint.screen.library.remove_placement", this::removePlacement,
                 rowLeft, row2, buttonWidth));
@@ -263,7 +263,7 @@ public class LibraryScreen extends Screen {
     }
 
     private void pickGroup() {
-        minecraft.setScreen(new GroupPickerScreen(this, Component.translatable("pawprint.library.group.pick"), true,
+        minecraft.gui.setScreen(new GroupPickerScreen(this, Component.translatable("pawprint.library.group.pick"), true,
                 groupFilter(), group -> {
             if (!group.startsWith("*")) {
                 createGroup(group);
@@ -274,10 +274,10 @@ public class LibraryScreen extends Screen {
     }
 
     private void newGroup() {
-        minecraft.setScreen(new TextInputScreen(this, Component.translatable("pawprint.library.group.new"), "",
+        minecraft.gui.setScreen(new TextInputScreen(this, Component.translatable("pawprint.library.group.new"), "",
                 Component.translatable("pawprint.library.group.new_hint"), false, name -> {
             createGroup(name);
-            minecraft.setScreen(this);
+            minecraft.gui.setScreen(this);
         }));
     }
 
@@ -318,7 +318,7 @@ public class LibraryScreen extends Screen {
                 PlacementManager.setViewing(true); // Otherwise the new placement would be invisible.
             }
             LibraryState.markUsed(entry.relativePath());
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
             PawprintClient.notify(minecraft, Component.translatable("pawprint.placement.placed", entry.meta().name,
                     PawprintKeys.MENU.getTranslatedKeyMessage()));
         } catch (IOException e) {
@@ -365,7 +365,7 @@ public class LibraryScreen extends Screen {
             return;
         }
         try {
-            minecraft.setScreen(new MaterialsScreen(this, selected, BlueprintLibrary.load(selected.relativePath())));
+            minecraft.gui.setScreen(new MaterialsScreen(this, selected, BlueprintLibrary.load(selected.relativePath())));
         } catch (IOException e) {
             setStatus(Component.translatable("pawprint.screen.library.load_failed", e.getMessage()), ERROR_COLOR);
         }
@@ -380,7 +380,7 @@ public class LibraryScreen extends Screen {
     private void openManage() {
         BlueprintLibrary.Entry selected = browser.selected();
         if (selected != null) {
-            minecraft.setScreen(new ManageBlueprintScreen(this, selected));
+            minecraft.gui.setScreen(new ManageBlueprintScreen(this, selected));
         }
     }
 
@@ -400,14 +400,14 @@ public class LibraryScreen extends Screen {
     private void captureSelection() {
         BoundingBox box = Selection.box();
         if (box != null) {
-            minecraft.setScreen(new SaveBlueprintScreen(this, box));
+            minecraft.gui.setScreen(new SaveBlueprintScreen(this, box));
         }
     }
 
     private void openFolder() {
         try {
             Files.createDirectories(BlueprintLibrary.root());
-            Util.getPlatform().openPath(BlueprintLibrary.root());
+            com.mojang.blaze3d.Blaze3D.openPath(BlueprintLibrary.root());
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not open the blueprint folder", e);
         }
@@ -468,7 +468,7 @@ public class LibraryScreen extends Screen {
     private void exportBlockList() {
         try {
             Path file = AiTools.exportBlockList();
-            Util.getPlatform().openPath(file);
+            com.mojang.blaze3d.Blaze3D.openPath(file);
             setStatus(Component.translatable("pawprint.ai.blocks_exported", file.toString()), SUCCESS_COLOR);
         } catch (IOException e) {
             setStatus(Component.translatable("pawprint.capture.write_failed", e.getMessage()), ERROR_COLOR);
@@ -506,30 +506,30 @@ public class LibraryScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         ThumbnailCache.tick();
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawString(font, title, MARGIN, 2, 0xFFFFFF);
-        graphics.drawString(font, selectionInfo(), MARGIN + font.width(title) + 8, 2, 0xA0A0A0);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.text(font, title, MARGIN, 2, 0xFFFFFFFF);
+        graphics.text(font, selectionInfo(), MARGIN + font.width(title) + 8, 2, 0xFFA0A0A0);
         if (browser.isEmpty()) {
-            graphics.drawCenteredString(font, Component.translatable(all.isEmpty()
+            graphics.centeredText(font, Component.translatable(all.isEmpty()
                             ? "pawprint.screen.library.empty" : "pawprint.library.no_match"),
-                    browser.getX() + browser.getWidth() / 2, browser.getY() + 20, 0xA0A0A0);
+                    browser.getX() + browser.getWidth() / 2, browser.getY() + 20, 0xFFA0A0A0);
         }
         renderDetails(graphics);
         if (status != null) {
             List<FormattedCharSequence> lines = font.split(status, width - MARGIN * 2);
-            graphics.drawCenteredString(font, lines.get(0), width / 2, height - BOTTOM + 4, statusColor);
+            graphics.centeredText(font, lines.get(0), width / 2, height - BOTTOM + 4, statusColor);
         }
     }
 
-    private void renderDetails(GuiGraphics graphics) {
+    private void renderDetails(GuiGraphicsExtractor graphics) {
         BlueprintLibrary.Entry entry = browser.selected();
         int x = width - MARGIN - DETAIL_WIDTH;
         int y = TOP + 4;
         if (entry == null) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.library.select_hint"),
-                    x + DETAIL_WIDTH / 2, y + 40, 0x808080);
+            graphics.centeredText(font, Component.translatable("pawprint.library.select_hint"),
+                    x + DETAIL_WIDTH / 2, y + 40, 0xFF808080);
             return;
         }
         BlueprintBrowser.renderThumbnail(graphics, entry, x + (DETAIL_WIDTH - DETAIL_THUMB) / 2, y, DETAIL_THUMB);
@@ -545,7 +545,7 @@ public class LibraryScreen extends Screen {
         lines.add(Component.translatable("pawprint.library.detail.modified", formatDate(meta.modified)));
         lines.add(Component.translatable("pawprint.library.detail.author", meta.author.isEmpty() ? "-" : meta.author));
         for (Component line : lines) {
-            graphics.drawString(font, font.plainSubstrByWidth(line.getString(), DETAIL_WIDTH), x, y, 0xC0C0C0);
+            graphics.text(font, font.plainSubstrByWidth(line.getString(), DETAIL_WIDTH), x, y, 0xFFC0C0C0);
             y += 10;
         }
         if (!meta.description.isEmpty()) {
@@ -554,7 +554,7 @@ public class LibraryScreen extends Screen {
                 if (descriptionY + 10 > height - BOTTOM) {
                     break;
                 }
-                graphics.drawString(font, line, x, descriptionY, 0x909090);
+                graphics.text(font, line, x, descriptionY, 0xFF909090);
                 descriptionY += 10;
             }
         }
@@ -583,6 +583,6 @@ public class LibraryScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

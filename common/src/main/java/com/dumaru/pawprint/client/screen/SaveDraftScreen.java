@@ -9,7 +9,7 @@ import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintIO;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -105,7 +105,7 @@ public class SaveDraftScreen extends Screen {
             Draft.clear();
             PlacementManager.draftChanged();
             PlacementManager.add(new Placement(relative, blueprint, min, Rotation.NONE, Mirror.NONE));
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
             PawprintClient.notify(minecraft, Component.translatable("pawprint.capture.saved",
                     blueprint.meta().name, blueprint.meta().blockCount));
         } catch (IOException e) {
@@ -123,20 +123,20 @@ public class SaveDraftScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
-        graphics.drawCenteredString(font, Component.translatable("pawprint.hud.draft", Draft.size()),
-                width / 2, height / 2 - 45, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.screen.save.name"),
-                width / 2 - 100, height / 2 - 32, 0xA0A0A0);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 60, 0xFFFFFFFF);
+        graphics.centeredText(font, Component.translatable("pawprint.hud.draft", Draft.size()),
+                width / 2, height / 2 - 45, 0xFFA0A0A0);
+        graphics.text(font, Component.translatable("pawprint.screen.save.name"),
+                width / 2 - 100, height / 2 - 32, 0xFFA0A0A0);
         if (error != null) {
-            graphics.drawCenteredString(font, error, width / 2, height / 2 + 64, 0xFF5555);
+            graphics.centeredText(font, error, width / 2, height / 2 + 64, 0xFFFF5555);
         }
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

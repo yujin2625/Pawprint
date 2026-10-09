@@ -20,31 +20,31 @@ final class LitematicFormat {
     }
 
     static Blueprint read(CompoundTag root, String fallbackName) throws IOException {
-        int dataVersion = root.getInt("MinecraftDataVersion");
-        CompoundTag metadata = root.getCompound("Metadata");
-        CompoundTag regions = root.getCompound("Regions");
+        int dataVersion = root.getIntOr("MinecraftDataVersion", 0);
+        CompoundTag metadata = root.getCompoundOrEmpty("Metadata");
+        CompoundTag regions = root.getCompoundOrEmpty("Regions");
         Formats.Collector collector = new Formats.Collector();
-        for (String regionName : regions.getAllKeys()) {
-            CompoundTag region = regions.getCompound(regionName);
-            CompoundTag position = region.getCompound("Position");
-            CompoundTag size = region.getCompound("Size");
-            int sx = size.getInt("x");
-            int sy = size.getInt("y");
-            int sz = size.getInt("z");
+        for (String regionName : regions.keySet()) {
+            CompoundTag region = regions.getCompoundOrEmpty(regionName);
+            CompoundTag position = region.getCompoundOrEmpty("Position");
+            CompoundTag size = region.getCompoundOrEmpty("Size");
+            int sx = size.getIntOr("x", 0);
+            int sy = size.getIntOr("y", 0);
+            int sz = size.getIntOr("z", 0);
             // Negative sizes extend from the position toward smaller coordinates.
-            int minX = position.getInt("x") + (sx < 0 ? sx + 1 : 0);
-            int minY = position.getInt("y") + (sy < 0 ? sy + 1 : 0);
-            int minZ = position.getInt("z") + (sz < 0 ? sz + 1 : 0);
+            int minX = position.getIntOr("x", 0) + (sx < 0 ? sx + 1 : 0);
+            int minY = position.getIntOr("y", 0) + (sy < 0 ? sy + 1 : 0);
+            int minZ = position.getIntOr("z", 0) + (sz < 0 ? sz + 1 : 0);
             sx = Math.abs(sx);
             sy = Math.abs(sy);
             sz = Math.abs(sz);
 
-            ListTag paletteTag = region.getList("BlockStatePalette", Tag.TAG_COMPOUND);
+            ListTag paletteTag = region.getListOrEmpty("BlockStatePalette");
             String[] palette = new String[paletteTag.size()];
             for (int i = 0; i < palette.length; i++) {
-                palette[i] = StateTags.toString(paletteTag.getCompound(i), dataVersion);
+                palette[i] = StateTags.toString(paletteTag.getCompoundOrEmpty(i), dataVersion);
             }
-            long[] states = region.getLongArray("BlockStates");
+            long[] states = region.getLongArray("BlockStates").orElse(new long[0]);
             int bits = bitsFor(palette.length);
             long volume = (long) sx * sy * sz;
             if (states.length < (volume * bits + 63) / 64) {
@@ -62,9 +62,9 @@ final class LitematicFormat {
                 }
             }
         }
-        String name = metadata.getString("Name");
-        return collector.build(name.isEmpty() ? fallbackName : name, metadata.getString("Author"),
-                metadata.getString("Description"));
+        String name = metadata.getStringOr("Name", "");
+        return collector.build(name.isEmpty() ? fallbackName : name, metadata.getStringOr("Author", ""),
+                metadata.getStringOr("Description", ""));
     }
 
     static CompoundTag write(Blueprint blueprint) {

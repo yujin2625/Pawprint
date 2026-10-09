@@ -51,7 +51,7 @@ public final class TerrainSnapshot {
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
-                        int bottom = Math.max(level.getMinBuildHeight(), top - depth);
+                        int bottom = Math.max(level.getMinY(), top - depth);
                         for (int y = bottom; y <= top; y++) {
                             BlockState state = chunk.getBlockState(pos.set(x, y, z));
                             if (!state.isAir()) {

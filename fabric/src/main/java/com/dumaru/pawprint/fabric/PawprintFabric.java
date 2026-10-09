@@ -7,9 +7,10 @@ import com.dumaru.pawprint.client.edit.EditHud;
 import com.dumaru.pawprint.client.render.GhostRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.minecraft.resources.Identifier;
 
 public class PawprintFabric implements ClientModInitializer {
     @Override
@@ -17,9 +18,11 @@ public class PawprintFabric implements ClientModInitializer {
         Pawprint.init();
         PawprintClient.init();
         GhostRenderer.init();
-        PawprintKeys.ALL.forEach(KeyBindingHelper::registerKeyBinding);
+        PawprintKeys.ALL.forEach(KeyMappingHelper::registerKeyMapping);
         ClientTickEvents.END_CLIENT_TICK.register(PawprintClient::onClientTick);
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> GhostRenderer.render(context.camera(), context.frustum()));
-        HudRenderCallback.EVENT.register((graphics, tickCounter) -> EditHud.render(graphics));
+        // Ghost blocks join the frame's geometry like the game's own (NeoForge: SubmitCustomGeometryEvent).
+        LevelRenderEvents.COLLECT_SUBMITS.register(context -> GhostRenderer.submit(
+                context.submitNodeCollector(), context.poseStack(), context.levelState().cameraRenderState));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(Pawprint.MOD_ID, "edit_hud"), (graphics, delta) -> EditHud.render(graphics));
     }
 }

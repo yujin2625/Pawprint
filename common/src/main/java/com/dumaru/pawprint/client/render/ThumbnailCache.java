@@ -6,7 +6,7 @@ import com.google.common.hash.Hashing;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -26,7 +26,7 @@ import java.util.Set;
  * {@code pawprint/cache/thumbnails} keyed by file path and modification time, so editing a blueprint makes a new one.
  */
 public final class ThumbnailCache {
-    private static final Map<String, ResourceLocation> textures = new HashMap<>();
+    private static final Map<String, Identifier> textures = new HashMap<>();
     /** Entries that have no thumbnail (too large, empty or unreadable), so they are not retried every frame. */
     private static final Set<String> failed = new HashSet<>();
     private static final Deque<BlueprintLibrary.Entry> queue = new ArrayDeque<>();
@@ -36,9 +36,9 @@ public final class ThumbnailCache {
     }
 
     /** The texture for an entry, or null while it is being prepared or when it cannot have one. */
-    public static @Nullable ResourceLocation get(BlueprintLibrary.Entry entry) {
+    public static @Nullable Identifier get(BlueprintLibrary.Entry entry) {
         String key = key(entry);
-        ResourceLocation texture = textures.get(key);
+        Identifier texture = textures.get(key);
         if (texture != null || failed.contains(key)) {
             return texture;
         }
@@ -56,8 +56,14 @@ public final class ThumbnailCache {
         return null;
     }
 
-    /** Renders the next queued thumbnail. Call once per frame from a screen. */
+    /** True while a thumbnail is on the GPU; one at a time. */
+    private static boolean rendering;
+
+    /** Starts the next queued thumbnail. Call once per frame from a screen; the image arrives a frame or so later. */
     public static void tick() {
+        if (rendering) {
+            return;
+        }
         BlueprintLibrary.Entry entry = queue.poll();
         if (entry == null) {
             return;
@@ -65,16 +71,24 @@ public final class ThumbnailCache {
         String key = key(entry);
         queued.remove(key);
         try {
-            NativeImage image = ThumbnailRenderer.render(BlueprintLibrary.read(entry.file()));
-            if (image == null) {
-                failed.add(key);
-                return;
-            }
-            Path file = cacheFile(key);
-            Files.createDirectories(file.getParent());
-            image.writeToFile(file);
-            register(key, image);
+            rendering = true;
+            ThumbnailRenderer.render(BlueprintLibrary.read(entry.file())).whenComplete((image, error) -> {
+                rendering = false;
+                if (image == null) {
+                    failed.add(key);
+                    return;
+                }
+                try {
+                    Path file = cacheFile(key);
+                    Files.createDirectories(file.getParent());
+                    image.writeToFile(file);
+                } catch (IOException e) {
+                    Pawprint.LOG.debug("Could not cache the thumbnail for {}", entry.file(), e);
+                }
+                register(key, image);
+            });
         } catch (IOException | RuntimeException e) {
+            rendering = false;
             Pawprint.LOG.warn("Could not make a thumbnail for {}", entry.file(), e);
             failed.add(key);
         }
@@ -90,9 +104,9 @@ public final class ThumbnailCache {
         queued.clear();
     }
 
-    private static ResourceLocation register(String key, NativeImage image) {
-        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Pawprint.MOD_ID, "thumbnail/" + hash(key));
-        Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
+    private static Identifier register(String key, NativeImage image) {
+        Identifier id = Identifier.fromNamespaceAndPath(Pawprint.MOD_ID, "thumbnail/" + hash(key));
+        Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(() -> "Pawprint thumbnail", image));
         textures.put(key, id);
         return id;
     }

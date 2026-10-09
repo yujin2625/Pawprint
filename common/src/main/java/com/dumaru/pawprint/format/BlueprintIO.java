@@ -161,18 +161,18 @@ public final class BlueprintIO {
         CompoundTag tag = NbtIo.readCompressed(new ByteArrayInputStream(bytes), NbtAccounter.create(MAX_NBT_HEAP));
         BlueprintMeta meta = new BlueprintMeta();
         meta.id = java.util.UUID.randomUUID().toString();
-        meta.name = tag.getString("Name").isBlank() ? "Shared Blueprint" : tag.getString("Name");
-        meta.description = tag.getString("Description");
-        ListTag tags = tag.getList("Tags", Tag.TAG_STRING);
+        meta.name = tag.getStringOr("Name", "").isBlank() ? "Shared Blueprint" : tag.getStringOr("Name", "");
+        meta.description = tag.getStringOr("Description", "");
+        ListTag tags = tag.getListOrEmpty("Tags");
         for (int i = 0; i < tags.size(); i++) {
-            meta.tags.add(tags.getString(i));
+            meta.tags.add(tags.getStringOr(i, ""));
         }
         meta.author = author;
         meta.created = meta.modified = java.time.Instant.now().toString();
-        meta.dataVersion = tag.getInt("DataVersion");
-        if (tag.contains("Layers", Tag.TAG_STRING)) {
+        meta.dataVersion = tag.getIntOr("DataVersion", 0);
+        if (tag.contains("Layers")) {
             try {
-                JsonObject layers = GSON.fromJson(tag.getString("Layers"), JsonObject.class);
+                JsonObject layers = GSON.fromJson(tag.getStringOr("Layers", ""), JsonObject.class);
                 if (layers != null && layers.has("layers") && layers.get("layers").isJsonArray()) {
                     meta.layers = layers.getAsJsonArray("layers");
                     meta.layerOrder = layers.has("layerOrder") && layers.get("layerOrder").isJsonArray() ? layers.getAsJsonArray("layerOrder") : null;
@@ -227,18 +227,18 @@ public final class BlueprintIO {
     }
 
     private static Blueprint fromNbt(BlueprintMeta meta, CompoundTag tag) throws IOException {
-        ListTag paletteTag = tag.getList("Palette", Tag.TAG_STRING);
+        ListTag paletteTag = tag.getListOrEmpty("Palette");
         if (paletteTag.size() > MAX_PALETTE) {
             throw new IOException("Palette too large: " + paletteTag.size());
         }
         List<String> palette = new ArrayList<>(paletteTag.size());
         for (int i = 0; i < paletteTag.size(); i++) {
-            palette.add(paletteTag.getString(i));
+            palette.add(paletteTag.getStringOr(i, ""));
         }
 
-        long[] positions = tag.getLongArray("Positions");
-        int[] states = tag.getIntArray("States");
-        long[] removalArray = tag.getLongArray("Removals");
+        long[] positions = tag.getLongArray("Positions").orElse(new long[0]);
+        int[] states = tag.getIntArray("States").orElse(new int[0]);
+        long[] removalArray = tag.getLongArray("Removals").orElse(new long[0]);
         if (positions.length != states.length) {
             throw new IOException("Positions and states differ in length");
         }
@@ -258,11 +258,11 @@ public final class BlueprintIO {
         Long2IntMap removalLayers = new Long2IntOpenHashMap();
         if (meta.format >= 2) {
             java.util.Set<Integer> known = BlueprintMeta.layerIds(meta.layers);
-            readLayers(tag.getIntArray("BlockLayers"), positions, known, blockLayers);
-            readLayers(tag.getIntArray("RemovalLayers"), removalArray, known, removalLayers);
+            readLayers(tag.getIntArray("BlockLayers").orElse(new int[0]), positions, known, blockLayers);
+            readLayers(tag.getIntArray("RemovalLayers").orElse(new int[0]), removalArray, known, removalLayers);
         }
 
-        int[] size = tag.getIntArray("Size");
+        int[] size = tag.getIntArray("Size").orElse(new int[0]);
         if (size.length == 3) {
             meta.size = size;
         }

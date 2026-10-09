@@ -1,8 +1,10 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.library.BlueprintLibrary;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
@@ -60,9 +62,9 @@ final class GroupPickerScreen extends Screen {
             }
         }
         addRenderableWidget(Button.builder(Component.translatable("pawprint.library.group.new"), b ->
-                minecraft.setScreen(new TextInputScreen(this, Component.translatable("pawprint.library.group.new"), "",
+                minecraft.gui.setScreen(new TextInputScreen(this, Component.translatable("pawprint.library.group.new"), "",
                         Component.translatable("pawprint.library.group.new_hint"), false, name -> {
-                    minecraft.setScreen(parent);
+                    minecraft.gui.setScreen(parent);
                     onPick.accept(name);
                 }))).bounds(width / 2 - 154, height - 30, 150, 20).build());
         addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, b -> onClose())
@@ -70,14 +72,14 @@ final class GroupPickerScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, 12, 0xFFFFFFFF);
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     private final class GroupList extends ObjectSelectionList<GroupList.Entry> {
@@ -99,15 +101,21 @@ final class GroupPickerScreen extends Screen {
             }
 
             @Override
-            public void render(GuiGraphics graphics, int index, int top, int left, int width, int height,
-                               int mouseX, int mouseY, boolean hovering, float partialTick) {
+            public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovering, float partialTick) {
+                int top = getContentY();
+                int left = getContentX();
+                int width = getContentWidth();
+                int height = getContentHeight();
                 boolean special = group.isEmpty() || group.startsWith("*");
-                graphics.drawString(font, label(group), left + 4, top + 4, special ? 0xFFFF80 : 0xFFFFFF);
+                graphics.text(font, label(group), left + 4, top + 4, special ? 0xFFFFFF80 : 0xFFFFFFFF);
             }
 
             @Override
-            public boolean mouseClicked(double mouseX, double mouseY, int button) {
-                minecraft.setScreen(parent);
+            public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+                double mouseX = event.x();
+                double mouseY = event.y();
+                int button = event.button();
+                minecraft.gui.setScreen(parent);
                 onPick.accept(group);
                 return true;
             }

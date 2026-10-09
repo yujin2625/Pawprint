@@ -1,5 +1,7 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.KeyEvent;
+
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.Capture;
 import com.dumaru.pawprint.client.ClientContext;
@@ -8,7 +10,7 @@ import com.dumaru.pawprint.client.Selection;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintMeta;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -62,7 +64,7 @@ public class SaveBlueprintScreen extends Screen {
             BlueprintLibrary.saveNew(blueprint);
             Selection.clear();
             parent.refresh();
-            minecraft.setScreen(parent);
+            minecraft.gui.setScreen(parent);
             PawprintClient.notify(minecraft, Component.translatable("pawprint.capture.saved",
                     blueprint.meta().name, blueprint.meta().blockCount));
         } catch (Capture.CaptureException e) {
@@ -74,29 +76,32 @@ public class SaveBlueprintScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
         if ((keyCode == 257 || keyCode == 335) && save.active) { // Enter, keypad Enter
             save();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
-        graphics.drawCenteredString(font, Component.translatable("pawprint.screen.library.selection",
-                box.getXSpan(), box.getYSpan(), box.getZSpan()), width / 2, height / 2 - 45, 0xA0A0A0);
-        graphics.drawString(font, Component.translatable("pawprint.screen.save.name"),
-                width / 2 - 100, height / 2 - 32, 0xA0A0A0);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 60, 0xFFFFFFFF);
+        graphics.centeredText(font, Component.translatable("pawprint.screen.library.selection",
+                box.getXSpan(), box.getYSpan(), box.getZSpan()), width / 2, height / 2 - 45, 0xFFA0A0A0);
+        graphics.text(font, Component.translatable("pawprint.screen.save.name"),
+                width / 2 - 100, height / 2 - 32, 0xFFA0A0A0);
         if (error != null) {
-            graphics.drawCenteredString(font, error, width / 2, height / 2 + 40, 0xFF5555);
+            graphics.centeredText(font, error, width / 2, height / 2 + 40, 0xFFFF5555);
         }
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

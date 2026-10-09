@@ -101,7 +101,7 @@ public final class WebLink {
         String base = Pawprint.config().webEditorUrl;
         String url = base + (base.contains("#") ? "" : "#") + "/receive?port=" + port + "&token=" + token + "&name="
                 + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
-        net.minecraft.Util.getPlatform().openUri(url);
+        com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create(url));
         return true;
     }
 
@@ -160,7 +160,7 @@ public final class WebLink {
             JsonObject status = new JsonObject();
             status.addProperty("app", "pawprint");
             status.addProperty("version", Services.PLATFORM.modInfo(Pawprint.MOD_ID).map(i -> i.version()).orElse("?"));
-            status.addProperty("mcVersion", SharedConstants.getCurrentVersion().getName());
+            status.addProperty("mcVersion", SharedConstants.getCurrentVersion().name());
             status.addProperty("loader", Services.PLATFORM.getPlatformName().toLowerCase(Locale.ROOT));
             json(out, origin, 200, status);
         } else if (request.method().equals("GET") && path.startsWith("/blueprint/")) {

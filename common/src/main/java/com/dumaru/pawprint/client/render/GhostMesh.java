@@ -4,61 +4,37 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.placement.BlockStatus;
 import com.dumaru.pawprint.client.placement.GhostStore;
 import com.dumaru.pawprint.client.placement.PlacementManager;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexBuffer;
-import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
-import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.block.BlockStateModelSet;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
 
 /**
- * GPU buffers for one section of ghost blocks: block models, red boxes over blocks in the way, and outlines.
- * Vertices are relative to the section origin, so the mesh stays valid wherever the camera goes; it is rebuilt
- * only when statuses in the section change. Build and draw on the render thread only.
+ * The geometry of one section of ghost blocks: block models, red boxes over blocks in the way, and outlines.
+ * Vertices are relative to the section origin, so the mesh stays valid wherever the camera goes; it is rebuilt only
+ * when statuses in the section change. Build on the render thread only.
  */
-final class GhostMesh implements AutoCloseable {
-    static final int MODELS = 0;
-    static final int BOXES = 1;
-    static final int LINES = 2;
-
-    private static final ByteBufferBuilder MODEL_BYTES = new ByteBufferBuilder(1 << 20);
-    private static final ByteBufferBuilder BOX_BYTES = new ByteBufferBuilder(1 << 16);
-    private static final ByteBufferBuilder LINE_BYTES = new ByteBufferBuilder(1 << 16);
-    private static final ByteBufferBuilder SORT_BYTES = new ByteBufferBuilder(1 << 16);
-    private static final TintingConsumer TINT = new TintingConsumer();
-    private static final RandomSource RANDOM = RandomSource.create();
+final class GhostMesh {
     private static final float WRONG_STATE_SCALE = 1.01f;
 
-    private final @Nullable VertexBuffer[] buffers = new VertexBuffer[3];
+    final GhostGeometry.Quads models = new GhostGeometry.Quads();
+    final GhostGeometry.Shapes shapes = new GhostGeometry.Shapes();
 
     private GhostMesh() {
     }
 
-    @Nullable VertexBuffer get(int layer) {
-        return buffers[layer];
-    }
-
-    static GhostMesh build(GhostStore.Section section, GhostWorld world, Vec3 camera) {
+    static GhostMesh build(GhostStore.Section section, GhostWorld world) {
+        Minecraft minecraft = Minecraft.getInstance();
         float opacity = Pawprint.config().ghostOpacity;
         boolean fullBright = Pawprint.config().ghostFullBright;
-        BlockRenderDispatcher blocks = Minecraft.getInstance().getBlockRenderer();
-        BufferBuilder models = new BufferBuilder(MODEL_BYTES, VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
-        BufferBuilder boxes = new BufferBuilder(BOX_BYTES, VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
-        BufferBuilder lines = new BufferBuilder(LINE_BYTES, VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
-        PoseStack poseStack = new PoseStack();
+        boolean ao = minecraft.options.ambientOcclusion().get();
+        // Missing blocks hide faces against neighbors like real blocks; wrong-state ones are drawn whole.
+        ModelBlockRenderer culled = new ModelBlockRenderer(ao, true, minecraft.getBlockColors());
+        ModelBlockRenderer whole = new ModelBlockRenderer(ao, false, minecraft.getBlockColors());
+        BlockStateModelSet modelSet = minecraft.getModelManager().getBlockStateModelSet();
+        GhostMesh mesh = new GhostMesh();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
         Integer layer = PlacementManager.layer();
@@ -76,84 +52,42 @@ final class GhostMesh implements AutoCloseable {
             switch (status) {
                 case MISSING -> {
                     if (target == null) {
-                        box(lines, lx, ly, lz, -0.1, 1f, 0f, 1f); // Block from a mod that is not installed.
+                        mesh.outline(lx, ly, lz, -0.1f, 1f, 0f, 1f); // Block from a mod that is not installed.
                     } else if (model) {
-                        tesselate(blocks, world, poseStack, TINT.set(models, 1f, 1f, 1f, opacity, fullBright),
-                                target, pos, lx, ly, lz, true, 1f);
+                        mesh.models.tint(1f, 1f, 1f, opacity, fullBright).scale(1f);
+                        tesselate(culled, mesh.models, world, modelSet, target, pos, lx, ly, lz);
                     } else {
-                        box(lines, lx, ly, lz, -0.05, 0.3f, 0.7f, 1f); // Fluids and chests have no plain model.
+                        mesh.outline(lx, ly, lz, -0.05f, 0.3f, 0.7f, 1f); // Fluids and chests have no plain model.
                     }
                 }
                 case WRONG_STATE -> {
                     if (model) {
-                        tesselate(blocks, world, poseStack, TINT.set(models, 1f, 0.85f, 0.2f, Math.min(1f, opacity + 0.1f),
-                                fullBright), target, pos, lx, ly, lz, false, WRONG_STATE_SCALE);
+                        mesh.models.tint(1f, 0.85f, 0.2f, Math.min(1f, opacity + 0.1f), fullBright).scale(WRONG_STATE_SCALE);
+                        tesselate(whole, mesh.models, world, modelSet, target, pos, lx, ly, lz);
                     } else {
-                        box(lines, lx, ly, lz, -0.05, 1f, 0.85f, 0.2f);
+                        mesh.outline(lx, ly, lz, -0.05f, 1f, 0.85f, 0.2f);
                     }
                 }
-                case WRONG_BLOCK -> LevelRenderer.addChainedFilledBoxVertices(poseStack, boxes,
-                        lx - 0.01, ly - 0.01, lz - 0.01, lx + 1.01, ly + 1.01, lz + 1.01, 1f, 0.15f, 0.15f, 0.35f);
-                case REMOVE -> box(lines, lx, ly, lz, 0.002, 1f, 0.55f, 0f);
+                case WRONG_BLOCK -> mesh.shapes.box(lx - 0.01f, ly - 0.01f, lz - 0.01f, lx + 1.01f, ly + 1.01f, lz + 1.01f,
+                        GhostGeometry.argb(1f, 0.15f, 0.15f, 0.35f));
+                case REMOVE -> mesh.outline(lx, ly, lz, 0.002f, 1f, 0.55f, 0f);
                 default -> {
                 }
             }
         }
-
-        GhostMesh mesh = new GhostMesh();
-        MeshData modelData = models.build();
-        if (modelData != null) {
-            // Sorted once for the camera at build time; close enough for see-through ghosts.
-            modelData.sortQuads(SORT_BYTES, VertexSorting.byDistance(
-                    (float) (camera.x - section.originX), (float) (camera.y - section.originY), (float) (camera.z - section.originZ)));
-        }
-        mesh.buffers[MODELS] = upload(modelData);
-        mesh.buffers[BOXES] = upload(boxes.build());
-        mesh.buffers[LINES] = upload(lines.build());
         return mesh;
     }
 
-    private static void tesselate(BlockRenderDispatcher blocks, GhostWorld world, PoseStack poseStack, TintingConsumer consumer,
-                                  BlockState state, BlockPos pos, float lx, float ly, float lz, boolean cullHiddenFaces,
-                                  float scale) {
-        poseStack.pushPose();
-        poseStack.translate(lx, ly, lz);
-        if (scale != 1f) {
-            poseStack.translate(0.5f, 0.5f, 0.5f);
-            poseStack.scale(scale, scale, scale);
-            poseStack.translate(-0.5f, -0.5f, -0.5f);
-        }
+    static void tesselate(ModelBlockRenderer renderer, GhostGeometry.Quads out, GhostWorld world, BlockStateModelSet modelSet,
+                          BlockState state, BlockPos pos, float x, float y, float z) {
         try {
-            blocks.getModelRenderer().tesselateBlock(world, blocks.getBlockModel(state), state, pos, poseStack, consumer,
-                    cullHiddenFaces, RANDOM, state.getSeed(pos), OverlayTexture.NO_OVERLAY);
+            renderer.tesselateBlock(out.output(), x, y, z, world, pos, state, modelSet.get(state), state.getSeed(pos));
         } catch (RuntimeException e) {
             Pawprint.LOG.debug("Could not draw ghost {}", state, e);
         }
-        poseStack.popPose();
     }
 
-    private static void box(BufferBuilder lines, float x, float y, float z, double grow, float r, float g, float b) {
-        LevelRenderer.renderLineBox(new PoseStack(), lines, new AABB(x, y, z, x + 1, y + 1, z + 1).inflate(grow), r, g, b, 1f);
-    }
-
-    private static @Nullable VertexBuffer upload(@Nullable MeshData data) {
-        if (data == null) {
-            return null;
-        }
-        VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
-        buffer.bind();
-        buffer.upload(data);
-        VertexBuffer.unbind();
-        return buffer;
-    }
-
-    @Override
-    public void close() {
-        for (int i = 0; i < buffers.length; i++) {
-            if (buffers[i] != null) {
-                buffers[i].close();
-                buffers[i] = null;
-            }
-        }
+    private void outline(float x, float y, float z, float grow, float r, float g, float b) {
+        shapes.lineBox(x - grow, y - grow, z - grow, x + 1 + grow, y + 1 + grow, z + 1 + grow, GhostGeometry.argb(r, g, b, 1f), 2f);
     }
 }

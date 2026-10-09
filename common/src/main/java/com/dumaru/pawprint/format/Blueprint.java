@@ -244,8 +244,8 @@ public final class Blueprint {
         public Blueprint build(BlueprintMeta meta) {
             applyLayers(meta);
             meta.format = meta.layers != null ? BlueprintIO.FORMAT_VERSION : 1;
-            meta.mcVersion = SharedConstants.getCurrentVersion().getName();
-            meta.dataVersion = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+            meta.mcVersion = SharedConstants.getCurrentVersion().name();
+            meta.dataVersion = SharedConstants.getCurrentVersion().dataVersion().version();
             meta.size = new int[]{maxX + 1, maxY + 1, maxZ + 1};
             meta.blockCount = blocks.size();
             meta.removalCount = removals.size();

@@ -10,7 +10,7 @@ import com.dumaru.pawprint.client.studio.StudioWorld;
 import com.dumaru.pawprint.client.studio.TerrainSnapshot;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.BlueprintMeta;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -34,7 +34,7 @@ public class StudioScreen extends Screen {
     private int radius = Pawprint.config().snapshotRadiusChunks;
     private int depth = Pawprint.config().snapshotSurfaceDepth;
     private @Nullable Component status;
-    private int statusColor = 0xFF5555;
+    private int statusColor = 0xFFFF5555;
 
     public StudioScreen() {
         super(Component.translatable("pawprint.studio.title"));
@@ -54,11 +54,11 @@ public class StudioScreen extends Screen {
             addRenderableWidget(Button.builder(Component.translatable("pawprint.studio.save_and_return"), b -> askName(true))
                     .bounds(left, y + 24, 220, 20).build());
             addRenderableWidget(Button.builder(Component.translatable("pawprint.studio.return_without_saving"), b ->
-                    minecraft.setScreen(new ConfirmScreen(yes -> {
+                    minecraft.gui.setScreen(new ConfirmScreen(yes -> {
                         if (yes) {
                             Studio.returnToOrigin(minecraft);
                         } else {
-                            minecraft.setScreen(this);
+                            minecraft.gui.setScreen(this);
                         }
                     }, Component.translatable("pawprint.studio.return_without_saving"),
                             Component.translatable("pawprint.studio.return_confirm")))).bounds(left, y + 48, 220, 20).build());
@@ -120,7 +120,7 @@ public class StudioScreen extends Screen {
     }
 
     private void askName(boolean thenReturn) {
-        minecraft.setScreen(new TextInputScreen(this, Component.translatable("pawprint.screen.save.name"), "", null, false,
+        minecraft.gui.setScreen(new TextInputScreen(this, Component.translatable("pawprint.screen.save.name"), "", null, false,
                 name -> save(name, thenReturn)));
     }
 
@@ -128,31 +128,31 @@ public class StudioScreen extends Screen {
         try {
             Blueprint blueprint = Studio.diff(minecraft, name);
             if (blueprint == null) {
-                minecraft.setScreen(this);
+                minecraft.gui.setScreen(this);
                 status = Component.translatable("pawprint.studio.no_changes");
-                statusColor = 0xFFFF55;
+                statusColor = 0xFFFFFF55;
                 return;
             }
             Studio.saveForReturn(blueprint);
             if (thenReturn) {
                 Studio.returnToOrigin(minecraft);
             } else {
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
                 PawprintClient.notify(minecraft, Component.translatable("pawprint.capture.saved",
                         blueprint.meta().name, blueprint.meta().blockCount + blueprint.meta().removalCount));
             }
         } catch (IOException e) {
             Pawprint.LOG.warn("Could not save the studio blueprint", e);
-            minecraft.setScreen(this);
+            minecraft.gui.setScreen(this);
             status = Component.translatable("pawprint.capture.write_failed", e.getMessage());
-            statusColor = 0xFF5555;
+            statusColor = 0xFFFF5555;
         }
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 92, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 92, 0xFFFFFFFF);
         Component info;
         if (inStudio()) {
             StudioSession session = Studio.session();
@@ -164,12 +164,12 @@ public class StudioScreen extends Screen {
         }
         int y = height / 2 - 76;
         for (FormattedCharSequence line : font.split(info, Math.min(width - 40, 360))) {
-            graphics.drawCenteredString(font, line, width / 2, y, 0xC0C0C0);
+            graphics.centeredText(font, line, width / 2, y, 0xFFC0C0C0);
             y += 10;
         }
         if (status != null) {
             List<FormattedCharSequence> lines = font.split(status, Math.min(width - 40, 360));
-            graphics.drawCenteredString(font, lines.get(0), width / 2, height / 2 + 100, statusColor);
+            graphics.centeredText(font, lines.get(0), width / 2, height / 2 + 100, statusColor);
         }
     }
 }

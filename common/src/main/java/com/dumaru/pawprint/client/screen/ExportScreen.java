@@ -3,8 +3,8 @@ package com.dumaru.pawprint.client.screen;
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.convert.Formats;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.Util;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.util.Util;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -47,23 +47,23 @@ final class ExportScreen extends Screen {
     private void export(Formats format) {
         try {
             Path file = BlueprintLibrary.export(entry, format);
-            Util.getPlatform().openPath(file.getParent());
+            com.mojang.blaze3d.Blaze3D.openPath(file.getParent());
             library.refresh(entry.relativePath(), Component.translatable("pawprint.library.exported", file.getFileName().toString()), false);
         } catch (IOException | RuntimeException e) {
             Pawprint.LOG.warn("Export of {} failed", entry.file(), e);
             library.refresh(entry.relativePath(), Component.translatable("pawprint.library.action_failed", e.getMessage()), true);
         }
-        minecraft.setScreen(library);
+        minecraft.gui.setScreen(library);
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 60, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 60, 0xFFFFFFFF);
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(back);
+        minecraft.gui.setScreen(back);
     }
 }

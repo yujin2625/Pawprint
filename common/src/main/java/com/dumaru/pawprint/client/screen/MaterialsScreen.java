@@ -1,11 +1,13 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.placement.MaterialList;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.Util;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.util.Util;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -80,14 +82,17 @@ final class MaterialsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         int row = MaterialTable.rowAt(mouseX, mouseY, MARGIN, TOP, width - MARGIN, height - 44, scroll, result.lines().size());
         if (row >= 0 && button == 0) {
             selected = row;
             updateButtons();
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
@@ -106,24 +111,24 @@ final class MaterialsScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, Component.translatable("pawprint.materials.title", blueprint.meta().name), width / 2, 10, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, Component.translatable("pawprint.materials.title", blueprint.meta().name), width / 2, 10, 0xFFFFFFFF);
         int totalItems = result.lines().stream().mapToInt(MaterialList.Line::total).sum();
-        graphics.drawCenteredString(font, Component.translatable("pawprint.materials.summary", result.lines().size(), totalItems),
-                width / 2, 22, 0xA0A0A0);
+        graphics.centeredText(font, Component.translatable("pawprint.materials.summary", result.lines().size(), totalItems),
+                width / 2, 22, 0xFFA0A0A0);
         MaterialTable.render(graphics, font, result, left(), TOP, right(), height - 44, scroll, false, selected);
         if (Util.getMillis() - copiedAt < 2500) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0x55FF55);
+            graphics.centeredText(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0xFF55FF55);
         } else if (message != null) {
-            graphics.drawCenteredString(font, message, width / 2, height - 40, 0x55FF55);
+            graphics.centeredText(font, message, width / 2, height - 40, 0xFF55FF55);
         } else if (entry != null) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.replace.hint"), width / 2, height - 40, 0x909090);
+            graphics.centeredText(font, Component.translatable("pawprint.replace.hint"), width / 2, height - 40, 0xFF909090);
         }
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

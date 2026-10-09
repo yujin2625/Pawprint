@@ -1,5 +1,7 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.ViewRay;
@@ -7,7 +9,7 @@ import com.dumaru.pawprint.client.placement.MaterialList;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -67,7 +69,7 @@ public class PlacementScreen extends Screen {
                 Placement active = PlacementManager.active();
                 minecraft.keyboardHandler.setClipboard(MaterialList.toText(
                         active == null ? "" : active.blueprint().meta().name, materials, true));
-                copiedAt = net.minecraft.Util.getMillis();
+                copiedAt = net.minecraft.util.Util.getMillis();
             }
         }).bounds(x, bottom, buttonWidth, 20).build());
         x += buttonWidth + gap;
@@ -129,7 +131,10 @@ public class PlacementScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (materials != null && button == 0) {
             int row = MaterialTable.rowAt(mouseX, mouseY, materialLeft(), listTop(), width - MARGIN, height - 46,
                     materialScroll, materials.lines().size());
@@ -148,7 +153,7 @@ public class PlacementScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
@@ -163,23 +168,23 @@ public class PlacementScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, 8, 0xFFFFFFFF);
         renderPlacements(graphics, mouseX, mouseY);
         renderMaterials(graphics);
-        if (net.minecraft.Util.getMillis() - copiedAt < 2500) {
-            graphics.drawCenteredString(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0x55FF55);
+        if (net.minecraft.util.Util.getMillis() - copiedAt < 2500) {
+            graphics.centeredText(font, Component.translatable("pawprint.materials.copied"), width / 2, height - 40, 0xFF55FF55);
         } else if (message != null) {
-            graphics.drawCenteredString(font, message, width / 2, height - 40, 0x55FF55);
+            graphics.centeredText(font, message, width / 2, height - 40, 0xFF55FF55);
         }
     }
 
-    private void renderPlacements(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void renderPlacements(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         List<Placement> placements = PlacementManager.placements();
-        graphics.drawString(font, Component.translatable("pawprint.placements.list"), MARGIN, listTop() - 11, 0xA0A0A0);
+        graphics.text(font, Component.translatable("pawprint.placements.list"), MARGIN, listTop() - 11, 0xFFA0A0A0);
         if (placements.isEmpty()) {
-            graphics.drawString(font, Component.translatable("pawprint.placements.none"), MARGIN, listTop() + 4, 0x808080);
+            graphics.text(font, Component.translatable("pawprint.placements.none"), MARGIN, listTop() + 4, 0xFF808080);
             return;
         }
         Placement active = PlacementManager.active();
@@ -195,22 +200,22 @@ public class PlacementScreen extends Screen {
             } else if (hovered) {
                 graphics.fill(MARGIN, y, MARGIN + LIST_WIDTH, y + ROW - 2, 0x30FFFFFF);
             }
-            graphics.drawString(font, font.plainSubstrByWidth(placement.blueprint().meta().name, LIST_WIDTH - 6),
-                    MARGIN + 3, y + 1, 0xFFFFFF);
-            graphics.drawString(font, placement.origin().toShortString(), MARGIN + 3, y + 11, 0x909090);
+            graphics.text(font, font.plainSubstrByWidth(placement.blueprint().meta().name, LIST_WIDTH - 6),
+                    MARGIN + 3, y + 1, 0xFFFFFFFF);
+            graphics.text(font, placement.origin().toShortString(), MARGIN + 3, y + 11, 0xFF909090);
         }
     }
 
-    private void renderMaterials(GuiGraphics graphics) {
+    private void renderMaterials(GuiGraphicsExtractor graphics) {
         int left = materialLeft();
         int right = width - MARGIN;
         int top = listTop();
         if (materials == null) {
-            graphics.drawString(font, Component.translatable("pawprint.placements.select"), left, top + 4, 0x808080);
+            graphics.text(font, Component.translatable("pawprint.placements.select"), left, top + 4, 0xFF808080);
             return;
         }
-        graphics.drawString(font, Component.translatable("pawprint.placements.progress", materials.percent(),
-                materials.correct(), materials.blocks()), left, top - 11, 0xFFFF80);
+        graphics.text(font, Component.translatable("pawprint.placements.progress", materials.percent(),
+                materials.correct(), materials.blocks()), left, top - 11, 0xFFFFFF80);
         MaterialTable.render(graphics, font, materials, left, top, right, height - 46, materialScroll, true, selectedMaterial);
     }
 

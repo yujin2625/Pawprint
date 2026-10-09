@@ -50,13 +50,13 @@ public final class PawprintClient {
         }
         AdjustMode.tick(minecraft);
         while (PawprintKeys.MENU.consumeClick()) {
-            if (minecraft.screen == null) {
-                minecraft.setScreen(new RadialMenuScreen());
+            if (minecraft.gui.screen() == null) {
+                minecraft.gui.setScreen(new RadialMenuScreen());
             }
         }
         while (PawprintKeys.OPEN_LIBRARY.consumeClick()) {
-            if (minecraft.screen == null) {
-                minecraft.setScreen(new LibraryScreen(null));
+            if (minecraft.gui.screen() == null) {
+                minecraft.gui.setScreen(new LibraryScreen(null));
             }
         }
         while (PawprintKeys.TOGGLE_EDIT.consumeClick()) {
@@ -72,24 +72,24 @@ public final class PawprintClient {
             stepLayer(minecraft, -1);
         }
         while (PawprintKeys.STUDIO.consumeClick()) {
-            if (minecraft.screen == null) {
-                minecraft.setScreen(new StudioScreen());
+            if (minecraft.gui.screen() == null) {
+                minecraft.gui.setScreen(new StudioScreen());
             }
         }
         while (PawprintKeys.PLACEMENT_PANEL.consumeClick()) {
-            if (minecraft.screen == null) {
-                minecraft.setScreen(new PlacementScreen());
+            if (minecraft.gui.screen() == null) {
+                minecraft.gui.setScreen(new PlacementScreen());
             }
         }
         while (PawprintKeys.TOGGLE_PLACEMENT_VIEW.consumeClick()) {
             togglePlacementView(minecraft);
         }
         while (PawprintKeys.EDIT_MENU.consumeClick()) {
-            if (minecraft.screen == null) {
+            if (minecraft.gui.screen() == null) {
                 if (!EditMode.isActive()) {
                     EditMode.toggle(minecraft);
                 }
-                minecraft.setScreen(new EditMenuScreen());
+                minecraft.gui.setScreen(new EditMenuScreen());
             }
         }
         while (PawprintKeys.MARK_CORNER.consumeClick()) {
@@ -111,7 +111,7 @@ public final class PawprintClient {
         if (AdjustMode.onScroll(minecraft, amount)) {
             return true;
         }
-        if (Screen.hasAltDown() && PlacementManager.layer() != null && amount != 0) {
+        if (net.minecraft.client.Minecraft.getInstance().hasAltDown() && PlacementManager.layer() != null && amount != 0) {
             stepLayer(minecraft, amount > 0 ? 1 : -1);
             return true;
         }
@@ -156,7 +156,7 @@ public final class PawprintClient {
     private static void handlePlacementKeys(Minecraft minecraft) {
         Placement placement = PlacementManager.isVisible() ? PlacementManager.active() : null;
         Direction facing = ViewRay.facing(minecraft);
-        int step = Screen.hasShiftDown() ? FAST_MOVE : 1;
+        int step = net.minecraft.client.Minecraft.getInstance().hasShiftDown() ? FAST_MOVE : 1;
         boolean changed = false;
 
         changed |= move(PawprintKeys.MOVE_FORWARD, placement, facing, step);
@@ -201,7 +201,7 @@ public final class PawprintClient {
 
     public static void notify(Minecraft minecraft, Component message) {
         if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(message, true);
+            minecraft.player.sendOverlayMessage(message);
         }
     }
 }

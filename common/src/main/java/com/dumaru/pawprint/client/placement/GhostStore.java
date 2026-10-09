@@ -42,7 +42,7 @@ public final class GhostStore {
         /** Set when statuses changed and the cached mesh no longer matches. */
         public boolean meshDirty = true;
         /** Cached mesh, owned by the renderer. */
-        public @Nullable AutoCloseable mesh;
+        public @Nullable Object mesh;
 
         private Section(long key, int capacity) {
             this.key = key;

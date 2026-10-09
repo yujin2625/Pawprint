@@ -2,7 +2,6 @@ package com.dumaru.pawprint.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
@@ -10,10 +9,10 @@ import java.util.List;
  * Key mappings shared by all loaders. Each loader registers {@link #ALL} with its own API.
  */
 public final class PawprintKeys {
-    public static final String CATEGORY = "key.categories.pawprint";
+    public static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(net.minecraft.resources.Identifier.fromNamespaceAndPath("pawprint", "keys"));
 
     /** The one key bound by default: opens the radial menu. */
-    public static final KeyMapping MENU = new KeyMapping("key.pawprint.menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, CATEGORY);
+    public static final KeyMapping MENU = new KeyMapping("key.pawprint.menu", InputConstants.Type.KEYBOARD, InputConstants.KEY_B, CATEGORY);
 
     // Everything below is reachable from the menu or the mouse. The keys exist for players who want direct
     // shortcuts, but are unbound by default so Pawprint does not take keys other mods use.
@@ -46,6 +45,6 @@ public final class PawprintKeys {
     }
 
     private static KeyMapping key(String name) {
-        return new KeyMapping("key.pawprint." + name, InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY);
+        return new KeyMapping("key.pawprint." + name, InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);
     }
 }

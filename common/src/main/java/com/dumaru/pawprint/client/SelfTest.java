@@ -22,7 +22,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -99,7 +99,7 @@ public final class SelfTest {
             return;
         }
         // Any menu screen after resource loading will do; a first launch shows an onboarding screen, not the title.
-        if (minecraft.getOverlay() != null || minecraft.screen == null || minecraft.level != null) {
+        if (minecraft.gui.overlay() != null || minecraft.gui.screen() == null || minecraft.level != null) {
             return;
         }
         done = true;
@@ -121,14 +121,18 @@ public final class SelfTest {
             } catch (TextBlueprintReader.FormatException e) {
                 Pawprint.LOG.info("SELFTEST bad state rejected: {}", e.getMessage());
             }
-            NativeImage image = ThumbnailRenderer.render(blueprint);
             Path file = Pawprint.dataDir().resolve("selftest.png");
             java.nio.file.Files.createDirectories(file.getParent());
-            if (image != null) {
-                image.writeToFile(file);
-                image.close();
-            }
-            Pawprint.LOG.info("SELFTEST thumbnail: {}", image != null ? file.toAbsolutePath() : "none");
+            ThumbnailRenderer.render(blueprint).whenComplete((image, error) -> {
+                try (image) {
+                    if (image != null) {
+                        image.writeToFile(file);
+                    }
+                    Pawprint.LOG.info("SELFTEST thumbnail: {}", image != null ? file.toAbsolutePath() : "none " + error);
+                } catch (Exception e) {
+                    Pawprint.LOG.info("SELFTEST thumbnail failed", e);
+                }
+            });
             formatRoundTrips(blueprint);
             // The web link: the editor test fetches this token and sends blueprints back (see web/README.md).
             Path shareFile = Pawprint.dataDir().resolve("selftest-share" + com.dumaru.pawprint.format.BlueprintIO.EXTENSION);
@@ -255,10 +259,24 @@ public final class SelfTest {
     }
 
     /** Exports a block pack with English and Korean names and checks what is in it. */
-    private static void packCheck(Minecraft minecraft) throws Exception {
+    private static void packCheck(Minecraft minecraft) {
         long started = System.currentTimeMillis();
-        var result = com.dumaru.pawprint.client.pack.PackExporter.export(minecraft,
-                new com.dumaru.pawprint.client.pack.PackExporter.Options("Pawprint Selftest", java.util.List.of("en_us", "ko_kr"), true)).join();
+        com.dumaru.pawprint.client.pack.PackExporter.export(minecraft,
+                new com.dumaru.pawprint.client.pack.PackExporter.Options("Pawprint Selftest", java.util.List.of("en_us", "ko_kr"), true))
+                .whenComplete((result, error) -> {
+                    if (error != null) {
+                        Pawprint.LOG.info("SELFTEST pack failed", error);
+                        return;
+                    }
+                    try {
+                        packReport(result, started);
+                    } catch (Exception e) {
+                        Pawprint.LOG.info("SELFTEST pack report failed", e);
+                    }
+                });
+    }
+
+    private static void packReport(com.dumaru.pawprint.client.pack.PackExporter.Result result, long started) throws Exception {
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(result.file().toFile())) {
             java.util.function.Function<String, String> text = name -> {
                 try (var in = zip.getInputStream(zip.getEntry(name))) {
@@ -308,10 +326,10 @@ public final class SelfTest {
 
     /** A plain superflat world to start the studio round trip from. */
     private static void openOriginWorld(Minecraft minecraft) {
-        LevelSettings settings = new LevelSettings("Pawprint Selftest", GameType.CREATIVE, false, Difficulty.PEACEFUL,
-                true, new GameRules(), WorldDataConfiguration.DEFAULT);
+        LevelSettings settings = new LevelSettings("Pawprint Selftest", GameType.CREATIVE,
+                new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT);
         minecraft.createWorldOpenFlows().createFreshLevel(ORIGIN_FOLDER, settings, new WorldOptions(0L, false, false),
-                registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(WorldPresets.FLAT)
+                registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT)
                         .value().createWorldDimensions(), new TitleScreen());
     }
 
@@ -320,11 +338,11 @@ public final class SelfTest {
      * save the difference, return, and check that the blueprint was placed back.
      */
     private static void worldTick(Minecraft minecraft) {
-        if (minecraft.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
-            minecraft.setScreen(null);
+        if (minecraft.gui.screen() instanceof net.minecraft.client.gui.screens.PauseScreen) {
+            minecraft.gui.setScreen(null);
         }
-        boolean ownScreen = stage >= 4 && minecraft.screen != null;
-        if (minecraft.level == null || minecraft.player == null || (minecraft.screen != null && !ownScreen)) {
+        boolean ownScreen = stage >= 4 && minecraft.gui.screen() != null;
+        if (minecraft.level == null || minecraft.player == null || (minecraft.gui.screen() != null && !ownScreen)) {
             return;
         }
         stageTicks++;
@@ -399,19 +417,19 @@ public final class SelfTest {
                 }
                 case 4 -> {
                     if (stageTicks == 20) {
-                        minecraft.setScreen(new com.dumaru.pawprint.client.screen.PlacementScreen());
+                        minecraft.gui.setScreen(new com.dumaru.pawprint.client.screen.PlacementScreen());
                     } else if (stageTicks == 40) {
-                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_panel.png", minecraft.getMainRenderTarget(),
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_panel.png", minecraft.gameRenderer.mainRenderTarget(), 1,
                                 message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
                         Blueprint sample = TextBlueprintReader.read(SAMPLE, "test").blueprint();
                         var materials = com.dumaru.pawprint.client.placement.MaterialList.forBlueprint(sample, minecraft.player);
                         Pawprint.LOG.info("SELFTEST blueprint materials text:\n{}",
                                 com.dumaru.pawprint.client.placement.MaterialList.toText(sample.meta().name, materials, false));
-                        minecraft.setScreen(com.dumaru.pawprint.client.screen.LibraryScreen.materialsFor(sample));
+                        minecraft.gui.setScreen(com.dumaru.pawprint.client.screen.LibraryScreen.materialsFor(sample));
                     } else if (stageTicks == 60) {
-                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_materials.png", minecraft.getMainRenderTarget(),
+                        Screenshot.grab(minecraft.gameDirectory, "pawprint_selftest_materials.png", minecraft.gameRenderer.mainRenderTarget(), 1,
                                 message -> Pawprint.LOG.info("SELFTEST screenshot: {}", message.getString()));
-                        minecraft.setScreen(null);
+                        minecraft.gui.setScreen(null);
                         Pawprint.LOG.info("SELFTEST studio round trip finished");
                         next();
                     }

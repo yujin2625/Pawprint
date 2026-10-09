@@ -1,14 +1,18 @@
 package com.dumaru.pawprint.client.screen;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
+import net.minecraft.client.input.KeyEvent;
+
 import com.dumaru.pawprint.client.AdjustMode;
 import com.dumaru.pawprint.client.Freecam;
 import com.dumaru.pawprint.client.PawprintClient;
 import com.dumaru.pawprint.client.PawprintKeys;
 import com.dumaru.pawprint.client.edit.EditMode;
 import com.dumaru.pawprint.client.placement.PlacementManager;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -41,13 +45,13 @@ public class RadialMenuScreen extends Screen {
                 if (!EditMode.isActive()) {
                     EditMode.toggle(minecraft);
                 }
-                minecraft.setScreen(new EditMenuScreen());
+                minecraft.gui.setScreen(new EditMenuScreen());
             }),
             new Option("view", Items.SPYGLASS, PlacementManager::isViewing, PawprintClient::togglePlacementView),
             new Option("adjust", Items.PISTON, AdjustMode::isActive, AdjustMode::toggle),
-            new Option("library", Items.BOOKSHELF, () -> false, minecraft -> minecraft.setScreen(new LibraryScreen(null))),
-            new Option("panel", Items.CHEST, () -> false, minecraft -> minecraft.setScreen(new PlacementScreen())),
-            new Option("studio", Items.GRASS_BLOCK, () -> false, minecraft -> minecraft.setScreen(new StudioScreen())),
+            new Option("library", Items.BOOKSHELF, () -> false, minecraft -> minecraft.gui.setScreen(new LibraryScreen(null))),
+            new Option("panel", Items.CHEST, () -> false, minecraft -> minecraft.gui.setScreen(new PlacementScreen())),
+            new Option("studio", Items.GRASS_BLOCK, () -> false, minecraft -> minecraft.gui.setScreen(new StudioScreen())),
             new Option("freecam", Items.ENDER_EYE, Freecam::isActive, Freecam::toggle));
 
     private final long openedAt = Util.getMillis();
@@ -89,37 +93,46 @@ public class RadialMenuScreen extends Screen {
 
     private void choose(@Nullable Integer index) {
         Minecraft client = minecraft;
-        client.setScreen(null);
+        client.gui.setScreen(null);
         if (index != null) {
             OPTIONS.get(index).action().accept(client);
         }
     }
 
     @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (PawprintKeys.MENU.matches(keyCode, scanCode) && !clickMode) {
+    public boolean keyReleased(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
+        if (PawprintKeys.MENU.matches(event) && !clickMode) {
             releaseMenuKey();
             return true;
         }
-        return super.keyReleased(keyCode, scanCode, modifiers);
+        return super.keyReleased(event);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (clickMode && PawprintKeys.MENU.matches(keyCode, scanCode)) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
+        if (clickMode && PawprintKeys.MENU.matches(event)) {
             onClose(); // Pressing the key again closes the open menu.
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (PawprintKeys.MENU.matchesMouse(button) && !clickMode) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
+        if (PawprintKeys.MENU.matchesMouse(event) && !clickMode) {
             releaseMenuKey();
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     private void releaseMenuKey() {
@@ -132,22 +145,25 @@ public class RadialMenuScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (button == 0) {
             choose(pointed(mouseX, mouseY));
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0x50000000); // Light dimming; the world stays visible.
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         Integer pointed = pointed(mouseX, mouseY);
         for (int i = 0; i < OPTIONS.size(); i++) {
             Option option = OPTIONS.get(i);
@@ -157,16 +173,16 @@ public class RadialMenuScreen extends Screen {
             int background = Integer.valueOf(i).equals(pointed) ? 0xD03070D0 : 0xB0101010;
             graphics.fill(x, y, x + ITEM_WIDTH, y + ITEM_HEIGHT, background);
             if (on) {
-                graphics.renderOutline(x, y, ITEM_WIDTH, ITEM_HEIGHT, 0xFF55FF55);
+                graphics.outline(x, y, ITEM_WIDTH, ITEM_HEIGHT, 0xFF55FF55);
             }
-            graphics.renderItem(new ItemStack(option.icon()), x + (ITEM_WIDTH - 16) / 2, y + 3);
+            graphics.item(new ItemStack(option.icon()), x + (ITEM_WIDTH - 16) / 2, y + 3);
             Component label = Component.translatable("pawprint.menu." + option.key());
-            graphics.drawCenteredString(font, font.plainSubstrByWidth(label.getString(), ITEM_WIDTH - 4),
-                    x + ITEM_WIDTH / 2, y + 22, on ? 0x55FF55 : 0xFFFFFF);
+            graphics.centeredText(font, font.plainSubstrByWidth(label.getString(), ITEM_WIDTH - 4),
+                    x + ITEM_WIDTH / 2, y + 22, on ? 0xFF55FF55 : 0xFFFFFFFF);
         }
-        graphics.drawCenteredString(font, title, centerX(), centerY() - 10, 0xFFFFFF);
-        graphics.drawCenteredString(font, Component.translatable(clickMode ? "pawprint.menu.hint_click" : "pawprint.menu.hint_hold"),
-                centerX(), centerY() + 2, 0xA0A0A0);
+        graphics.centeredText(font, title, centerX(), centerY() - 10, 0xFFFFFFFF);
+        graphics.centeredText(font, Component.translatable(clickMode ? "pawprint.menu.hint_click" : "pawprint.menu.hint_hold"),
+                centerX(), centerY() + 2, 0xFFA0A0A0);
     }
 
     @Override

@@ -19,15 +19,15 @@ final class McEditSchematicFormat {
     }
 
     static Blueprint read(CompoundTag root, String name) throws IOException {
-        if (!root.contains("Blocks", Tag.TAG_BYTE_ARRAY)) {
+        if (!root.contains("Blocks")) {
             throw new IOException("Not a legacy schematic (no numeric block data); newer .schematic files are not supported");
         }
-        int width = root.getShort("Width") & 0xFFFF;
-        int height = root.getShort("Height") & 0xFFFF;
-        int length = root.getShort("Length") & 0xFFFF;
-        byte[] blocks = root.getByteArray("Blocks");
-        byte[] data = root.getByteArray("Data");
-        byte[] add = root.getByteArray("AddBlocks");
+        int width = root.getShortOr("Width", (short) 0) & 0xFFFF;
+        int height = root.getShortOr("Height", (short) 0) & 0xFFFF;
+        int length = root.getShortOr("Length", (short) 0) & 0xFFFF;
+        byte[] blocks = root.getByteArray("Blocks").orElse(new byte[0]);
+        byte[] data = root.getByteArray("Data").orElse(new byte[0]);
+        byte[] add = root.getByteArray("AddBlocks").orElse(new byte[0]);
         long volume = (long) width * height * length;
         if (blocks.length < volume || data.length < volume) {
             throw new IOException("Block data is shorter than the schematic size");

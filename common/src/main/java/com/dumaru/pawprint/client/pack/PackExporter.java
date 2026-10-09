@@ -11,12 +11,12 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.resources.language.ClientLanguage;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.item.BlockItem;
@@ -34,6 +34,7 @@ import net.minecraft.world.level.block.state.properties.Property;
 import org.jetbrains.annotations.Nullable;
 
 import com.dumaru.pawprint.client.render.IconRenderer;
+import com.dumaru.pawprint.client.render.RenderLayers;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -92,7 +93,7 @@ public final class PackExporter {
         if (folder.equals(".minecraft") || folder.equals("run")) {
             folder = Services.PLATFORM.getPlatformName();
         }
-        return folder + " (" + SharedConstants.getCurrentVersion().getName() + ")";
+        return folder + " (" + SharedConstants.getCurrentVersion().name() + ")";
     }
 
     public static CompletableFuture<Result> export(Minecraft minecraft, Options options) {
@@ -103,9 +104,10 @@ public final class PackExporter {
             return CompletableFuture.failedFuture(e);
         }
         ResourceManager resources = minecraft.getResourceManager();
-        return CompletableFuture.supplyAsync(() -> {
+        // Icons are drawn on the GPU and read back a frame later; the files are then written in the background.
+        return IconRenderer.render(catalog.iconItems()).thenApplyAsync(icons -> {
             try {
-                return write(catalog, resources, options);
+                return write(catalog, icons, resources, options);
             } catch (IOException e) {
                 throw new RuntimeException(e.getMessage(), e);
             }
@@ -113,8 +115,8 @@ public final class PackExporter {
     }
 
     /** Everything that must be read on the game thread. */
-    private record Catalog(JsonObject pack, JsonArray blocks, Map<String, JsonObject> names, List<ResourceLocation> blockstates,
-                           IconRenderer.@Nullable Sheet icons) {
+    private record Catalog(JsonObject pack, JsonArray blocks, Map<String, JsonObject> names, List<Identifier> blockstates,
+                           List<Map.Entry<String, ItemStack>> iconItems) {
         static Catalog collect(Minecraft minecraft, Options options) {
             Map<String, List<String>> tabsByBlock = new HashMap<>();
             Map<String, Integer> order = new HashMap<>();
@@ -130,14 +132,14 @@ public final class PackExporter {
 
             BlockColors colors = minecraft.getBlockColors();
             JsonArray blocks = new JsonArray();
-            List<ResourceLocation> blockstates = new ArrayList<>();
+            List<Identifier> blockstates = new ArrayList<>();
             Set<String> mods = new TreeSet<>();
             // Blocks the game draws in code (chests, signs…) or without a blockstate file: the web shows their icons.
             List<Map.Entry<String, ItemStack>> iconItems = new ArrayList<>();
             int index = 0;
             for (Block block : BuiltInRegistries.BLOCK) {
                 index++;
-                ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+                Identifier key = BuiltInRegistries.BLOCK.getKey(block);
                 String id = key.toString();
                 BlockState state = block.defaultBlockState();
                 JsonObject entry = new JsonObject();
@@ -166,7 +168,7 @@ public final class PackExporter {
                     entry.addProperty("fluid", BuiltInRegistries.FLUID.getKey(state.getFluidState().getType()).toString());
                 }
                 blocks.add(entry);
-                ResourceLocation blockstate = ResourceLocation.tryParse(key.getNamespace() + ":blockstates/" + key.getPath() + ".json");
+                Identifier blockstate = Identifier.tryParse(key.getNamespace() + ":blockstates/" + key.getPath() + ".json");
                 blockstates.add(blockstate);
                 if (block.asItem() != Items.AIR && (!renderShape(state).equals("model") || resources.getResource(blockstate).isEmpty())) {
                     iconItems.add(Map.entry(id, new ItemStack(block)));
@@ -190,8 +192,8 @@ public final class PackExporter {
             pack.addProperty("created", Instant.now().toString());
             pack.addProperty("generator", "pawprint-mod " + Services.PLATFORM.modInfo(Pawprint.MOD_ID).map(info -> info.version()).orElse("?"));
             pack.addProperty("source", "mod-export");
-            pack.addProperty("mcVersion", SharedConstants.getCurrentVersion().getName());
-            pack.addProperty("dataVersion", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
+            pack.addProperty("mcVersion", SharedConstants.getCurrentVersion().name());
+            pack.addProperty("dataVersion", SharedConstants.getCurrentVersion().dataVersion().version());
             pack.addProperty("loader", Services.PLATFORM.getPlatformName().toLowerCase(java.util.Locale.ROOT));
             JsonArray modList = new JsonArray();
             for (String mod : mods) {
@@ -213,7 +215,7 @@ public final class PackExporter {
             pack.add("languages", languageCodes);
             pack.addProperty("blockCount", blocks.size());
             pack.addProperty("propertiesComplete", true);
-            return new Catalog(pack, blocks, names, blockstates, IconRenderer.render(iconItems));
+            return new Catalog(pack, blocks, names, blockstates, iconItems);
         }
     }
 
@@ -232,7 +234,10 @@ public final class PackExporter {
 
     private static String renderShape(BlockState state) {
         RenderShape shape = state.getRenderShape();
-        return shape == RenderShape.MODEL ? "model" : shape == RenderShape.INVISIBLE ? "invisible" : "entity";
+        if (shape == RenderShape.INVISIBLE) {
+            return "invisible";
+        }
+        return RenderLayers.hasQuads(state) ? "model" : "entity";
     }
 
     /** Creative tabs each block's item is listed in, and a global order for the web palette. */
@@ -252,7 +257,7 @@ public final class PackExporter {
             if (tab.getType() != CreativeModeTab.Type.CATEGORY) {
                 continue;
             }
-            ResourceLocation tabKey = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+            Identifier tabKey = BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
             if (tabKey == null) {
                 continue;
             }
@@ -280,8 +285,8 @@ public final class PackExporter {
             return null;
         }
         JsonObject tint = new JsonObject();
-        tint.addProperty("kind", base == GrassColor.getDefaultColor() ? "grass"
-                : base == FoliageColor.getDefaultColor() ? "foliage"
+        tint.addProperty("kind", base == (GrassColor.getDefaultColor() & 0xFFFFFF) ? "grass"
+                : base == (FoliageColor.FOLIAGE_DEFAULT & 0xFFFFFF) ? "foliage"
                 : base == 0x3F76E4 ? "water" : "constant");
         tint.addProperty("color", hex(base));
         List<BlockState> states = block.getStateDefinition().getPossibleStates();
@@ -315,9 +320,11 @@ public final class PackExporter {
         return tint;
     }
 
+    /** The first tint layer's color without a world (default grass, foliage…), as 0xRRGGBB; -1 when untinted. */
     private static int color(BlockColors colors, BlockState state) {
         try {
-            return colors.getColor(state, null, null, 0);
+            var source = colors.getTintSource(state, 0);
+            return source == null ? -1 : source.color(state) & 0xFFFFFF;
         } catch (RuntimeException e) {
             return -1; // Some mods' color handlers need a world.
         }
@@ -329,13 +336,13 @@ public final class PackExporter {
 
     // Background part: files.
 
-    private static Result write(Catalog catalog, ResourceManager resources, Options options) throws IOException {
+    private static Result write(Catalog catalog, IconRenderer.@Nullable Sheet icons, ResourceManager resources, Options options) throws IOException {
         Map<String, byte[]> files = new LinkedHashMap<>();
-        Set<ResourceLocation> models = new LinkedHashSet<>();
-        Set<ResourceLocation> textures = new LinkedHashSet<>();
+        Set<Identifier> models = new LinkedHashSet<>();
+        Set<Identifier> textures = new LinkedHashSet<>();
         int missing = 0;
 
-        for (ResourceLocation blockstate : catalog.blockstates()) {
+        for (Identifier blockstate : catalog.blockstates()) {
             Optional<byte[]> data = read(resources, blockstate, options.resourcePacks());
             if (data.isEmpty()) {
                 continue; // Drawn in code by its mod; the web shows a stand-in.
@@ -348,15 +355,15 @@ public final class PackExporter {
             }
         }
 
-        Deque<ResourceLocation> queue = new ArrayDeque<>(models);
-        Set<ResourceLocation> seen = new HashSet<>(models);
+        Deque<Identifier> queue = new ArrayDeque<>(models);
+        Set<Identifier> seen = new HashSet<>(models);
         int modelCount = 0;
         while (!queue.isEmpty()) {
-            ResourceLocation model = queue.poll();
+            Identifier model = queue.poll();
             if (model.getPath().startsWith("builtin/")) {
                 continue;
             }
-            ResourceLocation file = ResourceLocation.tryParse(model.getNamespace() + ":models/" + model.getPath() + ".json");
+            Identifier file = Identifier.tryParse(model.getNamespace() + ":models/" + model.getPath() + ".json");
             Optional<byte[]> data = file == null ? Optional.empty() : read(resources, file, options.resourcePacks());
             if (data.isEmpty()) {
                 missing++;
@@ -367,7 +374,7 @@ public final class PackExporter {
             try {
                 JsonObject json = JsonParser.parseString(new String(data.get(), StandardCharsets.UTF_8)).getAsJsonObject();
                 if (json.has("parent") && json.get("parent").isJsonPrimitive()) {
-                    ResourceLocation parent = ResourceLocation.tryParse(json.get("parent").getAsString());
+                    Identifier parent = Identifier.tryParse(json.get("parent").getAsString());
                     if (parent != null && seen.add(parent)) {
                         queue.add(parent);
                     }
@@ -378,7 +385,7 @@ public final class PackExporter {
                                 : texture.getValue().isJsonObject() && texture.getValue().getAsJsonObject().has("sprite")
                                 ? texture.getValue().getAsJsonObject().get("sprite").getAsString() : null;
                         if (ref != null && !ref.startsWith("#")) {
-                            ResourceLocation location = ResourceLocation.tryParse(ref);
+                            Identifier location = Identifier.tryParse(ref);
                             if (location != null) {
                                 textures.add(location);
                             }
@@ -391,8 +398,8 @@ public final class PackExporter {
         }
 
         int textureCount = 0;
-        for (ResourceLocation texture : textures) {
-            ResourceLocation png = ResourceLocation.tryParse(texture.getNamespace() + ":textures/" + texture.getPath() + ".png");
+        for (Identifier texture : textures) {
+            Identifier png = Identifier.tryParse(texture.getNamespace() + ":textures/" + texture.getPath() + ".png");
             Optional<byte[]> data = png == null ? Optional.empty() : read(resources, png, options.resourcePacks());
             if (data.isEmpty()) {
                 missing++;
@@ -400,7 +407,7 @@ public final class PackExporter {
             }
             files.put(assetPath(png), data.get());
             textureCount++;
-            ResourceLocation meta = ResourceLocation.tryParse(png + ".mcmeta");
+            Identifier meta = Identifier.tryParse(png + ".mcmeta");
             if (meta != null) {
                 read(resources, meta, options.resourcePacks()).ifPresent(bytes -> files.put(assetPath(meta), bytes));
             }
@@ -418,29 +425,29 @@ public final class PackExporter {
             }
             JsonObject colors = new JsonObject();
             colors.addProperty("grass", hex(GrassColor.getDefaultColor()));
-            colors.addProperty("foliage", hex(FoliageColor.getDefaultColor()));
+            colors.addProperty("foliage", hex(FoliageColor.FOLIAGE_DEFAULT));
             colors.addProperty("water", "#3F76E4");
             put(zip, "colors.json", GSON.toJson(colors).getBytes(StandardCharsets.UTF_8));
             for (Map.Entry<String, byte[]> entry : files.entrySet()) {
                 put(zip, entry.getKey(), entry.getValue());
             }
-            if (catalog.icons() != null) {
-                JsonObject icons = new JsonObject();
-                icons.addProperty("cell", IconRenderer.CELL);
-                icons.addProperty("columns", IconRenderer.COLUMNS);
+            if (icons != null) {
+                JsonObject iconJson = new JsonObject();
+                iconJson.addProperty("cell", IconRenderer.CELL);
+                iconJson.addProperty("columns", IconRenderer.COLUMNS);
                 JsonObject cells = new JsonObject();
-                catalog.icons().icons().forEach(cells::addProperty);
-                icons.add("icons", cells);
-                put(zip, "icons.json", GSON.toJson(icons).getBytes(StandardCharsets.UTF_8));
-                put(zip, "icons.png", catalog.icons().png());
+                icons.icons().forEach(cells::addProperty);
+                iconJson.add("icons", cells);
+                put(zip, "icons.json", GSON.toJson(iconJson).getBytes(StandardCharsets.UTF_8));
+                put(zip, "icons.png", icons.png());
             }
         }
         Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
         return new Result(file, catalog.blocks().size(), modelCount, textureCount, missing,
-                catalog.icons() == null ? 0 : catalog.icons().icons().size());
+                icons == null ? 0 : icons.icons().size());
     }
 
-    private static void collectModels(JsonElement blockstate, Set<ResourceLocation> out) {
+    private static void collectModels(JsonElement blockstate, Set<Identifier> out) {
         if (!blockstate.isJsonObject()) {
             return;
         }
@@ -459,11 +466,11 @@ public final class PackExporter {
         }
     }
 
-    private static void addModels(JsonElement apply, Set<ResourceLocation> out) {
+    private static void addModels(JsonElement apply, Set<Identifier> out) {
         if (apply.isJsonArray()) {
             apply.getAsJsonArray().forEach(element -> addModels(element, out));
         } else if (apply.isJsonObject() && apply.getAsJsonObject().has("model")) {
-            ResourceLocation model = ResourceLocation.tryParse(apply.getAsJsonObject().get("model").getAsString());
+            Identifier model = Identifier.tryParse(apply.getAsJsonObject().get("model").getAsString());
             if (model != null) {
                 out.add(model);
             }
@@ -474,7 +481,7 @@ public final class PackExporter {
      * Reads a resource. With resource packs off, takes the topmost copy that does not come from a user resource pack,
      * so the pack shows blocks the way the game and its mods ship them.
      */
-    private static Optional<byte[]> read(ResourceManager resources, ResourceLocation location, boolean resourcePacks) {
+    private static Optional<byte[]> read(ResourceManager resources, Identifier location, boolean resourcePacks) {
         try {
             Optional<Resource> resource;
             if (resourcePacks) {
@@ -501,7 +508,7 @@ public final class PackExporter {
         }
     }
 
-    private static String assetPath(ResourceLocation location) {
+    private static String assetPath(Identifier location) {
         return "assets/" + location.getNamespace() + "/" + location.getPath();
     }
 

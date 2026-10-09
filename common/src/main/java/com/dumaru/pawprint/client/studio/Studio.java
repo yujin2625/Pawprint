@@ -105,10 +105,11 @@ public final class Studio {
 
     private static void leaveWorld(Minecraft minecraft) {
         boolean local = minecraft.isLocalServer();
+        Component message = Component.translatable(local ? "menu.savingLevel" : "pawprint.studio.leaving");
         if (minecraft.level != null) {
-            minecraft.level.disconnect();
+            minecraft.level.disconnect(message);
         }
-        minecraft.disconnect(new GenericMessageScreen(Component.translatable(local ? "menu.savingLevel" : "pawprint.studio.leaving")));
+        minecraft.disconnect(new GenericMessageScreen(message), false);
     }
 
     // In the studio
@@ -132,7 +133,10 @@ public final class Studio {
         }
         pasteProgress = 0;
         PawprintClient.notify(minecraft, Component.translatable("pawprint.studio.pasting", 0));
-        server.execute(() -> new PasteJob(server, server.overworld(), snapshot, current).run());
+        server.execute(() -> {
+            StudioWorld.applyRules(server);
+            new PasteJob(server, server.overworld(), snapshot, current).run();
+        });
     }
 
     /** Clears the snapshot area, then pastes the snapshot in batches, then moves the player above it. */
@@ -194,7 +198,7 @@ public final class Studio {
             int total = chunkCount() * 64 + positions.length;
             pasteProgress = (int) (100L * (chunkCursor * 64L + blockCursor) / Math.max(1, total));
             if (chunkCursor < chunkCount() || blockCursor < positions.length) {
-                server.tell(new TickTask(server.getTickCount() + 1, this));
+                server.schedule(new TickTask(server.getTickCount() + 1, this));
                 return;
             }
             finish();
@@ -239,7 +243,7 @@ public final class Studio {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 player.getAbilities().flying = true;
                 player.onUpdateAbilities();
-                player.teleportTo(level, x + 0.5, y, z + 0.5, player.getYRot(), player.getXRot());
+                player.teleportTo(level, x + 0.5, y, z + 0.5, java.util.Set.of(), player.getYRot(), player.getXRot(), true);
             }
             current.pasted = true;
             current.save();
@@ -361,7 +365,7 @@ public final class Studio {
         }
         leaveWorld(minecraft);
         if (current.returnType.equals("local")) {
-            minecraft.createWorldOpenFlows().openWorld(current.localFolder, () -> minecraft.setScreen(new TitleScreen()));
+            minecraft.createWorldOpenFlows().openWorld(current.localFolder, () -> minecraft.gui.setScreen(new TitleScreen()));
         } else {
             ServerData data = new ServerData(current.serverName, current.serverIp, ServerData.Type.OTHER);
             ConnectScreen.startConnecting(new JoinMultiplayerScreen(new TitleScreen()), minecraft,

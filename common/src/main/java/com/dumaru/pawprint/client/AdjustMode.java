@@ -47,13 +47,13 @@ public final class AdjustMode {
     }
 
     public static void tick(Minecraft minecraft) {
-        boolean pauseOpen = minecraft.screen instanceof PauseScreen;
+        boolean pauseOpen = minecraft.gui.screen() instanceof PauseScreen;
         if (active) {
             if (PlacementManager.active() == null || minecraft.player == null) {
                 active = false;
             } else if (pauseOpen && !pauseWasOpen) {
                 // Escape ends adjusting instead of pausing.
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
                 finish(minecraft);
                 pauseOpen = false;
             }
@@ -70,9 +70,9 @@ public final class AdjustMode {
         int step = amount > 0 ? 1 : -1;
         Direction facing = ViewRay.facing(minecraft);
         Direction direction;
-        if (Screen.hasShiftDown()) {
+        if (net.minecraft.client.Minecraft.getInstance().hasShiftDown()) {
             direction = Direction.UP;
-        } else if (Screen.hasControlDown()) {
+        } else if (net.minecraft.client.Minecraft.getInstance().hasControlDown()) {
             direction = facing.getClockWise();
         } else {
             direction = facing;

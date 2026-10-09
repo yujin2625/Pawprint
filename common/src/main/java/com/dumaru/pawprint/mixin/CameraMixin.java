@@ -2,8 +2,6 @@ package com.dumaru.pawprint.mixin;
 
 import com.dumaru.pawprint.client.Freecam;
 import net.minecraft.client.Camera;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,9 +24,8 @@ public abstract class CameraMixin {
     @Shadow
     protected abstract void setRotation(float yRot, float xRot);
 
-    @Inject(method = "setup", at = @At("TAIL"))
-    private void pawprint$freecam(BlockGetter level, Entity entity, boolean detached, boolean thirdPersonReverse,
-                                  float partialTick, CallbackInfo ci) {
+    @Inject(method = "alignWithEntity", at = @At("TAIL"))
+    private void pawprint$freecam(float partialTick, CallbackInfo ci) {
         if (Freecam.isActive()) {
             Vec3 position = Freecam.position(partialTick);
             setRotation(Freecam.yaw(), Freecam.pitch());

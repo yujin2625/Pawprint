@@ -8,47 +8,34 @@ import com.dumaru.pawprint.client.edit.EditTarget;
 import com.dumaru.pawprint.client.placement.GhostStore;
 import com.dumaru.pawprint.client.placement.Placement;
 import com.dumaru.pawprint.client.placement.PlacementManager;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexBuffer;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.renderer.culling.Frustum;
-import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 /**
- * Draws ghost blocks, the shape preview, the edit target and the capture selection. Called by each loader once
- * per frame after translucent terrain, while the model-view matrix already holds the camera rotation.
+ * Draws ghost blocks, the shape preview, the edit target and the capture selection. Each loader calls
+ * {@link #submit} once per frame while the game collects world geometry.
  *
- * <p>Ghost blocks are cached as one GPU mesh per 16x16x16 section ({@link GhostMesh}) and rebuilt only when that
- * section's statuses change, a few sections per frame. Drawing a frame is then a handful of buffer draws,
- * which keeps very large blueprints smooth. Small, fast-changing things (preview, outlines) are drawn directly.
+ * <p>Ghost blocks are kept as one mesh per 16x16x16 section ({@link GhostMesh}) and rebuilt only when that section's
+ * statuses change, a few sections per frame; a frame only hands the cached vertices to the game. Small,
+ * fast-changing things (preview, outlines) are built each frame.
  */
 public final class GhostRenderer {
-    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new ByteBufferBuilder(1 << 18));
-    private static final TintingConsumer TINT = new TintingConsumer();
-    private static final RandomSource RANDOM = RandomSource.create();
-
     /** Time per frame allowed for rebuilding section meshes. */
     private static final long REBUILD_BUDGET_NANOS = 4_000_000;
     /** Meshes this far beyond the render distance are freed. */
@@ -75,9 +62,6 @@ public final class GhostRenderer {
     }
 
     private static void release(GhostStore.Section section) {
-        if (section.mesh instanceof GhostMesh mesh) {
-            mesh.close();
-        }
         section.mesh = null;
         section.meshDirty = true;
     }
@@ -91,40 +75,37 @@ public final class GhostRenderer {
                 statFrames, statFrames == 0 ? 0 : statNanos / 1e6 / statFrames, statMaxNanos / 1e6, statMeshesBuilt);
     }
 
-    public static void render(Camera camera, @Nullable Frustum frustum) {
+    /** Hands this frame's ghost geometry to the game. {@code poseStack} is at the camera, without its offset. */
+    public static void submit(SubmitNodeCollector collector, PoseStack poseStack, CameraRenderState camera) {
         long start = System.nanoTime();
-        renderTimed(camera, frustum);
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft.level;
+        if (level != null) {
+            Vec3 cam = camera.pos;
+            if (PlacementManager.isVisible()) {
+                submitSections(collector, poseStack, level, cam, camera.cullFrustum);
+            }
+            if (++frame % 40 == 0) {
+                freeFarMeshes(cam);
+            }
+            submitImmediate(collector, poseStack, minecraft, level, cam);
+        }
         long took = System.nanoTime() - start;
         statFrames++;
         statNanos += took;
         statMaxNanos = Math.max(statMaxNanos, took);
     }
 
-    private static void renderTimed(Camera camera, @Nullable Frustum frustum) {
-        Minecraft minecraft = Minecraft.getInstance();
-        ClientLevel level = minecraft.level;
-        if (level == null) {
-            return;
-        }
-        Vec3 cam = camera.getPosition();
-        if (PlacementManager.isVisible()) {
-            renderSections(level, cam, frustum);
-        }
-        if (++frame % 40 == 0) {
-            freeFarMeshes(cam);
-        }
-        renderImmediate(minecraft, level, cam);
-    }
-
     // Cached sections
 
-    private static void renderSections(ClientLevel level, Vec3 cam, @Nullable Frustum frustum) {
+    private static void submitSections(SubmitNodeCollector collector, PoseStack poseStack, ClientLevel level, Vec3 cam,
+                                       @Nullable Frustum frustum) {
         double range = Pawprint.config().ghostRenderDistance + 8;
         double rangeSq = range * range;
         List<GhostStore.Section> visible = new ArrayList<>();
+        Integer layer = PlacementManager.layer();
         for (GhostStore store : List.of(PlacementManager.placementGhosts(), PlacementManager.draftGhosts())) {
             for (GhostStore.Section section : store.sections()) {
-                Integer layer = PlacementManager.layer();
                 if (layer != null && (layer < section.originY || layer >= section.originY + 16)) {
                     continue;
                 }
@@ -137,48 +118,41 @@ public final class GhostRenderer {
         if (visible.isEmpty()) {
             return;
         }
-        visible.sort(Comparator.comparingDouble(section -> GhostStore.distanceSq(section, cam)));
+        // Far to near, so see-through ghosts in front blend over those behind.
+        visible.sort(Comparator.comparingDouble((GhostStore.Section section) -> GhostStore.distanceSq(section, cam)).reversed());
 
         GhostWorld world = new GhostWorld(level);
         long deadline = System.nanoTime() + REBUILD_BUDGET_NANOS;
-        for (GhostStore.Section section : visible) {
+        for (int i = visible.size() - 1; i >= 0; i--) { // Nearest first while time lasts.
+            GhostStore.Section section = visible.get(i);
             if ((section.meshDirty || section.mesh == null) && System.nanoTime() < deadline) {
-                release(section);
-                section.mesh = GhostMesh.build(section, world, cam);
+                section.mesh = GhostMesh.build(section, world);
                 section.meshDirty = false;
                 statMeshesBuilt++;
             }
         }
-        draw(RenderType.translucent(), visible, cam, GhostMesh.MODELS);
-        draw(RenderType.debugFilledBox(), visible, cam, GhostMesh.BOXES);
-        draw(RenderType.lines(), visible, cam, GhostMesh.LINES);
+        for (GhostStore.Section section : visible) {
+            if (!(section.mesh instanceof GhostMesh mesh)) {
+                continue;
+            }
+            poseStack.pushPose();
+            poseStack.translate(section.originX - cam.x, section.originY - cam.y, section.originZ - cam.z);
+            submit(collector, poseStack, mesh.models, mesh.shapes);
+            poseStack.popPose();
+        }
     }
 
-    private static void draw(RenderType type, List<GhostStore.Section> sections, Vec3 cam, int layer) {
-        type.setupRenderState();
-        ShaderInstance shader = RenderSystem.getShader();
-        if (shader != null) {
-            if (shader.CHUNK_OFFSET != null) {
-                shader.CHUNK_OFFSET.set(0f, 0f, 0f); // Offsets go into the model-view matrix instead.
-            }
-            Matrix4f modelView = RenderSystem.getModelViewMatrix();
-            Matrix4f projection = RenderSystem.getProjectionMatrix();
-            for (GhostStore.Section section : sections) {
-                if (!(section.mesh instanceof GhostMesh mesh)) {
-                    continue;
-                }
-                VertexBuffer buffer = mesh.get(layer);
-                if (buffer == null) {
-                    continue;
-                }
-                Matrix4f matrix = new Matrix4f(modelView).translate(
-                        (float) (section.originX - cam.x), (float) (section.originY - cam.y), (float) (section.originZ - cam.z));
-                buffer.bind();
-                buffer.drawWithShader(matrix, projection, shader);
-            }
-            VertexBuffer.unbind();
+    private static void submit(SubmitNodeCollector collector, PoseStack poseStack, GhostGeometry.Quads models,
+                               GhostGeometry.Shapes shapes) {
+        if (!models.isEmpty()) {
+            collector.submitCustomGeometry(poseStack, RenderTypes.translucentMovingBlock(), models::replay);
         }
-        type.clearRenderState();
+        if (shapes.hasQuads()) {
+            collector.submitCustomGeometry(poseStack, RenderTypes.debugQuads(), shapes::replayQuads);
+        }
+        if (shapes.hasLines()) {
+            collector.submitCustomGeometry(poseStack, RenderTypes.lines(), shapes::replayLines);
+        }
     }
 
     private static void freeFarMeshes(Vec3 cam) {
@@ -198,90 +172,80 @@ public final class GhostRenderer {
                 section.originX + 16, section.originY + 16, section.originZ + 16);
     }
 
-    // Immediate: preview, outlines, selection
+    // Built each frame: preview, outlines, selection. Coordinates are relative to the camera.
 
-    private static void renderImmediate(Minecraft minecraft, ClientLevel level, Vec3 cam) {
-        PoseStack poseStack = new PoseStack();
+    private static void submitImmediate(SubmitNodeCollector collector, PoseStack poseStack, Minecraft minecraft,
+                                        ClientLevel level, Vec3 cam) {
+        GhostGeometry.Quads models = new GhostGeometry.Quads();
+        GhostGeometry.Shapes lines = new GhostGeometry.Shapes();
         Preview preview = Preview.current();
         if (preview != null && !preview.erase() && preview.state() != null
                 && preview.state().getRenderShape() == RenderShape.MODEL && preview.cells().size() <= MAX_PREVIEW_MODELS) {
             GhostWorld world = new GhostWorld(level);
-            TINT.set(BUFFERS.getBuffer(RenderType.translucent()), 0.8f, 0.9f, 1f,
-                    Pawprint.config().ghostOpacity * PREVIEW_OPACITY, Pawprint.config().ghostFullBright);
+            ModelBlockRenderer renderer = new ModelBlockRenderer(minecraft.options.ambientOcclusion().get(), false, minecraft.getBlockColors());
+            models.tint(0.8f, 0.9f, 1f, Pawprint.config().ghostOpacity * PREVIEW_OPACITY, Pawprint.config().ghostFullBright);
             for (long packed : preview.cells()) {
-                drawBlock(minecraft, world, poseStack, TINT, cam, preview.state(), BlockPos.of(packed));
+                BlockPos pos = BlockPos.of(packed);
+                GhostMesh.tesselate(renderer, models, world, minecraft.getModelManager().getBlockStateModelSet(), preview.state(), pos,
+                        (float) (pos.getX() - cam.x), (float) (pos.getY() - cam.y), (float) (pos.getZ() - cam.z));
             }
-            BUFFERS.endBatch(RenderType.translucent());
         }
 
-        VertexConsumer lines = BUFFERS.getBuffer(RenderType.lines());
         Placement active = PlacementManager.active();
         if (active != null && PlacementManager.isVisible()) {
-            boundsBox(poseStack, lines, cam, active.worldBounds(), 0.3f, 0.9f, 1f, 1f);
+            boundsBox(lines, cam, active.worldBounds(), 0.3f, 0.9f, 1f, 1f);
         }
-        renderSelection(poseStack, lines, cam);
-        renderEditTarget(poseStack, lines, cam, preview);
-        BUFFERS.endBatch(RenderType.lines());
+        addSelection(lines, cam);
+        addEditTarget(lines, cam, preview);
+        submit(collector, poseStack, models, lines);
     }
 
-    private static void drawBlock(Minecraft minecraft, GhostWorld world, PoseStack poseStack, VertexConsumer consumer,
-                                  Vec3 cam, BlockState state, BlockPos pos) {
-        poseStack.pushPose();
-        poseStack.translate(pos.getX() - cam.x, pos.getY() - cam.y, pos.getZ() - cam.z);
-        try {
-            minecraft.getBlockRenderer().getModelRenderer().tesselateBlock(world, minecraft.getBlockRenderer().getBlockModel(state),
-                    state, pos, poseStack, consumer, false, RANDOM, state.getSeed(pos), OverlayTexture.NO_OVERLAY);
-        } catch (RuntimeException e) {
-            Pawprint.LOG.debug("Could not draw preview {}", state, e);
-        }
-        poseStack.popPose();
-    }
-
-    private static void renderEditTarget(PoseStack poseStack, VertexConsumer lines, Vec3 cam, @Nullable Preview preview) {
+    private static void addEditTarget(GhostGeometry.Shapes lines, Vec3 cam, @Nullable Preview preview) {
         if (!EditMode.isActive()) {
             return;
         }
         if (preview != null) {
-            boundsBox(poseStack, lines, cam, preview.bounds(), 1f, 0.85f, 0.2f, 1f);
+            boundsBox(lines, cam, preview.bounds(), 1f, 0.85f, 0.2f, 1f);
             if (preview.erase()) {
                 int drawn = 0;
                 for (long packed : preview.cells()) {
                     if (Draft.get(packed) != null && drawn++ < MAX_ERASE_OUTLINES) {
-                        lineBox(poseStack, lines, cam, BlockPos.of(packed), -0.1, 1f, 0.3f, 0.3f, 1f);
+                        lineBox(lines, cam, BlockPos.of(packed), -0.1, 1f, 0.3f, 0.3f, 1f);
                     }
                 }
             }
         }
         EditTarget target = EditMode.target();
         if (target != null) {
-            lineBox(poseStack, lines, cam, target.placePos(), 0.003, 1f, 1f, 1f, 0.8f);
+            lineBox(lines, cam, target.placePos(), 0.003, 1f, 1f, 1f, 0.8f);
             if (target.hovered() != null) {
-                lineBox(poseStack, lines, cam, target.hovered(), 0.006, 1f, 0.4f, 0.4f, 0.6f);
+                lineBox(lines, cam, target.hovered(), 0.006, 1f, 0.4f, 0.4f, 0.6f);
             }
         }
     }
 
-    private static void renderSelection(PoseStack poseStack, VertexConsumer lines, Vec3 cam) {
+    private static void addSelection(GhostGeometry.Shapes lines, Vec3 cam) {
         BoundingBox box = Selection.box();
         if (box != null) {
-            boundsBox(poseStack, lines, cam, box, 1f, 1f, 1f, 1f);
+            boundsBox(lines, cam, box, 1f, 1f, 1f, 1f);
             return;
         }
         BlockPos first = Selection.first();
         if (first != null) {
-            lineBox(poseStack, lines, cam, first, 0.004, 0.4f, 1f, 0.4f, 1f);
+            lineBox(lines, cam, first, 0.004, 0.4f, 1f, 0.4f, 1f);
         }
     }
 
-    private static void lineBox(PoseStack poseStack, VertexConsumer lines, Vec3 cam, BlockPos pos, double grow,
-                                float r, float g, float b, float a) {
-        LevelRenderer.renderLineBox(poseStack, lines, new AABB(pos).inflate(grow).move(-cam.x, -cam.y, -cam.z), r, g, b, a);
+    private static void lineBox(GhostGeometry.Shapes lines, Vec3 cam, BlockPos pos, double grow, float r, float g, float b, float a) {
+        AABB box = new AABB(pos).inflate(grow).move(-cam.x, -cam.y, -cam.z);
+        lines.lineBox((float) box.minX, (float) box.minY, (float) box.minZ, (float) box.maxX, (float) box.maxY, (float) box.maxZ,
+                GhostGeometry.argb(r, g, b, a), 2f);
     }
 
-    private static void boundsBox(PoseStack poseStack, VertexConsumer lines, Vec3 cam, BoundingBox box,
-                                  float r, float g, float b, float a) {
+    private static void boundsBox(GhostGeometry.Shapes lines, Vec3 cam, BoundingBox box, float r, float g, float b, float a) {
         AABB aabb = new AABB(box.minX(), box.minY(), box.minZ(), box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1)
                 .inflate(0.01).move(-cam.x, -cam.y, -cam.z);
-        LevelRenderer.renderLineBox(poseStack, lines, aabb, r, g, b, a);
+        lines.lineBox((float) aabb.minX, (float) aabb.minY, (float) aabb.minZ, (float) aabb.maxX, (float) aabb.maxY, (float) aabb.maxZ,
+                GhostGeometry.argb(r, g, b, a), 2f);
     }
 }

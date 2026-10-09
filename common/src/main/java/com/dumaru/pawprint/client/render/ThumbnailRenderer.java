@@ -2,37 +2,28 @@ package com.dumaru.pawprint.client.render;
 
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.Blueprint;
-import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
-import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.block.BlockStateModelSet;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Draws a blueprint into an off-screen image from above and to the south-east, the way the front (south side)
- * of a build is usually seen. Must run on the render thread.
+ * Draws a blueprint into an off-screen image from above and to the south-east, the way the front (south side) of a
+ * build is usually seen. Call on the render thread; the image arrives a frame or so later.
  */
 public final class ThumbnailRenderer {
     public static final int SIZE = 128;
@@ -41,89 +32,66 @@ public final class ThumbnailRenderer {
     /** Shells larger than this are not rendered; drawing them would stall the frame. */
     public static final int MAX_BLOCKS = 300_000;
 
-    private static final List<RenderType> LAYERS = List.of(
-            RenderType.solid(), RenderType.cutoutMipped(), RenderType.cutout(), RenderType.translucent());
-    private static final MultiBufferSource.BufferSource BUFFERS = MultiBufferSource.immediate(new ByteBufferBuilder(1 << 18));
-    private static final TintingConsumer TINT = new TintingConsumer();
-    private static final RandomSource RANDOM = RandomSource.create();
-    private static @Nullable TextureTarget target;
-
     private ThumbnailRenderer() {
     }
 
-    /** Returns a new image the caller must close, or null when the blueprint is too large or empty. */
-    public static @Nullable NativeImage render(Blueprint blueprint) {
+    /** A new image the caller must close, or null when the blueprint is too large or empty. */
+    public static CompletableFuture<@Nullable NativeImage> render(Blueprint blueprint) {
         if (blueprint.blocks().isEmpty()) {
-            return null;
+            return CompletableFuture.completedFuture(null);
         }
         LongSet only = blueprint.blocks().size() > SHELL_THRESHOLD ? shell(blueprint) : null;
         if ((only != null ? only.size() : blueprint.blocks().size()) > MAX_BLOCKS) {
-            return null;
+            return CompletableFuture.completedFuture(null);
         }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (target == null) {
-            target = new TextureTarget(SIZE, SIZE, true, Minecraft.ON_OSX);
-        }
-        target.setClearColor(0f, 0f, 0f, 0f);
-        target.clear(Minecraft.ON_OSX);
-        target.bindWrite(true);
+        GhostGeometry.Quads opaque = new GhostGeometry.Quads().tint(1f, 1f, 1f, 1f, true);
+        GhostGeometry.Quads translucent = new GhostGeometry.Quads().tint(1f, 1f, 1f, 1f, true);
+        tesselate(blueprint, only, opaque, translucent);
 
         float sx = blueprint.sizeX();
         float sy = blueprint.sizeY();
         float sz = blueprint.sizeZ();
         float radius = (float) Math.sqrt(sx * sx + sy * sy + sz * sz) / 2f;
-        RenderSystem.backupProjectionMatrix();
-        RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(-radius, radius, -radius, radius, -1000f, 1000f),
-                VertexSorting.ORTHOGRAPHIC_Z);
-        Matrix4fStack modelView = RenderSystem.getModelViewStack();
-        modelView.pushMatrix();
-        modelView.identity();
-        RenderSystem.applyModelViewMatrix();
-        float fogStart = RenderSystem.getShaderFogStart();
-        RenderSystem.setShaderFogStart(Float.MAX_VALUE);
-
-        try {
-            PoseStack poseStack = new PoseStack();
-            poseStack.mulPose(Axis.XP.rotationDegrees(30f));
-            poseStack.mulPose(Axis.YP.rotationDegrees(-45f));
+        float scale = SIZE / 2f / radius;
+        Offscreen.Step step = (poseStack, storage) -> {
+            poseStack.translate(SIZE / 2f, SIZE / 2f, 0f);
+            poseStack.scale(scale, -scale, scale); // y points down in this projection, as for GUI items.
+            poseStack.rotate(Axis.XP.rotationDegrees(30f));
+            poseStack.rotate(Axis.YP.rotationDegrees(-45f));
             poseStack.translate(-sx / 2f, -sy / 2f, -sz / 2f);
-            drawBlocks(minecraft, blueprint, poseStack, only);
-        } finally {
-            RenderSystem.setShaderFogStart(fogStart);
-            modelView.popMatrix();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.restoreProjectionMatrix();
-            minecraft.getMainRenderTarget().bindWrite(true);
-        }
-        return download(target);
+            if (!opaque.isEmpty()) {
+                storage.submitCustomGeometry(poseStack, RenderTypes.cutoutMovingBlock(), opaque::replay);
+            }
+            if (!translucent.isEmpty()) {
+                storage.submitCustomGeometry(poseStack, RenderTypes.translucentMovingBlock(), translucent::replay);
+            }
+        };
+        return Offscreen.render("thumbnail", SIZE, SIZE, List.of(step)).thenApply(image -> image);
     }
 
-    private static void drawBlocks(Minecraft minecraft, Blueprint blueprint, PoseStack poseStack, @Nullable LongSet only) {
-        BlockRenderDispatcher blocks = minecraft.getBlockRenderer();
+    private static void tesselate(Blueprint blueprint, @Nullable LongSet only, GhostGeometry.Quads opaque, GhostGeometry.Quads translucent) {
+        Minecraft minecraft = Minecraft.getInstance();
+        ModelBlockRenderer renderer = new ModelBlockRenderer(true, true, minecraft.getBlockColors());
+        BlockStateModelSet models = minecraft.getModelManager().getBlockStateModelSet();
         BlueprintWorld world = new BlueprintWorld(blueprint);
-        for (RenderType layer : LAYERS) {
-            TINT.set(BUFFERS.getBuffer(layer), 1f, 1f, 1f, 1f, true);
-            for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
-                BlockState state = blueprint.state(entry.getIntValue());
-                if (only != null && !only.contains(entry.getLongKey())) {
-                    continue;
-                }
-                if (state == null || state.getRenderShape() != RenderShape.MODEL
-                        || ItemBlockRenderTypes.getChunkRenderType(state) != layer) {
-                    continue;
-                }
-                BlockPos pos = BlockPos.of(entry.getLongKey());
-                poseStack.pushPose();
-                poseStack.translate(pos.getX(), pos.getY(), pos.getZ());
-                try {
-                    blocks.getModelRenderer().tesselateBlock(world, blocks.getBlockModel(state), state, pos, poseStack,
-                            TINT, true, RANDOM, state.getSeed(pos), OverlayTexture.NO_OVERLAY);
-                } catch (RuntimeException e) {
-                    Pawprint.LOG.debug("Skipping {} in thumbnail", state, e);
-                }
-                poseStack.popPose();
+        var toOpaque = opaque.output();
+        var toTranslucent = translucent.output();
+        for (Long2IntMap.Entry entry : blueprint.blocks().long2IntEntrySet()) {
+            if (only != null && !only.contains(entry.getLongKey())) {
+                continue;
             }
-            BUFFERS.endBatch(layer);
+            BlockState state = blueprint.state(entry.getIntValue());
+            if (state == null || state.getRenderShape() != RenderShape.MODEL) {
+                continue;
+            }
+            BlockPos pos = BlockPos.of(entry.getLongKey());
+            try {
+                renderer.tesselateBlock((x, y, z, quad, instance) -> (quad.materialInfo().layer() == ChunkSectionLayer.TRANSLUCENT
+                                ? toTranslucent : toOpaque).put(x, y, z, quad, instance),
+                        pos.getX(), pos.getY(), pos.getZ(), world, pos, state, models.get(state), state.getSeed(pos));
+            } catch (RuntimeException e) {
+                Pawprint.LOG.debug("Skipping {} in thumbnail", state, e);
+            }
         }
     }
 
@@ -142,13 +110,5 @@ public final class ThumbnailRenderer {
             }
         }
         return shell;
-    }
-
-    private static NativeImage download(RenderTarget source) {
-        NativeImage image = new NativeImage(SIZE, SIZE, false);
-        RenderSystem.bindTexture(source.getColorTextureId());
-        image.downloadTexture(0, false);
-        image.flipY();
-        return image;
     }
 }

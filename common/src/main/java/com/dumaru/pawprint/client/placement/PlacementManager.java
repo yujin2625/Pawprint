@@ -79,7 +79,7 @@ public final class PlacementManager {
             Studio.onWorldChanged(minecraft, newServer, newDimension);
         }
         if (minecraft.level != null && minecraft.player != null) {
-            Vec3 center = minecraft.gameRenderer.getMainCamera().getPosition();
+            Vec3 center = minecraft.gameRenderer.mainCamera().position();
             double range = Pawprint.config().ghostRenderDistance;
             placementGhosts.updateStatus(minecraft.level, center, range, STATUS_BUDGET_PER_TICK);
             draftGhosts.updateStatus(minecraft.level, center, range, STATUS_BUDGET_PER_TICK);
@@ -221,7 +221,7 @@ public final class PlacementManager {
     private static void checkNearby(GhostStore store) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level != null) {
-            store.updateStatus(minecraft.level, minecraft.gameRenderer.getMainCamera().getPosition(),
+            store.updateStatus(minecraft.level, minecraft.gameRenderer.mainCamera().position(),
                     Pawprint.config().ghostRenderDistance, STATUS_BUDGET_ON_CHANGE);
         }
     }

@@ -1,6 +1,8 @@
 package com.dumaru.pawprint.client.screen;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.input.KeyEvent;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -54,25 +56,28 @@ final class TextInputScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
         if (keyCode == 257 || keyCode == 335) { // Enter, keypad Enter
             confirm();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 40, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, height / 2 - 40, 0xFFFFFFFF);
         if (hint != null) {
-            graphics.drawCenteredString(font, hint, width / 2, height / 2 - 26, 0xA0A0A0);
+            graphics.centeredText(font, hint, width / 2, height / 2 - 26, 0xFFA0A0A0);
         }
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

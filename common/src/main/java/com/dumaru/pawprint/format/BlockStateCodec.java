@@ -21,7 +21,7 @@ public final class BlockStateCodec {
     /** Returns null when the block is not registered in this game, e.g. a block from a mod that is not installed. */
     public static @Nullable BlockState parse(String value) {
         try {
-            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), value, false).blockState();
+            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, value, false).blockState();
         } catch (CommandSyntaxException e) {
             return null;
         }

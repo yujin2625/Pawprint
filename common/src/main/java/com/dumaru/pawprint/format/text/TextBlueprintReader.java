@@ -15,7 +15,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -278,10 +278,10 @@ public final class TextBlueprintReader {
         String result;
         try {
             result = BlockStateCodec.serialize(
-                    BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), trimmed, false).blockState());
+                    BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, trimmed, false).blockState());
         } catch (CommandSyntaxException e) {
             int bracket = trimmed.indexOf('[');
-            ResourceLocation id = ResourceLocation.tryParse(bracket < 0 ? trimmed : trimmed.substring(0, bracket));
+            Identifier id = Identifier.tryParse(bracket < 0 ? trimmed : trimmed.substring(0, bracket));
             if (id == null) {
                 throw new FormatException(where + ": \"" + trimmed + "\" is not a valid block ID.");
             }

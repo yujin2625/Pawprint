@@ -29,7 +29,7 @@ public final class ClientContext {
 
     public static @Nullable String dimension() {
         Minecraft minecraft = Minecraft.getInstance();
-        return minecraft.level == null ? null : minecraft.level.dimension().location().toString();
+        return minecraft.level == null ? null : minecraft.level.dimension().identifier().toString();
     }
 
     /** Turns any string into a single safe file or folder name. */

@@ -1,8 +1,6 @@
 package com.dumaru.pawprint.fabric;
 
 import com.dumaru.pawprint.platform.Platform;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -43,17 +41,6 @@ public class FabricPlatform implements Platform {
 
     @Override
     public String renderLayer(BlockState state) {
-        // Fabric API registers block render layers into the vanilla map.
-        RenderType type = ItemBlockRenderTypes.getChunkRenderType(state);
-        if (type == RenderType.translucent()) {
-            return "translucent";
-        }
-        if (type == RenderType.cutoutMipped()) {
-            return "cutout_mipped";
-        }
-        if (type == RenderType.cutout()) {
-            return "cutout";
-        }
-        return "solid";
+        return com.dumaru.pawprint.client.render.RenderLayers.of(state);
     }
 }

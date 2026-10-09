@@ -18,26 +18,26 @@ final class SpongeSchematicFormat {
     }
 
     static Blueprint read(CompoundTag root, String name) throws IOException {
-        CompoundTag schematic = root.contains("Schematic", Tag.TAG_COMPOUND) ? root.getCompound("Schematic") : root;
-        int version = schematic.getInt("Version");
-        int dataVersion = schematic.getInt("DataVersion");
-        int width = schematic.getShort("Width") & 0xFFFF;
-        int height = schematic.getShort("Height") & 0xFFFF;
-        int length = schematic.getShort("Length") & 0xFFFF;
+        CompoundTag schematic = root.contains("Schematic") ? root.getCompoundOrEmpty("Schematic") : root;
+        int version = schematic.getIntOr("Version", 0);
+        int dataVersion = schematic.getIntOr("DataVersion", 0);
+        int width = schematic.getShortOr("Width", (short) 0) & 0xFFFF;
+        int height = schematic.getShortOr("Height", (short) 0) & 0xFFFF;
+        int length = schematic.getShortOr("Length", (short) 0) & 0xFFFF;
 
         CompoundTag paletteTag;
         byte[] data;
         if (version >= 3) {
-            CompoundTag blocks = schematic.getCompound("Blocks");
-            paletteTag = blocks.getCompound("Palette");
-            data = blocks.getByteArray("Data");
+            CompoundTag blocks = schematic.getCompoundOrEmpty("Blocks");
+            paletteTag = blocks.getCompoundOrEmpty("Palette");
+            data = blocks.getByteArray("Data").orElse(new byte[0]);
         } else {
-            paletteTag = schematic.getCompound("Palette");
-            data = schematic.getByteArray("BlockData");
+            paletteTag = schematic.getCompoundOrEmpty("Palette");
+            data = schematic.getByteArray("BlockData").orElse(new byte[0]);
         }
         Map<Integer, String> palette = new HashMap<>();
-        for (String key : paletteTag.getAllKeys()) {
-            palette.put(paletteTag.getInt(key), StateTags.upgrade(key, dataVersion));
+        for (String key : paletteTag.keySet()) {
+            palette.put(paletteTag.getIntOr(key, 0), StateTags.upgrade(key, dataVersion));
         }
 
         Formats.Collector collector = new Formats.Collector();
@@ -65,9 +65,9 @@ final class SpongeSchematicFormat {
             }
             index++;
         }
-        CompoundTag metadata = schematic.getCompound("Metadata");
-        String title = metadata.contains("Name", Tag.TAG_STRING) ? metadata.getString("Name") : name;
-        return collector.build(title, metadata.getString("Author"), "");
+        CompoundTag metadata = schematic.getCompoundOrEmpty("Metadata");
+        String title = metadata.contains("Name") ? metadata.getStringOr("Name", "") : name;
+        return collector.build(title, metadata.getStringOr("Author", ""), "");
     }
 
     static CompoundTag write(Blueprint blueprint) throws IOException {

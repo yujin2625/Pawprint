@@ -4,7 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.ClientLanguage;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -31,7 +31,7 @@ public final class BlockSearchIndex {
      * @param searchText lower-cased ID and names joined, for substring search
      * @param initials   the same text with Hangul syllables reduced to initial consonants
      */
-    public record Entry(Block block, ItemStack icon, ResourceLocation id, List<String> names, String searchText,
+    public record Entry(Block block, ItemStack icon, Identifier id, List<String> names, String searchText,
                         String initials) {
     }
 
@@ -91,7 +91,7 @@ public final class BlockSearchIndex {
             if (block.asItem() == Items.AIR) {
                 continue; // Technical blocks such as piston heads have no item.
             }
-            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+            Identifier id = BuiltInRegistries.BLOCK.getKey(block);
             List<String> names = new ArrayList<>();
             for (ClientLanguage language : languages) {
                 String name = language.getOrDefault(block.getDescriptionId(), id.getPath());

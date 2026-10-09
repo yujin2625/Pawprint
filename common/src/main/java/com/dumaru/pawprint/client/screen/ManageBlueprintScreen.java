@@ -4,7 +4,7 @@ import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.format.Blueprint;
 import com.dumaru.pawprint.format.text.TextBlueprintWriter;
 import com.dumaru.pawprint.library.BlueprintLibrary;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -33,27 +33,27 @@ final class ManageBlueprintScreen extends Screen {
     protected void init() {
         int left = width / 2 - 100;
         int y = Math.max(30, height / 2 - 100);
-        y = add("pawprint.library.manage.rename", left, y, () -> minecraft.setScreen(new TextInputScreen(this,
+        y = add("pawprint.library.manage.rename", left, y, () -> minecraft.gui.setScreen(new TextInputScreen(this,
                 Component.translatable("pawprint.library.manage.rename"), entry.meta().name, null, false,
                 name -> apply(() -> BlueprintLibrary.updateMeta(entry, meta -> meta.name = name), "pawprint.library.renamed"))));
-        y = add("pawprint.library.manage.tags", left, y, () -> minecraft.setScreen(new TextInputScreen(this,
+        y = add("pawprint.library.manage.tags", left, y, () -> minecraft.gui.setScreen(new TextInputScreen(this,
                 Component.translatable("pawprint.library.manage.tags"), String.join(", ", entry.meta().tags),
                 Component.translatable("pawprint.library.manage.tags_hint"), true,
                 text -> apply(() -> BlueprintLibrary.updateMeta(entry, meta -> meta.tags = parseTags(text)),
                         "pawprint.library.tags_saved"))));
-        y = add("pawprint.library.manage.description", left, y, () -> minecraft.setScreen(new TextInputScreen(this,
+        y = add("pawprint.library.manage.description", left, y, () -> minecraft.gui.setScreen(new TextInputScreen(this,
                 Component.translatable("pawprint.library.manage.description"), entry.meta().description, null, true,
                 text -> apply(() -> BlueprintLibrary.updateMeta(entry, meta -> meta.description = text),
                         "pawprint.library.description_saved"))));
-        y = add("pawprint.library.manage.move", left, y, () -> minecraft.setScreen(new GroupPickerScreen(this,
+        y = add("pawprint.library.manage.move", left, y, () -> minecraft.gui.setScreen(new GroupPickerScreen(this,
                 Component.translatable("pawprint.library.manage.move"), false, entry.group(),
                 group -> apply(() -> BlueprintLibrary.moveToGroup(entry, group), "pawprint.library.moved"))));
         y = add("pawprint.library.manage.duplicate", left, y, () -> apply(() -> BlueprintLibrary.duplicate(entry,
                 Component.translatable("pawprint.library.copy_suffix").getString()), "pawprint.library.duplicated"));
         y = add("pawprint.screen.library.copy_text", left, y, this::copyAsText);
         y = add("pawprint.library.manage.share", left, y, this::copyShareString);
-        y = add("pawprint.library.manage.export", left, y, () -> minecraft.setScreen(new ExportScreen(this, parent, entry)));
-        y = add("pawprint.library.manage.delete", left, y, () -> minecraft.setScreen(new ConfirmScreen(confirmed -> {
+        y = add("pawprint.library.manage.export", left, y, () -> minecraft.gui.setScreen(new ExportScreen(this, parent, entry)));
+        y = add("pawprint.library.manage.delete", left, y, () -> minecraft.gui.setScreen(new ConfirmScreen(confirmed -> {
             if (confirmed) {
                 try {
                     BlueprintLibrary.delete(entry);
@@ -61,9 +61,9 @@ final class ManageBlueprintScreen extends Screen {
                 } catch (IOException e) {
                     parent.refresh(entry.relativePath(), error(e), true);
                 }
-                minecraft.setScreen(parent);
+                minecraft.gui.setScreen(parent);
             } else {
-                minecraft.setScreen(this);
+                minecraft.gui.setScreen(this);
             }
         }, Component.translatable("pawprint.library.manage.delete_confirm", entry.meta().name),
                 Component.translatable("pawprint.library.manage.delete_detail"))));
@@ -88,7 +88,7 @@ final class ManageBlueprintScreen extends Screen {
             Pawprint.LOG.warn("Library action failed for {}", entry.file(), e);
             parent.refresh(entry.relativePath(), error(e), true);
         }
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     private void copyAsText() {
@@ -100,7 +100,7 @@ final class ManageBlueprintScreen extends Screen {
         } catch (IOException | IllegalStateException e) {
             parent.refresh(entry.relativePath(), error(e), true);
         }
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     private void copyShareString() {
@@ -111,7 +111,7 @@ final class ManageBlueprintScreen extends Screen {
         } catch (IOException e) {
             parent.refresh(entry.relativePath(), error(e), true);
         }
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     private static Component error(Exception e) {
@@ -127,13 +127,13 @@ final class ManageBlueprintScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, Math.max(30, height / 2 - 100) - 16, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+        graphics.centeredText(font, title, width / 2, Math.max(30, height / 2 - 100) - 16, 0xFFFFFFFF);
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 }

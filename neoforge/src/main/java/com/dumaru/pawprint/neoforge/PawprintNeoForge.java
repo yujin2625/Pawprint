@@ -12,7 +12,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = Pawprint.MOD_ID, dist = Dist.CLIENT)
@@ -24,12 +24,9 @@ public class PawprintNeoForge {
         modBus.addListener(RegisterKeyMappingsEvent.class, event -> PawprintKeys.ALL.forEach(event::register));
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
                 event -> PawprintClient.onClientTick(Minecraft.getInstance()));
-        // Same point in the frame as Fabric's AFTER_TRANSLUCENT: after translucent terrain and particles.
-        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class, event -> {
-            if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
-                GhostRenderer.render(event.getCamera(), event.getFrustum());
-            }
-        });
+        // Ghost blocks join the frame's geometry like the game's own (Fabric: COLLECT_SUBMITS).
+        NeoForge.EVENT_BUS.addListener(SubmitCustomGeometryEvent.class, event -> GhostRenderer.submit(
+                event.getSubmitNodeCollector(), event.getPoseStack(), event.getLevelRenderState().cameraRenderState));
         NeoForge.EVENT_BUS.addListener(RenderGuiEvent.Post.class, event -> EditHud.render(event.getGuiGraphics()));
     }
 }

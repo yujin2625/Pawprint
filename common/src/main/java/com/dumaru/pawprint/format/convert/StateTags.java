@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Converts between block-state NBT ({@code {Name, Properties}}) and Pawprint's state strings, upgrading states
+ * Converts between block-state NBT ({@code {id, properties}}, or {@code {Name, Properties}} before 26.1) and Pawprint's state strings, upgrading states
  * from older game versions with the game's own data fixer (renamed blocks, changed properties).
  */
 public final class StateTags {
@@ -26,38 +26,40 @@ public final class StateTags {
     }
 
     public static int currentDataVersion() {
-        return SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+        return SharedConstants.getCurrentVersion().dataVersion().version();
     }
 
     /** {@code {Name:"minecraft:oak_stairs", Properties:{facing:"east"}}} to {@code minecraft:oak_stairs[facing=east]}. */
     public static String toString(CompoundTag tag, int dataVersion) {
         CompoundTag fixed = upgrade(tag, dataVersion);
-        String name = fixed.getString("Name");
+        // Files written before the rename still say Name/Properties when no upgrade ran (their version is unknown).
+        String name = fixed.getStringOr("id", fixed.getStringOr("Name", ""));
         if (!name.contains(":")) {
             name = "minecraft:" + name;
         }
-        CompoundTag properties = fixed.getCompound("Properties");
+        CompoundTag properties = fixed.contains("properties") ? fixed.getCompoundOrEmpty("properties") : fixed.getCompoundOrEmpty("Properties");
         if (properties.isEmpty()) {
             return name;
         }
         StringBuilder text = new StringBuilder(name).append('[');
         boolean first = true;
         for (String key : new TreeMap<>(asStrings(properties)).keySet()) {
-            text.append(first ? "" : ",").append(key).append('=').append(properties.getString(key));
+            text.append(first ? "" : ",").append(key).append('=').append(properties.getStringOr(key, ""));
             first = false;
         }
         return text.append(']').toString();
     }
 
-    /** A state string to NBT, for writing other formats. Unknown blocks are written as they are. */
+    /** A state string to NBT in the current game's layout, for writing other formats. Unknown blocks are written as they are. */
     public static CompoundTag toTag(String state) {
         BlockState resolved = BlockStateCodec.parse(state);
-        if (resolved != null) {
-            return NbtUtils.writeBlockState(resolved);
-        }
+        return resolved != null ? NbtUtils.writeBlockState(resolved) : rawTag(state, "id", "properties");
+    }
+
+    private static CompoundTag rawTag(String state, String nameKey, String propertiesKey) {
         CompoundTag tag = new CompoundTag();
         int bracket = state.indexOf('[');
-        tag.putString("Name", bracket < 0 ? state : state.substring(0, bracket));
+        tag.putString(nameKey, bracket < 0 ? state : state.substring(0, bracket));
         if (bracket >= 0 && state.endsWith("]")) {
             CompoundTag properties = new CompoundTag();
             for (String pair : state.substring(bracket + 1, state.length() - 1).split(",")) {
@@ -66,14 +68,15 @@ public final class StateTags {
                     properties.putString(pair.substring(0, equals).strip(), pair.substring(equals + 1).strip());
                 }
             }
-            tag.put("Properties", properties);
+            tag.put(propertiesKey, properties);
         }
         return tag;
     }
 
     /** Upgrades a state string written by an older game version. */
     public static String upgrade(String state, int dataVersion) {
-        return dataVersion >= currentDataVersion() ? state : toString(toTag(state), dataVersion);
+        // The fixer expects the layout of that old version, Name/Properties.
+        return dataVersion >= currentDataVersion() ? state : toString(rawTag(state, "Name", "Properties"), dataVersion);
     }
 
     private static CompoundTag upgrade(CompoundTag tag, int dataVersion) {
@@ -88,8 +91,8 @@ public final class StateTags {
 
     private static Map<String, String> asStrings(CompoundTag tag) {
         Map<String, String> map = new TreeMap<>();
-        for (String key : tag.getAllKeys()) {
-            map.put(key, tag.getString(key));
+        for (String key : tag.keySet()) {
+            map.put(key, tag.getStringOr(key, ""));
         }
         return map;
     }
