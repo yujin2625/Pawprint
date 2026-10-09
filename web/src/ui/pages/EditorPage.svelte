@@ -9,7 +9,7 @@
   import { hiddenLayers, moveCellsTo, protectedLayers, rows } from '../../core/blueprint/layers';
   import { getSetting, setSetting } from '../../storage/db';
   import { loadDefaultPack } from '../packs/activePack';
-  import { exportFile, loadProject, saveProject, saveStamp } from '../projects';
+  import { exportFile, loadProject, saveProject, saveStamp, saveToFile } from '../projects';
   import { isDesktop, saveBytes } from '../../platform/platform';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
@@ -35,6 +35,8 @@
   let locked = $state(false);
   let presetName = $state('');
   let layoutInput: HTMLInputElement | undefined = $state();
+  /** Desktop: the file this project is linked to. */
+  let filePath = $state<string | null>(null);
   /** Set while the desktop window closes: panel windows close with it, and that must not end up in the saved layout. */
   let closing = false;
 
@@ -61,6 +63,7 @@
           return;
         }
         name = loaded.blueprint.meta.name;
+        filePath = loaded.project.filePath ?? null;
         editor.solo = null;
         editor.selection = null;
         editor.currentLayer = loaded.blueprint.currentLayer = 0;
@@ -252,6 +255,23 @@
     }
   }
 
+  /** Desktop: saves the project, then writes the linked file (or asks where). */
+  async function saveFile(saveAs = false) {
+    const bp = ctx.blueprint;
+    if (!bp) return;
+    await save();
+    try {
+      const path = await saveToFile(projectId, bp, saveAs);
+      if (path) {
+        filePath = path;
+        editor.message = 'editor.savedToFile';
+      }
+    } catch (e) {
+      console.error(e);
+      editor.message = 'editor.saveFailed';
+    }
+  }
+
   function rename() {
     const bp = ctx.blueprint;
     if (!bp) return;
@@ -383,7 +403,8 @@
       bp?.redo();
     } else if ((e.ctrlKey || e.metaKey) && key === 's') {
       e.preventDefault();
-      void save();
+      if (isDesktop && (filePath || e.shiftKey)) void saveFile(e.shiftKey);
+      else void save();
     } else if (e.key === 'PageUp' || e.key === ']') {
       e.preventDefault();
       stepSlice(1);
@@ -474,7 +495,16 @@
       </Menu>
       <input bind:this={layoutInput} type="file" accept=".json,application/json" hidden onchange={importLayout} />
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
-      <button class="btn primary" type="button" disabled={!ctx.blueprint} onclick={() => ctx.blueprint && exportFile(ctx.blueprint)}>{t(isDesktop ? 'editor.saveFile' : 'editor.download')}</button>
+      {#if isDesktop}
+        {#if filePath}
+          <button class="btn" type="button" disabled={!ctx.blueprint} onclick={() => saveFile(true)}>{t('editor.saveAs')}</button>
+        {/if}
+        <button class="btn primary" type="button" disabled={!ctx.blueprint} title={filePath ?? ''} onclick={() => saveFile(false)}>
+          {filePath ? t('editor.saveToFile', { name: filePath.split(/[\\/]/).pop() ?? '' }) : t('editor.saveFile')}
+        </button>
+      {:else}
+        <button class="btn primary" type="button" disabled={!ctx.blueprint} onclick={() => ctx.blueprint && exportFile(ctx.blueprint)}>{t('editor.download')}</button>
+      {/if}
     </div>
 
     <div class="options">

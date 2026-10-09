@@ -1,7 +1,7 @@
 import { getPack, listPacks, putPack } from '../storage/db';
 import { baseName, onOpenFiles, readFile, takeOpenFiles } from '../platform/platform';
 import { toStoredPack } from './packs/addPack';
-import { importFile } from './projects';
+import { openPath } from './projects';
 import { openProject } from './session.svelte';
 
 /**
@@ -12,16 +12,15 @@ export async function openPaths(paths: string[]): Promise<void> {
   for (const path of paths) {
     const name = baseName(path);
     try {
-      const bytes = await readFile(path);
       if (name.toLowerCase().endsWith('.pawpack')) {
-        const pack = toStoredPack(bytes);
+        const pack = toStoredPack(await readFile(path));
         const existing = await getPack(pack.id);
         pack.isDefault = existing ? existing.isDefault : (await listPacks()).length === 0;
         if (existing) pack.info.name = existing.info.name;
         await putPack(pack);
         location.hash = '#/packs';
       } else {
-        openProject(await importFile(bytes, name.replace(/\.pawprint$/i, '')));
+        openProject(await openPath(path));
       }
     } catch (e) {
       console.error(e);

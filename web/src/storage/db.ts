@@ -89,6 +89,10 @@ export interface StoredProject {
   size: [number, number, number];
   thumbnail: Blob | null;
   file: Blob;
+  /** Desktop: the `.pawprint` on disk this project was opened from or saved to. */
+  filePath?: string;
+  /** Desktop: that file's modification time right after the app last read or wrote it. */
+  fileSynced?: number;
 }
 
 /** Project list without the files (the list only needs names and thumbnails). */

@@ -344,5 +344,11 @@
   "packs.busy.instance.index": "{name}의 파일을 읽는 중…",
   "packs.busy.instance.blocks": "{name}에서 블럭, 모델, 텍스처를 찾는 중…",
   "packs.busy.instance.pack": "{name} 팩으로 묶는 중…",
-  "packs.source.instance-folder": "모드팩 폴더로 만듦"
+  "packs.source.instance-folder": "모드팩 폴더로 만듦",
+  "editor.saveAs": "다른 이름으로…",
+  "editor.saveToFile": "{name}에 저장",
+  "editor.savedToFile": "파일에 저장했어요.",
+  "projects.fileChanged": "\"{name}\" 파일이 Pawprint에서 마지막으로 열거나 저장한 뒤 바깥에서 바뀌었어요. 지금 파일 내용으로 열까요, Pawprint에 있는 버전을 열까요?",
+  "projects.useFile": "파일 내용으로",
+  "projects.keepApp": "Pawprint 버전으로"
 }

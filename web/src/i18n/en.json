@@ -344,5 +344,11 @@
   "packs.busy.instance.index": "Reading the files of {name}…",
   "packs.busy.instance.blocks": "Finding blocks, models and textures in {name}…",
   "packs.busy.instance.pack": "Packing {name}…",
-  "packs.source.instance-folder": "Made from modpack folder"
+  "packs.source.instance-folder": "Made from modpack folder",
+  "editor.saveAs": "Save as…",
+  "editor.saveToFile": "Save to {name}",
+  "editor.savedToFile": "Saved to the file.",
+  "projects.fileChanged": "\"{name}\" changed outside Pawprint since it was last opened or saved here. Open the file as it is now, or keep the version in Pawprint?",
+  "projects.useFile": "Use the file",
+  "projects.keepApp": "Keep Pawprint's"
 }

@@ -58,6 +58,13 @@ fn percent_decode(s: &str) -> Result<String, String> {
   String::from_utf8(out).map_err(|e| e.to_string())
 }
 
+/// Last modification time in milliseconds, to notice files changed outside the app.
+#[tauri::command]
+fn file_modified(path: String) -> Option<u64> {
+  let time = std::fs::metadata(path).ok()?.modified().ok()?;
+  Some(time.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64)
+}
+
 #[tauri::command]
 fn minecraft_default_root() -> Option<String> {
   minecraft::default_root().filter(|p| p.is_dir()).map(|p| p.to_string_lossy().into_owned())
@@ -171,6 +178,7 @@ pub fn run() {
       take_open_files,
       read_file,
       write_file,
+      file_modified,
       minecraft_default_root,
       minecraft_installs,
       minecraft_languages,

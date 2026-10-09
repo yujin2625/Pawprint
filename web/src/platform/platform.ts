@@ -54,6 +54,21 @@ export async function writeFile(path: string, bytes: Uint8Array): Promise<void> 
   await invoke('write_file', bytes, { headers: { path: encodeURIComponent(path) } });
 }
 
+export async function fileModified(path: string): Promise<number | null> {
+  return invoke<number | null>('file_modified', { path });
+}
+
+/** A save dialog alone (desktop): the chosen path, or null. */
+export async function pickSavePath(fileName: string, filter: FileFilter): Promise<string | null> {
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  return save({ defaultPath: fileName, filters: [filter] });
+}
+
+export async function askYesNo(message: string, yes: string, no: string): Promise<boolean> {
+  const { ask } = await import('@tauri-apps/plugin-dialog');
+  return ask(message, { title: 'Pawprint', kind: 'warning', okLabel: yes, cancelLabel: no });
+}
+
 export async function pickFolder(): Promise<string | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ directory: true });
