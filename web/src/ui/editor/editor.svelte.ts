@@ -29,6 +29,8 @@ export const editor = $state({
   cursor: null as [number, number, number] | null,
   cursorState: null as string | null,
   message: null as string | null,
+  /** Values for the message's placeholders, when it has any. */
+  messageParams: {} as Record<string, string | number>,
 });
 
 export const TOOL_KEYS: Record<string, Tool> = {

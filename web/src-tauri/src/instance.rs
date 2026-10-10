@@ -1,7 +1,7 @@
 //! Reads a modded game folder (an "instance") without starting the game, for making block packs: the vanilla jar,
 //! every mod jar (and the jars nested in them), assets mods generated and cached on disk, and the enabled resource
-//! packs, layered in the game's order. Only block-related assets are indexed: blockstates, models, item models,
-//! textures and language files.
+//! packs, layered in the game's order. Only block-related files are indexed: blockstates, models, item models,
+//! textures and language files, plus the block tags and block loot tables mods ship as data.
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -62,22 +62,38 @@ pub struct Index {
   files: HashMap<String, (usize, String)>,
   /// Language files from every source, lowest priority first: the game merges them key by key.
   langs: HashMap<String, Vec<(usize, String)>>,
+  /// Block tag files by tag ID (`<namespace>:<path>`), lowest priority first: the game merges their entries.
+  tags: HashMap<String, Vec<(usize, String)>>,
 }
 
-/// `assets/<namespace>/<kind>/...` files a block pack can use.
+/// `assets/<namespace>/<kind>/...` and `data/<namespace>/<kind>/...` files a block pack can use.
 fn wanted(name: &str) -> bool {
   let mut parts = name.splitn(4, '/');
-  let (Some("assets"), Some(ns), Some(kind), Some(rest)) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+  let (Some(root), Some(ns), Some(kind), Some(rest)) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
     return false;
   };
   if ns.is_empty() || rest.is_empty() || name.contains("..") {
     return false;
   }
-  match kind {
-    "blockstates" | "models" | "items" | "lang" => rest.ends_with(".json"),
-    "textures" => rest.ends_with(".png") || rest.ends_with(".png.mcmeta"),
+  match (root, kind) {
+    ("assets", "blockstates" | "models" | "items" | "lang") => rest.ends_with(".json"),
+    ("assets", "textures") => rest.ends_with(".png") || rest.ends_with(".png.mcmeta"),
+    // `loot_table` since 1.21, `loot_tables` before.
+    ("data", "loot_table" | "loot_tables") => rest.starts_with("blocks/") && rest.ends_with(".json"),
+    ("data", "tags") => block_tag(name).is_some(),
     _ => false,
   }
+}
+
+/// `data/<ns>/tags/block/<path>.json` (`tags/blocks/` before 1.21) → `<ns>:<path>`.
+fn block_tag(name: &str) -> Option<String> {
+  let mut parts = name.splitn(5, '/');
+  let (Some("data"), Some(ns), Some("tags"), Some("block" | "blocks"), Some(rest)) =
+    (parts.next(), parts.next(), parts.next(), parts.next(), parts.next())
+  else {
+    return None;
+  };
+  Some(format!("{ns}:{}", rest.strip_suffix(".json")?))
 }
 
 fn read_json(path: &Path) -> Option<serde_json::Value> {
@@ -186,6 +202,10 @@ impl Index {
       if !wanted(&name) {
         continue;
       }
+      if let Some(tag) = block_tag(&name) {
+        self.tags.entry(tag).or_default().push((source, name));
+        continue;
+      }
       if name.split('/').nth(2) == Some("lang") {
         let code = name.rsplit('/').next().unwrap_or("").trim_end_matches(".json").to_lowercase();
         self.langs.entry(code).or_default().push((source, name.clone()));
@@ -208,13 +228,13 @@ impl Index {
   }
 
   fn add_dir(&mut self, root: &Path) {
-    if !root.join("assets").is_dir() {
+    let mut stack: Vec<PathBuf> = ["assets", "data"].iter().map(|d| root.join(d)).filter(|d| d.is_dir()).collect();
+    if stack.is_empty() {
       return;
     }
     let id = self.sources.len();
     self.sources.push(Source::Dir(root.to_owned()));
     let mut names = Vec::new();
-    let mut stack = vec![root.join("assets")];
     while let Some(dir) = stack.pop() {
       for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
         let path = entry.path();
@@ -248,7 +268,7 @@ impl Index {
       }
       let bytes = Arc::new(bytes);
       let Ok(mut inner) = ZipArchive::new(Cursor::new(bytes.as_slice())) else { continue };
-      if !inner.file_names().any(|n| n.starts_with("assets/")) {
+      if !inner.file_names().any(|n| n.starts_with("assets/") || n.starts_with("data/")) {
         continue;
       }
       mods.extend(mod_info(&mut inner));
@@ -429,6 +449,37 @@ impl Index {
   }
 }
 
+impl Index {
+  /// Block tags as the game merges them: tag ID → block IDs and `#tag` references. A file with `"replace": true`
+  /// drops what lower-priority packs listed.
+  pub fn block_tags(&self) -> HashMap<String, Vec<String>> {
+    let all: Vec<(usize, String)> = self.tags.values().flatten().cloned().collect();
+    let data = self.read_many(&all);
+    let mut out = HashMap::new();
+    for (tag, files) in &self.tags {
+      let mut entries: Vec<String> = Vec::new();
+      for key in files {
+        let Some(json) = data.get(key).and_then(|b| serde_json::from_slice::<serde_json::Value>(strip_bom(b)).ok()) else { continue };
+        let Some(values) = json.get("values").and_then(|v| v.as_array()) else { continue };
+        if json.get("replace").and_then(|r| r.as_bool()) == Some(true) {
+          entries.clear();
+        }
+        for value in values {
+          // An entry is an ID, or `{"id": …, "required": false}`.
+          let Some(id) = value.as_str().or_else(|| value.get("id").and_then(|i| i.as_str())) else { continue };
+          if !entries.iter().any(|e| e == id) {
+            entries.push(id.to_owned());
+          }
+        }
+      }
+      if !entries.is_empty() {
+        out.insert(tag.clone(), entries);
+      }
+    }
+    out
+  }
+}
+
 fn strip_bom(bytes: &[u8]) -> &[u8] {
   bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes)
 }
@@ -441,4 +492,48 @@ fn entry<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>, name: &s
   let mut data = Vec::with_capacity(file.size() as usize);
   file.read_to_end(&mut data).ok()?;
   Some(data)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn write(root: &Path, name: &str, text: &str) {
+    let path = root.join(name);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, text).unwrap();
+  }
+
+  #[test]
+  fn indexes_block_data_next_to_assets() {
+    assert!(wanted("assets/mymod/blockstates/lamp.json"));
+    assert!(wanted("data/mymod/loot_table/blocks/lamp.json"));
+    assert!(wanted("data/mymod/loot_tables/blocks/deco/lamp.json"));
+    assert!(wanted("data/minecraft/tags/block/mineable/pickaxe.json"));
+    assert!(!wanted("data/mymod/loot_table/entities/cow.json"));
+    assert!(!wanted("data/minecraft/tags/item/stairs.json"));
+    assert!(!wanted("data/mymod/recipe/lamp.json"));
+    assert_eq!(block_tag("data/c/tags/blocks/storage_blocks/iron.json").as_deref(), Some("c:storage_blocks/iron"));
+  }
+
+  #[test]
+  fn merges_block_tags_in_pack_order() {
+    let root = std::env::temp_dir().join(format!("pawprint-tags-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    write(&root.join("a"), "data/minecraft/tags/block/stairs.json", r#"{"values": ["minecraft:oak_stairs"]}"#);
+    write(&root.join("a"), "data/minecraft/tags/block/slabs.json", r#"{"values": ["minecraft:oak_slab"]}"#);
+    write(&root.join("a"), "data/mymod/loot_table/blocks/lamp.json", "{}");
+    write(&root.join("b"), "data/minecraft/tags/block/stairs.json", r##"{"values": ["mymod:maple_stairs", {"id": "#mymod:more", "required": false}]}"##);
+    write(&root.join("b"), "data/minecraft/tags/block/slabs.json", r#"{"replace": true, "values": ["mymod:maple_slab"]}"#);
+    let mut index = Index::default();
+    index.add_dir(&root.join("a"));
+    index.add_dir(&root.join("b"));
+    let tags = index.block_tags();
+    assert_eq!(tags["minecraft:stairs"], ["minecraft:oak_stairs", "mymod:maple_stairs", "#mymod:more"]);
+    assert_eq!(tags["minecraft:slabs"], ["mymod:maple_slab"]);
+    // Loot tables are ordinary files (the highest pack wins); tag files are not listed as such.
+    assert!(index.files.contains_key("data/mymod/loot_table/blocks/lamp.json"));
+    assert!(!index.files.keys().any(|n| n.contains("/tags/")));
+    let _ = fs::remove_dir_all(&root);
+  }
 }

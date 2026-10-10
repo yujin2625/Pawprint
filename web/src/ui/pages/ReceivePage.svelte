@@ -18,7 +18,8 @@
     (async () => {
       try {
         const bytes = await receiveFromGame(port, token);
-        const id = await importFile(bytes, name);
+        // The game always sends a .pawprint, whatever the blueprint is called.
+        const id = await importFile(bytes, name + '.pawprint');
         if (!cancelled) openProject(id);
       } catch (e) {
         if (!cancelled) failed = e instanceof Error && e.message === 'expired' ? 'receive.expired' : 'receive.failed';

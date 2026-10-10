@@ -78,7 +78,12 @@ export class ModelBaker {
   bake(state: string): BakedModel {
     let baked = this.cache.get(state);
     if (!baked) {
-      baked = this.bakeUncached(state);
+      try {
+        baked = this.bakeUncached(state);
+      } catch {
+        // A model this code cannot read (mods write surprising JSON) must not take the pack or the view down.
+        baked = colorBox(parseState(state).id, true);
+      }
       this.cache.set(state, baked);
     }
     return baked;
@@ -127,7 +132,7 @@ export class ModelBaker {
       const data = this.source?.file(blockstatePath(id));
       let def: BlockDefinition | null = null;
       try {
-        if (data) def = BlockDefinition.fromJson(JSON.parse(utf8(data)));
+        if (data) def = BlockDefinition.fromJson(stringConditions(JSON.parse(utf8(data))));
       } catch {
         def = null;
       }
@@ -177,6 +182,22 @@ export class ModelBaker {
     this.models.set(key, flat);
     return flat;
   }
+}
+
+/**
+ * Multipart conditions with their values as strings. The game also accepts `"north": true` and `"age": 3`, which
+ * some mods write; the blockstate reader expects `"true"` and `"3"`.
+ */
+function stringConditions(blockstate: unknown): unknown {
+  const multipart = (blockstate as { multipart?: unknown } | null)?.multipart;
+  if (!Array.isArray(multipart)) return blockstate;
+  const fix = (when: unknown): unknown => {
+    if (!when || typeof when !== 'object' || Array.isArray(when)) return when;
+    return Object.fromEntries(
+      Object.entries(when).map(([key, value]) => [key, (key === 'OR' || key === 'AND') && Array.isArray(value) ? value.map(fix) : String(value)]),
+    );
+  };
+  return { ...(blockstate as object), multipart: multipart.map((part) => (part && typeof part === 'object' && 'when' in part ? { ...part, when: fix(part.when) } : part)) };
 }
 
 function normalizeModelRef(ref: string): string {

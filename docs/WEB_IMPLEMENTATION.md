@@ -1,7 +1,7 @@
 # Pawprint Web 구현 계획
 
-> 상태: 구현 중. W1(형식 명세), W2(모드), W3(웹 기반), W4(3D 뷰어), W5(2D 편집), W6(3D 편집), W7(레이어), W8(화면 배치), W9(데스크탑) 완료. W10 진행 중: 설정·크레딧·첫 방문 소개, 테마, 듀얼 모니터 배치·배치 단축키, 모드팩 폴더로 팩 만들기(데스크탑), 원래 파일에 저장(데스크탑), 사용자 글꼴, 모드 팩 내보내기의 아이템 아이콘(코드로 그리는 블럭), 모드 ↔ 웹 연결(웹에서 열기, 게임으로 보내기), 단일 HTML 뷰어(청사진·팩 일부·뷰어를 .html 하나에: `src/viewer`, `vite.viewer.config.ts`).
-> 최종 수정: 2026-10-09
+> 상태: 구현 중. W1(형식 명세), W2(모드), W3(웹 기반), W4(3D 뷰어), W5(2D 편집), W6(3D 편집), W7(레이어), W8(화면 배치), W9(데스크탑) 완료. W10 진행 중: 설정·크레딧·첫 방문 소개, 테마, 듀얼 모니터 배치·배치 단축키, 모드팩 폴더로 팩 만들기(데스크탑), 원래 파일에 저장(데스크탑), 사용자 글꼴, 모드 팩 내보내기의 아이템 아이콘(코드로 그리는 블럭), 모드 ↔ 웹 연결(웹에서 열기, 게임으로 보내기), 단일 HTML 뷰어(청사진·팩 일부·뷰어를 .html 하나에: `src/viewer`, `vite.viewer.config.ts`), 게임 없이 만든 팩의 정확도(모델 `render_type`·텍스처 알파로 렌더 레이어, 블럭 태그로 팔레트 분류, 루트 테이블로 아이템, 팩을 만들 때 그리는 아이콘: FORMAT_PAWPACK 8.2장). 다른 형식(`.litematic`·`.schem`·`.nbt`) 가져오기·내보내기와 공유 문자열(`PAW1:`) 붙여넣기·복사(`core/format/convert.ts`, `share.ts`; 모드의 `format/convert`와 같은 규칙이지만 웹에는 DataFixer가 없어 옛 버전 블럭 상태를 올리지 않고, 1.12 이전 `.schematic`은 읽지 않는다). AI 안내문 복사(팩 선택, 모드 블럭 ID 목록: AI_BLUEPRINT_FORMAT "모드 블럭 목록")와 AI가 쓴 텍스트 청사진(JSON) 가져오기(`core/format/textBlueprint.ts`; 모드의 `TextBlueprintReader`·`Shape`와 같은 규칙). 블럭 팩 만들기는 Web Worker에서 돌고(`workers/packBuilder.worker.ts`, 모드팩 폴더의 파일은 Worker가 페이지에 요청해 받는다) 페이지를 옮겨도 계속된다(`ui/packs/packJobs.svelte.ts`).
+> 최종 수정: 2026-10-10
 > 설계: [WEB_DESIGN.md](WEB_DESIGN.md)
 
 ---
@@ -164,7 +164,7 @@ Pawprint/
 - 단위 테스트(Vitest): 형식 읽기·쓰기 왕복, 공유 문자열, 외부 포맷, 레이어 규칙, 도구 결과, 재료 계산
 - 테스트 데이터: Mojang 텍스처를 저장소에 넣을 수 없으므로 **직접 만든 작은 테스트 팩**(자체 단색 텍스처)을 쓴다.
 - 모드 자체 테스트가 만든 `.pawprint` 형식 2 파일로 웹 읽기를 교차 검증한다.
-- 화면 테스트(Playwright): 팩 불러오기 → 청사진 열기 → 2D에서 칠하기 → 저장 흐름
+- 화면 테스트(Playwright, `web/e2e`): jar로 팩 만들기 → 새 청사진 → 팔레트에서 블럭 고르기 → 2D에서 칠하기 → `.pawprint` 내려받기(내용 확인) → 다시 열기. 개발 서버의 디버그 훅(`window.__slice`)으로 칸의 화면 위치를 찾는다. `npm run e2e`, CI에서도 돈다
 - GitHub Actions: 푸시마다 웹 빌드·테스트, `main` 병합 시 GitHub Pages 배포. 데스크탑은 태그를 달면 Tauri 빌드 후 Releases에 올림
 
 ---

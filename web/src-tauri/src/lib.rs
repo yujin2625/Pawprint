@@ -110,6 +110,12 @@ async fn instance_languages(state: State<'_, InstanceIndex>) -> Result<HashMap<S
 }
 
 #[tauri::command]
+async fn instance_block_tags(state: State<'_, InstanceIndex>) -> Result<HashMap<String, Vec<String>>, String> {
+  let guard = state.0.lock().unwrap();
+  Ok(guard.as_ref().ok_or("no instance indexed")?.block_tags())
+}
+
+#[tauri::command]
 fn jar_data_version(jar: String) -> Option<u64> {
   instance::data_version(&PathBuf::from(jar))
 }
@@ -186,6 +192,7 @@ pub fn run() {
       instance_index,
       instance_read,
       instance_languages,
+      instance_block_tags,
       instance_done,
       jar_data_version
     ])

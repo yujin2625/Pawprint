@@ -1,12 +1,9 @@
 <script lang="ts">
   import { formatBytes, t } from '../../i18n/i18n.svelte';
-  import { FileFormatError } from '../../core/zip';
   import {
     deletePack,
-    getPack,
     listPacks,
     putPack,
-    requestPersistence,
     setDefaultPack,
     storageUse,
     type StorageUse,
@@ -20,6 +17,7 @@
     type InstanceInfo, type MinecraftInstall,
   } from '../../platform/platform';
   import { packFromInstance } from '../packs/instancePack';
+  import { addPack, describeError as describe, packJob, setBusy, type Message } from '../packs/packJobs.svelte';
 
   interface Question {
     message: string;
@@ -30,15 +28,11 @@
 
   let packs = $state<StoredPack[]>([]);
   let loaded = $state(false);
-  /** Messages are kept as keys so they follow a language change. */
-  interface Message {
-    key: string;
-    params: Record<string, string | number>;
-  }
-
-  let busy = $state<Message | null>(null);
-  let error = $state<Message | null>(null);
-  let notice = $state<Message | null>(null);
+  // Adding a pack runs in packJobs, so it survives leaving this page; errors of this page's own actions are local.
+  const busy = $derived(packJob.busy);
+  const notice = $derived(packJob.notice);
+  let pageError = $state<Message | null>(null);
+  const error = $derived(pageError ?? packJob.error);
   let usage = $state<StorageUse | null>(null);
   let question = $state<Question | null>(null);
   let packInput: HTMLInputElement;
@@ -51,7 +45,11 @@
   }
 
   $effect(() => {
+    void packJob.version;
     refresh();
+  });
+
+  $effect(() => {
     if (isDesktop) void findInstalls();
   });
 
@@ -65,7 +63,7 @@
       gameRoot = root ?? (await minecraftRoot());
       installs = gameRoot ? await minecraftInstalls(gameRoot) : [];
     } catch (e) {
-      error = describe(e);
+      pageError = describe(e);
     }
     searched = true;
   }
@@ -81,11 +79,11 @@
   async function chooseInstance() {
     const dir = await pickFolder();
     if (!dir) return;
-    error = notice = null;
+    pageError = packJob.error = packJob.notice = null;
     try {
       instance = { dir, info: await instanceInfo(dir) };
     } catch (e) {
-      error = describe(e);
+      pageError = describe(e);
     }
   }
 
@@ -102,7 +100,7 @@
     const jar = current?.info.vanillaJar;
     if (!current || !jar) return;
     const name = baseName(current.dir);
-    add(name, () => packFromInstance(current.dir, current.info, jar, (step) => (busy = { key: 'packs.busy.instance.' + step, params: { name } })), 'packs.busy.instance.index');
+    add(name, () => packFromInstance(current.dir, current.info, jar, (step) => setBusy({ key: 'packs.busy.instance.' + step, params: { name } })), 'packs.busy.instance.index');
   }
 
   function fromInstall(install: MinecraftInstall) {
@@ -121,36 +119,9 @@
     question = null;
   }
 
-  function describe(e: unknown): Message {
-    if (e instanceof FileFormatError) return { key: e.key, params: e.params };
-    return { key: 'error.unknown', params: { message: e instanceof Error ? e.message : String(e) } };
-  }
-
-  async function add(name: string, make: () => Promise<StoredPack>, busyKey: string) {
-    error = notice = null;
-    busy = { key: busyKey, params: { name } };
-    // Let the busy message paint before the synchronous unzip blocks the page.
-    await new Promise((r) => setTimeout(r, 30));
-    try {
-      const pack = await make();
-      const existing = await getPack(pack.id);
-      if (existing) {
-        busy = null;
-        if (!(await ask(t('packs.confirmReplace', { name: existing.info.name }), t('packs.replace')))) return;
-        pack.isDefault = existing.isDefault;
-        pack.info.name = existing.info.name;
-      } else {
-        pack.isDefault = packs.length === 0;
-      }
-      await putPack(pack);
-      await requestPersistence();
-      notice = { key: 'packs.added', params: { name: pack.info.name, count: pack.info.blockCount } };
-      await refresh();
-    } catch (e) {
-      error = describe(e);
-    } finally {
-      busy = null;
-    }
+  function add(name: string, make: () => Promise<StoredPack>, busyKey: string) {
+    pageError = null;
+    void addPack(name, make, busyKey);
   }
 
   function picked(input: HTMLInputElement, make: (file: File) => Promise<StoredPack>, busyKey: string) {
