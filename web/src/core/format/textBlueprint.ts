@@ -36,16 +36,75 @@ Format "Pawprint Text Blueprint v1":
 
 Build request: `;
 
+/** At most this many modded block IDs go into the instructions (about 15k tokens), so they fit any AI chat. */
+export const MAX_LISTED_BLOCKS = 3000;
+
+/** Modded block IDs written into the instructions, and how many the pack has. */
+export interface BlockListing {
+  /** Lines "namespace: name, name, …", one per namespace. */
+  lines: string[];
+  listed: number;
+  total: number;
+}
+
+/**
+ * Groups modded block IDs by namespace for the instructions. Over `max`, every namespace gets an equal share (small
+ * ones keep all their blocks) and the earliest IDs of each are kept, so callers put the most useful first.
+ */
+export function listModdedBlocks(ids: Iterable<string>, max = MAX_LISTED_BLOCKS): BlockListing {
+  const groups = new Map<string, string[]>();
+  for (const id of new Set(ids)) {
+    const colon = id.indexOf(':');
+    const ns = colon < 0 ? 'minecraft' : id.slice(0, colon);
+    if (ns === 'minecraft') continue;
+    let names = groups.get(ns);
+    if (!names) groups.set(ns, (names = []));
+    names.push(id.slice(colon + 1));
+  }
+  // Equal shares: namespaces smaller than the share give their leftover to the rest.
+  const share = new Map<string, number>();
+  let left = max;
+  const bySize = [...groups].sort((a, b) => a[1].length - b[1].length);
+  bySize.forEach(([ns, names], i) => {
+    const take = Math.min(names.length, Math.floor(left / (bySize.length - i)));
+    share.set(ns, take);
+    left -= take;
+  });
+  const lines: string[] = [];
+  let listed = 0, total = 0;
+  for (const ns of [...groups.keys()].sort()) {
+    const names = groups.get(ns)!;
+    const kept = names.slice(0, share.get(ns)).sort();
+    total += names.length;
+    listed += kept.length;
+    if (!kept.length) continue;
+    const more = names.length - kept.length;
+    lines.push(`${ns}: ${kept.join(', ')}${more ? ` (+${more} more not listed)` : ''}`);
+  }
+  return { lines, listed, total };
+}
+
 /**
  * The instructions for an AI chat. `mcVersion` and `mods` (namespaces of mods with blocks) come from the block
- * pack in use; without a pack the AI is told to stay with current vanilla blocks.
+ * pack in use; without a pack the AI is told to stay with current vanilla blocks. With `blocks` (from
+ * {@link listModdedBlocks}) the modded block IDs are listed, so the AI does not have to guess them.
  */
-export function aiPrompt(mcVersion: string, mods: string[]): string {
+export function aiPrompt(mcVersion: string, mods: string[], blocks?: BlockListing): string {
   const namespaces = [...new Set(mods)].filter((m) => m && m !== 'minecraft').sort();
-  const modText = namespaces.length
-    ? ` and these mods (namespaces): ${namespaces.join(', ')}. If unsure whether a modded block ID exists, prefer vanilla blocks`
-    : '';
-  return PROMPT.replace('{game}', mcVersion ? `Minecraft ${mcVersion}` : 'the latest Minecraft Java Edition').replace('{mods}', modText);
+  const listed = !!blocks?.lines.length;
+  const modText = !namespaces.length
+    ? ''
+    : listed
+      ? ` and these mods (namespaces): ${namespaces.join(', ')}. Modded blocks are listed at the end; use only those modded IDs` +
+        (blocks.listed < blocks.total ? ', and vanilla blocks where none of them fits' : '')
+      : ` and these mods (namespaces): ${namespaces.join(', ')}. If unsure whether a modded block ID exists, prefer vanilla blocks`;
+  const game = mcVersion ? `Minecraft ${mcVersion}` : 'the latest Minecraft Java Edition';
+  let text = PROMPT.replace('{game}', game).replace('{mods}', modText);
+  if (listed) {
+    const list = `Modded blocks in this game ("namespace: names"; write them as "namespace:name"). Any vanilla block of ${game} may be used too:\n${blocks.lines.join('\n')}\n\n`;
+    text = text.replace('Build request: ', list + 'Build request: ');
+  }
+  return text;
 }
 
 /** Whether a text looks like an AI's answer in this format (possibly inside a code fence or with chatter around it). */

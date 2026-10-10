@@ -2,9 +2,10 @@ import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint, type Blueprint } from '../core/format/pawprint';
 import { EXTERNAL_FORMATS, formatOfFile, readExternal, writeExternal, type ExternalFormat } from '../core/format/convert';
 import { fromShareString, toShareString } from '../core/format/share';
-import { aiPrompt, readTextBlueprint } from '../core/format/textBlueprint';
-import { loadDefaultPack } from './packs/activePack';
-import { getProject, listPacks, listProjects, putProject, type StoredProject } from '../storage/db';
+import { aiPrompt, listModdedBlocks, readTextBlueprint, type BlockListing } from '../core/format/textBlueprint';
+import { loadDefaultPack, loadPack } from './packs/activePack';
+import type { LoadedPack } from '../core/pack/pawpack';
+import { getProject, getSetting, listProjects, putProject, setSetting, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
 import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
 import { t } from '../i18n/i18n.svelte';
@@ -21,22 +22,41 @@ export function newBlueprint(name: string): EditableBlueprint {
   return new EditableBlueprint(newMeta(name));
 }
 
+/** The block pack the AI instructions were last copied for; its blocks check what the AI answers. */
+const AI_PACK = 'aiPack';
+
 /**
- * The instructions to paste into an AI chat (the same text the mod copies), for the game version and mods of the
- * default block pack. `hasPack` is false when there is none: the AI is then told to use vanilla blocks.
+ * The instructions to paste into an AI chat (the same text the mod copies), for the game version and mods of a
+ * block pack (the default one when `packId` is not given). With `listBlocks` the pack's modded block IDs are
+ * listed, blocks with an item first, so the AI uses real IDs. `blocks` counts them whether listed or not; `packId`
+ * is null when there is no pack: the AI is then told to use vanilla blocks.
  */
-export async function aiInstructions(): Promise<{ text: string; hasPack: boolean }> {
-  const packs = await listPacks();
-  const pack = packs.find((p) => p.isDefault) ?? packs[0];
-  return { text: aiPrompt(pack?.info.mcVersion ?? '', (pack?.info.mods ?? []).map((m) => m.id)), hasPack: !!pack };
+export async function aiInstructions(packId?: string, listBlocks = true): Promise<{ text: string; packId: string | null; blocks: BlockListing | null }> {
+  const pack = (packId ? await loadPack(packId) : null) ?? (await loadDefaultPack());
+  if (!pack) return { text: aiPrompt('', []), packId: null, blocks: null };
+  const ids = pack.blocks.filter((b) => !b.fluid).sort((a, b) => Number(!a.item) - Number(!b.item)).map((b) => b.id);
+  const namespaces = ids.map((id) => (id.includes(':') ? id.slice(0, id.indexOf(':')) : 'minecraft'));
+  const blocks = listModdedBlocks(ids);
+  return { text: aiPrompt(pack.info.mcVersion, namespaces, listBlocks ? blocks : undefined), packId: pack.info.id, blocks };
+}
+
+/** Called once the instructions are copied: the AI's answer will be checked against this pack. */
+export async function rememberAiPack(packId: string | null): Promise<void> {
+  await setSetting(AI_PACK, packId ?? undefined).catch(() => undefined);
+}
+
+/** The pack to check an AI's answer against: the one its instructions were copied for, else the default one. */
+async function aiPack(): Promise<LoadedPack | null> {
+  const id = await getSetting<string>(AI_PACK).catch(() => undefined);
+  return ((id ? await loadPack(id).catch(() => null) : null) ?? (await loadDefaultPack().catch(() => null)));
 }
 
 /**
- * Makes a project from the JSON an AI wrote (docs/AI_BLUEPRINT_FORMAT.md). Blocks are checked against the default
- * block pack when there is one. Throws TextFormatError with a message for the AI.
+ * Makes a project from the JSON an AI wrote (docs/AI_BLUEPRINT_FORMAT.md). Blocks are checked against the block
+ * pack the instructions were copied for (or the default one). Throws TextFormatError with a message for the AI.
  */
 export async function importText(text: string): Promise<{ id: string; warnings: string[] }> {
-  const pack = await loadDefaultPack().catch(() => null);
+  const pack = await aiPack();
   const known = pack ? { blocks: new Map(pack.blocks.map((b) => [b.id, b])), complete: pack.info.propertiesComplete } : null;
   const result = readTextBlueprint(text, newMeta(''), known);
   if (pack) result.blueprint.meta = { ...result.blueprint.meta, mcVersion: pack.info.mcVersion, dataVersion: pack.info.dataVersion };

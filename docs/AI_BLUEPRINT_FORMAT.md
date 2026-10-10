@@ -220,6 +220,15 @@ Build request: <DESCRIBE WHAT TO BUILD, SIZE, STYLE>
 
 ---
 
+### 웹에서 복사할 때
+웹(프로젝트 → "AI 안내문 복사")은 블럭 팩을 고르는 창을 띄운다. 게임 버전과 모드 네임스페이스는 고른 팩의 블럭 ID에서 가져오고,
+"모드 블럭 ID 목록 넣기"를 켜 두면 `Build request:` 바로 앞에 모드 블럭을 네임스페이스별로 붙인다(`create: andesite_casing, …`).
+- 상한 3,000개(약 1.5만 토큰). 넘으면 네임스페이스마다 같은 몫을 주고(블럭이 적은 모드는 전부), 아이템이 있는 블럭을 먼저 남긴다.
+  잘린 줄에는 `(+N more not listed)`를 붙이고, 이때 AI에게 맞는 모드 블럭이 없으면 바닐라를 쓰라고 한다.
+- 바닐라 블럭은 넣지 않는다(AI가 이미 안다).
+- AI의 답을 가져올 때는 마지막으로 안내문을 복사한 팩으로 블럭을 검사한다(그 팩이 지워졌으면 기본 팩).
+- 확인용: `npx vite-node tools/check-ai-prompt.ts <file.pawpack>`가 목록 크기를 보여 준다.
+
 ## 구현 메모
 - 읽기: `format/text/TextBlueprintReader` (JSON → `Blueprint`). 도형은 편집 도구와 같은 `shape.Shape`를 쓴다.
 - 쓰기: `format/text/TextBlueprintWriter` (레이어만, 쓰인 블럭마다 문자 하나).

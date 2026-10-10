@@ -2,13 +2,14 @@
   import { formatDate, t } from '../../i18n/i18n.svelte';
   import { FileFormatError } from '../../core/zip';
   import { deleteProject, listProjects, type StoredProject } from '../../storage/db';
-  import { aiInstructions, BLUEPRINT_EXTENSIONS, createProject, importFile, importShare, importText, newBlueprint, openPath } from '../projects';
+  import { BLUEPRINT_EXTENSIONS, createProject, importFile, importShare, importText, newBlueprint, openPath } from '../projects';
   import { hasShareString } from '../../core/format/share';
   import { fixRequest, looksLikeTextBlueprint, TextFormatError } from '../../core/format/textBlueprint';
   import { editor } from '../editor/editor.svelte';
   import { isDesktop, pickFile } from '../../platform/platform';
   import { openProject } from '../session.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
+  import AiPromptDialog from '../AiPromptDialog.svelte';
 
   let input: HTMLInputElement;
   let projects = $state<StoredProject[]>([]);
@@ -123,15 +124,16 @@
   }
 
   /** Copies the instructions for an AI chat, as the mod's library screen does. */
-  async function copyPrompt() {
-    error = notice = null;
-    try {
-      const { text, hasPack } = await aiInstructions();
-      await navigator.clipboard.writeText(text);
-      notice = hasPack ? 'projects.ai.promptCopied' : 'projects.ai.promptCopiedNoPack';
-    } catch (e) {
+  let askingAi = $state(false);
+
+  function aiClosed(message: string | null, e?: unknown) {
+    askingAi = false;
+    if (e) {
       console.error(e);
       error = { key: 'editor.shareFailed', params: {} };
+    } else if (message) {
+      error = null;
+      notice = message;
     }
   }
 
@@ -165,9 +167,11 @@
   <button class="btn primary" type="button" disabled={busy} onclick={create}>{t('projects.new')}</button>
   <button class="btn" type="button" disabled={busy} onclick={() => (isDesktop ? openFromDisk() : input.click())}>{t('projects.open')}</button>
   <button class="btn" type="button" disabled={busy} title={t('projects.pasteShareHelp')} onclick={importClipboard}>{t('projects.pasteShare')}</button>
-  <button class="btn" type="button" title={t('projects.ai.copyPromptHelp')} onclick={copyPrompt}>{t('projects.ai.copyPrompt')}</button>
+  <button class="btn" type="button" title={t('projects.ai.copyPromptHelp')} onclick={() => ((notice = null), (askingAi = true))}>{t('projects.ai.copyPrompt')}</button>
   <input bind:this={input} type="file" accept={BLUEPRINT_EXTENSIONS.map((e) => '.' + e).join(',')} hidden onchange={picked} />
 </div>
+
+{#if askingAi}<AiPromptDialog onclose={aiClosed} />{/if}
 
 {#if notice}<p class="notice" role="status">{t(notice)}</p>{/if}
 

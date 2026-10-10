@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Blueprint, PawprintMeta } from '../src/core/format/pawprint';
-import { aiPrompt, fixRequest, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
+import { aiPrompt, fixRequest, listModdedBlocks, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
 import type { BlockDef } from '../src/core/pack/types';
 
 const meta = (): PawprintMeta => ({
@@ -37,6 +37,28 @@ describe('AI instructions', () => {
 
   it('asks for vanilla blocks when there is no pack', () => {
     expect(aiPrompt('', [])).toContain('Only use blocks that exist in the latest Minecraft Java Edition.');
+  });
+
+  it('lists modded blocks by namespace, leaving vanilla out', () => {
+    const blocks = listModdedBlocks(['minecraft:stone', 'create:brass_block', 'aether:skyroot_planks', 'create:andesite_casing', 'create:brass_block']);
+    expect(blocks).toEqual({ lines: ['aether: skyroot_planks', 'create: andesite_casing, brass_block'], listed: 3, total: 3 });
+    const text = aiPrompt('1.21.1', ['create', 'aether'], blocks);
+    expect(text).toContain('these mods (namespaces): aether, create. Modded blocks are listed at the end; use only those modded IDs.');
+    expect(text).toContain('Any vanilla block of Minecraft 1.21.1 may be used too:\naether: skyroot_planks\ncreate: andesite_casing, brass_block\n\nBuild request: ');
+    expect(text.endsWith('Build request: ')).toBe(true);
+  });
+
+  it('shares the limit among mods and keeps the first IDs of each', () => {
+    const ids = ['small:a', 'small:b', ...Array.from({ length: 10 }, (_, i) => `big:b${i}`), ...Array.from({ length: 10 }, (_, i) => `mid:m${i}`)];
+    const blocks = listModdedBlocks(ids, 8);
+    expect(blocks.listed).toBe(8);
+    expect(blocks.total).toBe(22);
+    expect(blocks.lines).toEqual(['big: b0, b1, b2 (+7 more not listed)', 'mid: m0, m1, m2 (+7 more not listed)', 'small: a, b']);
+    expect(aiPrompt('1.21.1', ['big', 'mid', 'small'], blocks)).toContain('use only those modded IDs, and vanilla blocks where none of them fits.');
+  });
+
+  it('gives only mod names when there is no list', () => {
+    expect(aiPrompt('1.21.1', ['create'], { lines: [], listed: 0, total: 0 })).toContain('If unsure whether a modded block ID exists');
   });
 });
 
