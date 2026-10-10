@@ -5,12 +5,14 @@
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm run viewer && vite",
+    "build": "npm run viewer && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "tauri": "tauri"
+    "e2e": "playwright test",
+    "tauri": "tauri",
+    "viewer": "vite build --config vite.viewer.config.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1",
@@ -21,6 +23,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tauri-apps/cli": "^2.12.1",
     "@tsconfig/svelte": "^5.0.8",

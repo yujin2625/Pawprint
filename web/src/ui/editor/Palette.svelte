@@ -3,6 +3,7 @@
   import { blockName, type LoadedPack } from '../../core/pack/pawpack';
   import { buildIndex, search } from '../../core/search/blockSearch';
   import { formatState, parseState } from '../../core/model/state';
+  import { CATEGORIES, categoryTab } from '../../core/pack/categories';
   import type { BlockResources } from '../../render/resources';
   import type { BlockDef } from '../../core/pack/types';
   import { editor } from './editor.svelte';
@@ -44,16 +45,21 @@
     editor.block = formatState(selected.id, props);
   }
 
+  /** Categories inferred from block tags (packs made without the game) have translated names; creative tabs show their ID. */
+  const inferred = new Set(CATEGORIES.map(categoryTab));
+
   function tabLabel(id: string): string {
     const path = id.split(':')[1] ?? id;
-    return path.replace(/_/g, ' ');
+    return inferred.has(id) ? t('palette.category.' + path) : path.replace(/_/g, ' ');
   }
 
-  /** Draws a block's front view into a tile once its textures are loaded. */
+  /** Draws a block's item icon into a tile, or its front view (once its textures are loaded) when the pack has no icon. */
   function blockIcon(node: HTMLCanvasElement, state: string) {
     let current = state;
     const draw = async (s: string) => {
       current = s;
+      if (await resources.drawPackIcon(node, parseState(s).id)) return;
+      if (current !== s) return;
       await resources.prepare([s]);
       if (current !== s) return;
       const ctx = node.getContext('2d')!;

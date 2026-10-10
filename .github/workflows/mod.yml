@@ -1,8 +1,8 @@
 name: Mod release
 
-# Pushing a tag mod-v<version> builds the mod from both branches (main: 1.21.1 NeoForge + Fabric, mc/1.20.1: Forge +
-# Fabric) and puts the jars in one draft release to check and publish by hand. The version in gradle.properties must
-# match the tag on both branches.
+# Pushing a tag mod-v<version> builds the mod from every branch (main: 1.21.1 NeoForge + Fabric, mc/1.20.1: Forge +
+# Fabric, mc/26.3: NeoForge + Fabric) and puts the jars in one draft release to check and publish by hand. The version
+# in gradle.properties must match the tag on every branch.
 on:
   push:
     tags: ['mod-v*']
@@ -21,6 +21,9 @@ jobs:
           - ref: mc/1.20.1
             java: 17
             loaders: fabric forge
+          - ref: mc/26.3
+            java: 25
+            loaders: fabric neoforge
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,7 +1,7 @@
 # `.pawpack` 블럭 팩 형식
 
 > 모드(Java)와 웹(TypeScript)이 함께 따르는 명세.
-> 최종 수정: 2026-10-08
+> 최종 수정: 2026-10-10
 
 블럭 팩은 웹 편집기가 블럭 목록, 이름, 모양, 텍스처를 알기 위해 쓰는 파일이다. 각 사용자가 **자기 게임에서 만들어 자기 브라우저에서만 쓴다**(Mojang·모드 제작자의 에셋을 웹사이트가 배포하지 않기 위해).
 
@@ -122,7 +122,7 @@ example.pawpack
 | `renderLayer` | 문자열 | 예 | `solid`, `cutout`, `cutout_mipped`, `translucent` |
 | `renderShape` | 문자열 | 예 | `model`(블럭 모델로 그림), `entity`(상자·표지판처럼 따로 그림 → 웹은 대체 표시), `invisible`(공기 등) |
 | `tint` | 객체 또는 null | 예 | 색을 입히는 블럭. 아래 |
-| `tabs` | 문자열 배열 | 예 | 크리에이티브 탭 ID. 팔레트 분류용. 없으면 `[]` |
+| `tabs` | 문자열 배열 | 예 | 크리에이티브 탭 ID. 팔레트 분류용. 없으면 `[]`. 게임 없이 만든 팩은 탭을 알 수 없어 `pawprint:<분류>`(8.2장)를 넣는다 |
 | `order` | 정수 | 아니오 | 팔레트 정렬 순서(크리에이티브 탭 안 순서 기준). 없으면 ID 순 |
 | `fluid` | 문자열 | 아니오 | 물·용암처럼 액체 블럭이면 액체 ID |
 
@@ -191,11 +191,11 @@ example.pawpack
 - 사용자가 고른 `<버전>.jar`에서 만든다. jar 안의 `version.json`에서 `mcVersion`·`dataVersion`을 읽는다.
 - 블럭 목록과 속성은 `assets/minecraft/blockstates/*.json`에서 **추론**한다:
   - `variants`의 키(`facing=east,half=top`)와 `multipart`의 `when` 조건에서 속성 이름과 값을 모은다.
-  - 기본 상태는 각 속성의 첫 값으로 둔다. 실제 게임 기본값과 다를 수 있다.
-  - 모델에 쓰이지 않는 속성(예: `waterlogged`)은 빠진다.
+  - 기본 상태는 흔한 기본값(`facing=north`, `half=bottom`, `waterlogged=false` 등)이 있으면 그 값, 없으면 첫 값으로 둔다. 실제 게임 기본값과 다를 수 있다.
+  - 모델에 쓰이지 않는 속성(예: `waterlogged`)은 빠진다. 블럭 종류로 짐작해 채우지 않는다: 모드는 블럭에 없는 속성이 적힌 상태를 읽지 못한다.
   - 그래서 `propertiesComplete: false`.
 - 언어: 웹은 jar에 든 `en_us`만. 데스크탑 앱은 `versions/<v>/<v>.json`의 `assetIndex.id`로 `assets/indexes/<id>.json`을 열어 `minecraft/lang/*.json`을 `assets/objects/<해시 앞 2자>/<해시>`에서 읽고, `block.minecraft.<경로>` 이름이 있는 언어를 모두 넣는다.
-- `item`은 같은 ID의 아이템 모델이 있으면 그 ID, 없으면 null. `tabs`는 비우고, `tint`는 알려진 바닐라 블럭 목록(웹에 내장한 표)으로 채운다.
+- `tint`는 알려진 바닐라 블럭 목록(웹에 내장한 표)으로 채운다. `item`, `renderLayer`, `tabs`, 아이콘은 8.2장.
 
 ---
 
@@ -205,8 +205,38 @@ example.pawpack
 - 파일을 겹치는 순서(뒤가 우선)는 게임과 같다: 바닐라 jar → `options.txt`의 `resourcePacks` 순서. 그 안의 `mod_resources` 자리에 모드 jar(안에 든 `META-INF/jarjar/`·`META-INF/jars/` jar 포함), 모드가 실행 중에 만들어 디스크에 남긴 에셋(`dynamic-resource-pack-cache/*/`), `kubejs/assets`가 온다. `file/<이름>`은 `resourcepacks/<이름>`(zip 또는 폴더).
 - 언어: 런처 에셋(바닐라 jar 옆 `versions/<v>/<v>.json`의 asset index)의 언어 위에 모든 출처의 언어 파일을 키 단위로 합친다(게임과 같음). 이름 키는 `block.<ns>.<경로의 / 를 . 으로>`.
 - `mods`: 모드 jar의 `neoforge.mods.toml`·`mods.toml`·`fabric.mod.json`에서 읽은 것 중 블럭 네임스페이스와 같은 ID.
-- 틴트: 바닐라는 8장의 표. 모드 블럭은 모델 면에 `tintindex`가 있으면 이름으로 추측한다(풀·잎·물). 렌더 레이어도 이름으로 추측한다.
+- 틴트: 바닐라는 8장의 표. 모드 블럭은 모델 면에 `tintindex`가 있으면 이름으로 추측한다(풀·잎·물).
+- 블럭 태그와 루트 테이블(8.2장)은 `data/`에서 읽는다. 겹치는 순서는 에셋과 같다.
 - 한계: 게임 실행 중에만 등록되는 블럭(예: Diagonal Walls), 코드로만 정의된 블럭(blockstate 파일이 없음), 코드로 그리는 모양(연결 텍스처, 특수 렌더러)은 빠지거나 다르게 보인다. Better MC 5(모드 352개)에서 게임 블럭 목록의 95%를 찾았다(2026-10-09).
+
+## 8.2 게임 없이 만든 팩이 파일에서 알아내는 것
+
+8장과 8.1장의 팩은 게임 레지스트리를 볼 수 없다. 대신 파일에 적힌 것을 쓴다.
+
+**`renderLayer`** — 위에서부터 먼저 맞는 것:
+
+1. 블럭 모델의 `render_type`(Forge·NeoForge 모델 JSON. `minecraft:cutout`처럼 적는다). 부모보다 자식 모델의 값이 우선하고, 블럭의 모델이 여럿이면 가장 투명한 쪽.
+2. 바닐라 블럭은 내장한 이름 목록(유리판, 문, 묘목 등).
+3. 블럭 모델이 쓰는 텍스처의 알파: 반투명 픽셀(알파 1~254)이 5% 이상이면 `translucent`, 투명한 픽셀이 하나라도 있으면 `cutout`(이름이 잎이면 `cutout_mipped`), 없으면 `solid`. 바닐라 블럭은 여기서 `translucent`가 되지 않는다(반투명 바닐라 블럭은 2번 목록에 모두 있다).
+4. 텍스처를 읽지 못하면 이름으로 추측한다.
+
+한계: 텍스처 전체를 보므로, 쓰지 않는 빈 영역이 있는 텍스처(가구 등)의 블럭은 `solid` 대신 `cutout`이 된다. 보이는 모습은 같다.
+
+**`tabs`** — 블럭 태그(`data/<ns>/tags/block/**.json`, 1.21 전은 `tags/blocks/`)로 분류한다. 태그 파일은 게임처럼 모든 출처의 것을 합치고(`"replace": true`면 앞의 것을 버림), `#태그` 참조를 따라간다. 분류 ID는 `pawprint:<분류>`:
+
+`stairs`, `slabs`, `walls`, `fences`, `doors`, `planks`, `logs`, `leaves`, `wool`, `terracotta`, `concrete`, `glass`, `stone`, `ores`, `metal`, `terrain`, `plants`, `lights`, `signs`, `redstone`, `decoration`
+
+어느 태그가 어느 분류인지는 `web/src/core/pack/categories.ts`의 표가 기준이다(`minecraft:stairs` → `stairs`, `c:glass_blocks` → `glass` 등). 태그로 분류되지 않은 블럭은 이름 끝(`_stairs`, `_slab`, `_ore` 등)으로 한 번 더 본다. 그래도 없으면 `[]`.
+
+**`item`** — 같은 ID의 아이템 모델(`models/item/<경로>.json` 또는 `items/<경로>.json`)이 있으면 그 ID. 없으면 블럭 루트 테이블(`data/<ns>/loot_table/blocks/<경로>.json`, 1.21 전은 `loot_tables/`)이 주는 아이템: 하나뿐이면 그것, 여럿이면 씨앗(`…seeds`) 하나 또는 블럭 이름이 그 아이템 이름으로 시작하는 하나(`potatoes` → `potato`). 그 밖에는 null.
+
+**아이콘** — 웹·앱이 팩을 만들 때 직접 그려 `icons.png`(칸 32px)에 넣는다.
+
+- 아이템 모델이 평면 그림(`layer0`…이 있고 `elements`가 없음)이면 그 그림. 블럭에 틴트가 있으면 첫 층에 입힌다.
+- 그 밖에는 기본 상태의 블럭 모델을 게임 인벤토리와 같은 각도(Y 225°, X 30°, 0.625배)로 그린다.
+- 모델이 없는 블럭(상자, 침대 등)은 아이콘이 없다.
+
+Better MC 5(모드 352개, 모드 블럭 11,463개)에서(2026-10-10): 이름만으로 추측할 때보다 756개가 `solid`에서 `cutout`·`translucent`로 바뀌었고, 7,255개가 분류되고, 아이템이 없던 632개 중 204개의 아이템을 찾았다.
 
 ## 9. 버전 정책
 

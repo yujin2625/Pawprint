@@ -9,6 +9,7 @@ Browser editor for Pawprint blueprints. One codebase for every Minecraft version
 npm install
 npm run dev      # http://localhost:5173
 npm test         # unit tests (core logic, language files)
+npm run e2e      # screen test in a browser (installed Chrome; CI uses Playwright's Chromium)
 npm run check    # type check
 npm run build    # static site in dist/
 ```
@@ -36,6 +37,12 @@ npm run tauri build   # installer in src-tauri/target/release/bundle/nsis/
 - Desktop: set the same version in `src-tauri/tauri.conf.json` and `package.json`, then push a tag `app-v<version>`
   (for example `app-v0.1.0`). `.github/workflows/desktop.yml` builds Windows, macOS and Linux installers into a
   draft release; check it and publish it on GitHub.
+
+## HTML viewer
+
+"HTML viewer…" in the editor saves one .html file with the blueprint, the part of the block pack it uses and a viewer
+runtime (`src/viewer/main.ts`, built by `npm run viewer` into `viewer-dist/viewer.js`; `dev` and `build` run it
+first). It opens offline in any browser.
 
 ## Notes
 

@@ -1,6 +1,7 @@
 import { unzipSync } from 'fflate';
 import { FileFormatError, isSafeEntryName, readZip, utf8 } from '../zip';
-import { buildPackFromAssets, type AssetSource, type BuiltPack } from './assetPack';
+import { buildPackFromAssets, type AssetSource, type BuiltPack, type IconRenderer } from './assetPack';
+import { mergeTagFile, tagIdOf } from './categories';
 
 export { inferProperties } from './assetPack';
 
@@ -15,6 +16,8 @@ export interface JarPackOptions {
   generator?: string;
   /** More languages (code → the game's language table, at least its `block.*` keys). */
   languages?: Record<string, Record<string, string>>;
+  /** Draws the palette icons (needs a canvas, so the app passes it in). */
+  renderIcons?: IconRenderer;
 }
 
 export type JarPack = BuiltPack;
@@ -38,13 +41,28 @@ export function zipNames(bytes: Uint8Array): string[] {
   return names;
 }
 
+const LOOT_TABLE = /^data\/[a-z0-9_.-]+\/loot_tables?\/blocks\//;
+
 /** An in-memory zip as an asset source. */
 export function zipSource(bytes: Uint8Array): AssetSource {
+  const all = zipNames(bytes);
   return {
-    names: zipNames(bytes).filter((n) => n.startsWith('assets/') && !n.includes('/textures/')),
+    names: all.filter((n) => (n.startsWith('assets/') && !n.includes('/textures/')) || LOOT_TABLE.test(n)),
     read: async (paths) => {
       const set = new Set(paths);
       return readZip(bytes, JAR_LIMITS, (n) => set.has(n));
+    },
+    blockTags: async () => {
+      const files = new Set(all.filter((n) => tagIdOf(n)));
+      const tags: Record<string, string[]> = {};
+      for (const [name, data] of readZip(bytes, JAR_LIMITS, (n) => files.has(n))) {
+        try {
+          mergeTagFile(tags, tagIdOf(name)!, JSON.parse(utf8(data)));
+        } catch {
+          // A damaged tag file only loses that tag.
+        }
+      }
+      return tags;
     },
   };
 }
@@ -69,7 +87,7 @@ export async function buildPackFromJar(jar: Uint8Array, options: JarPackOptions)
   }
   const source = zipSource(jar);
   // Only the game's own blocks: a jar with other namespaces (a modded jar) is not a vanilla jar.
-  source.names = source.names.filter((n) => n.startsWith('assets/minecraft/'));
+  source.names = source.names.filter((n) => n.startsWith('assets/minecraft/') || n.startsWith('data/minecraft/'));
   return buildPackFromAssets(source, {
     id: options.id,
     now: options.now,
@@ -81,5 +99,6 @@ export async function buildPackFromJar(jar: Uint8Array, options: JarPackOptions)
     loader: 'vanilla',
     resourcePacks: ['vanilla'],
     languages: { ...options.languages, en_us: english },
+    renderIcons: options.renderIcons,
   });
 }

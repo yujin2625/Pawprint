@@ -3,3 +3,6 @@ dist/
 *.local
 .claude/
 public/_local/
+viewer-dist/
+test-results/
+playwright-report/

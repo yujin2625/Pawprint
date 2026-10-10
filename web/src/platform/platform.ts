@@ -158,6 +158,11 @@ export async function instanceLanguages(): Promise<Record<string, Record<string,
   return invoke('instance_languages');
 }
 
+/** Block tags merged across the indexed files: tag ID → block IDs and `#tag` references. */
+export async function instanceBlockTags(): Promise<Record<string, string[]>> {
+  return invoke('instance_block_tags');
+}
+
 export async function instanceDone(): Promise<void> {
   await invoke('instance_done');
 }

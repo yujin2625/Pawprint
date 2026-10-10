@@ -414,8 +414,11 @@ public class LibraryScreen extends Screen {
     }
 
     private void copyPrompt() {
-        minecraft.keyboardHandler.setClipboard(AiTools.prompt());
-        setStatus(Component.translatable("pawprint.ai.prompt_copied"), SUCCESS_COLOR);
+        AiTools.Prompt prompt = AiTools.prompt();
+        minecraft.keyboardHandler.setClipboard(prompt.text());
+        setStatus(prompt.total() == 0
+                ? Component.translatable("pawprint.ai.prompt_copied")
+                : Component.translatable("pawprint.ai.prompt_copied_blocks", prompt.listed(), prompt.total()), SUCCESS_COLOR);
     }
 
     private void importClipboard() {

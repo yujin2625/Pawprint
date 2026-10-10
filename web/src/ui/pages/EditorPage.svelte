@@ -9,9 +9,12 @@
   import { hiddenLayers, moveCellsTo, protectedLayers, rows } from '../../core/blueprint/layers';
   import { getSetting, setSetting } from '../../storage/db';
   import { loadDefaultPack } from '../packs/activePack';
-  import { exportFile, loadProject, saveProject, saveStamp, saveToFile } from '../projects';
+  import { exportAs, exportFile, loadProject, saveProject, saveStamp, saveToFile, shareString } from '../projects';
+  import { EXTERNAL_FORMATS, type ExternalFormat } from '../../core/format/convert';
+  import { FileFormatError } from '../../core/zip';
   import { isDesktop, saveBytes } from '../../platform/platform';
   import { findGames, sendToGame } from '../gameLink';
+  import { exportViewer } from '../viewerExport';
   import { writePawprint } from '../../core/format/pawprint';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
@@ -122,7 +125,8 @@
 
   $effect(() => {
     if (!editor.message) return;
-    const timer = setTimeout(() => (editor.message = null), 4000);
+    // Messages with details (import warnings) stay longer.
+    const timer = setTimeout(() => (editor.message = null), editor.message === 'editor.aiWarnings' ? 15000 : 4000);
     return () => clearTimeout(timer);
   });
 
@@ -278,6 +282,30 @@
       editor.message = 'editor.sendFailed';
     } finally {
       sending = false;
+    }
+  }
+
+  /** Saves a copy for another mod (Litematica, WorldEdit, structure blocks). Those formats have no layers. */
+  async function exportOther(format: ExternalFormat) {
+    const bp = ctx.blueprint;
+    if (!bp) return;
+    try {
+      if (await exportAs(bp, format, ctx.pack?.info.dataVersion ?? 0)) editor.message = bp.layers.length > 1 ? 'editor.exportedNoLayers' : 'editor.exported';
+    } catch (e) {
+      console.error(e);
+      editor.message = e instanceof FileFormatError ? e.key : 'editor.saveFailed';
+    }
+  }
+
+  async function copyShare() {
+    const bp = ctx.blueprint;
+    if (!bp) return;
+    try {
+      await navigator.clipboard.writeText(shareString(bp, ctx.pack?.info.dataVersion ?? 0));
+      editor.message = 'editor.shareCopied';
+    } catch (e) {
+      console.error(e);
+      editor.message = 'editor.shareFailed';
     }
   }
 
@@ -522,6 +550,17 @@
       <input bind:this={layoutInput} type="file" accept=".json,application/json" hidden onchange={importLayout} />
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
       <button class="btn" type="button" disabled={!ctx.blueprint || sending} title={t('editor.sendGameHelp')} onclick={sendGame}>{t('editor.sendGame')}</button>
+      <button class="btn" type="button" disabled={!ctx.blueprint} title={t('editor.viewerHelp')} onclick={() => ctx.blueprint && exportViewer(ctx.blueprint, ctx.pack)}>{t('editor.viewer')}</button>
+      <Menu label={t('editor.export')} align="right">
+        {#snippet children(close)}
+          <div class="heading">{t('editor.exportOther')}</div>
+          {#each EXTERNAL_FORMATS as format (format.id)}
+            <button class="item" type="button" onclick={() => (exportOther(format.id), close())}>{format.name}<span class="key">{format.extension}</span></button>
+          {/each}
+          <div class="sep"></div>
+          <button class="item" type="button" title={t('editor.shareHelp')} onclick={() => (copyShare(), close())}>{t('editor.copyShare')}</button>
+        {/snippet}
+      </Menu>
       {#if isDesktop}
         {#if filePath}
           <button class="btn" type="button" disabled={!ctx.blueprint} onclick={() => saveFile(true)}>{t('editor.saveAs')}</button>
@@ -624,7 +663,7 @@
         <span>{editor.cursorState ? nameOf(editor.cursorState) : t('editor.emptyCell')}</span>
       {/if}
       <span class="spacer"></span>
-      {#if editor.message}<span class="message">{t(editor.message)}</span>{/if}
+      {#if editor.message}<span class="message">{t(editor.message, editor.messageParams)}</span>{/if}
       {#if locked}<span>{t('layout.lockedNote')}</span>{/if}
       {#if ctx.stats}<span>{t('editor.quads', { count: ctx.stats.quads })}</span>{/if}
     </footer>

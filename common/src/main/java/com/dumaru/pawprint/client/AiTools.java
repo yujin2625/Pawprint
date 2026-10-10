@@ -2,14 +2,19 @@ package com.dumaru.pawprint.client;
 
 import com.dumaru.pawprint.Pawprint;
 import com.dumaru.pawprint.client.palette.BlockSearchIndex;
+import com.dumaru.pawprint.format.text.ModdedBlockList;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LiquidBlock;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeSet;
 
 /**
@@ -28,7 +33,7 @@ public final class AiTools {
             - Top level: {"pawprint": 1, "name": str, "description": str?, "tags": [str]?,
               "palette": {char: block}?, "operations": [op]?, "layers": {"origin": [x,y,z]?, "grid": [[row]]}?}
             - Block strings use /setblock syntax: "minecraft:oak_stairs[facing=east,half=bottom]".
-              "air" means the spot must be empty. Only use blocks that exist in Minecraft %s%s.
+              "air" means the spot must be empty. Only use blocks that exist in %s%s.
             - Operations run in order, then layers; later writes overwrite earlier ones. Shapes:
               single{at}, line{from,to}, box{from,to}, hollow_box{from,to}, walls{from,to},
               sphere{center,radius}, cylinder{base,radius,height}; each has "block" (palette char or block string).
@@ -45,19 +50,52 @@ public final class AiTools {
     private AiTools() {
     }
 
-    /** The instructions with this game's version and installed block mods filled in. */
-    public static String prompt() {
+    /** The instructions, and how many of this game's modded blocks they list. */
+    public record Prompt(String text, int listed, int total) {
+    }
+
+    /**
+     * The instructions with this game's version and installed block mods filled in, listing the modded block IDs
+     * (blocks with an item first when they do not all fit) so the AI does not have to guess them.
+     */
+    public static Prompt prompt() {
+        List<String> withItem = new ArrayList<>();
+        List<String> withoutItem = new ArrayList<>();
+        for (Block block : BuiltInRegistries.BLOCK) {
+            if (block instanceof LiquidBlock) {
+                continue;
+            }
+            String id = BuiltInRegistries.BLOCK.getKey(block).toString();
+            (block.asItem() != Items.AIR ? withItem : withoutItem).add(id);
+        }
+        withItem.addAll(withoutItem);
+        ModdedBlockList.Listing blocks = ModdedBlockList.of(withItem, ModdedBlockList.MAX_LISTED);
+        String game = "Minecraft " + SharedConstants.getCurrentVersion().getName();
         TreeSet<String> mods = new TreeSet<>();
-        for (ResourceLocation id : BuiltInRegistries.BLOCK.keySet()) {
-            if (!id.getNamespace().equals("minecraft")) {
-                mods.add(id.getNamespace());
+        for (String id : withItem) {
+            int colon = id.indexOf(':');
+            if (colon > 0 && !id.startsWith("minecraft:")) {
+                mods.add(id.substring(0, colon));
             }
         }
-        String modText = mods.isEmpty()
-                ? ""
-                : " and these mods (namespaces): " + String.join(", ", mods)
-                + ". If unsure whether a modded block ID exists, prefer vanilla blocks";
-        return PROMPT.formatted(SharedConstants.getCurrentVersion().getName(), modText);
+        String modText;
+        if (mods.isEmpty()) {
+            modText = "";
+        } else if (blocks.lines().isEmpty()) {
+            modText = " and these mods (namespaces): " + String.join(", ", mods)
+                    + ". If unsure whether a modded block ID exists, prefer vanilla blocks";
+        } else {
+            modText = " and these mods (namespaces): " + String.join(", ", mods)
+                    + ". Modded blocks are listed at the end; use only those modded IDs"
+                    + (blocks.listed() < blocks.total() ? ", and vanilla blocks where none of them fits" : "");
+        }
+        String text = PROMPT.formatted(game, modText);
+        if (!blocks.lines().isEmpty()) {
+            String list = "Modded blocks in this game (\"namespace: names\"; write them as \"namespace:name\"). Any vanilla block of "
+                    + game + " may be used too:\n" + String.join("\n", blocks.lines()) + "\n\n";
+            text = text.replace("Build request: ", list + "Build request: ");
+        }
+        return new Prompt(text, blocks.listed(), blocks.total());
     }
 
     /**
