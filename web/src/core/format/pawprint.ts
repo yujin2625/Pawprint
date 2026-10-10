@@ -94,7 +94,8 @@ export function readPawprint(bytes: Uint8Array): Blueprint {
   return fromNbt(normalizeMeta(rawMeta, format), readNbt(data), files.get('thumbnail.png') ?? null);
 }
 
-function fromNbt(meta: PawprintMeta, root: NbtCompound, thumbnail: Uint8Array | null): Blueprint {
+/** A blueprint from its NBT (`blueprint.nbt`, or a share string's payload) and the metadata that goes with it. */
+export function fromNbt(meta: PawprintMeta, root: NbtCompound, thumbnail: Uint8Array | null): Blueprint {
   const paletteTag = root.Palette;
   const palette = Array.isArray(paletteTag) ? paletteTag.map(String) : [];
   if (palette.length > MAX_PALETTE) throw new FileFormatError('error.pawprint.tooLarge');
@@ -198,9 +199,31 @@ function fixOrder(order: unknown, layers: Layer[]): number[] {
   return [...new Set([...given, ...top])];
 }
 
+/** Whether a blueprint uses layers (more than the default one), which makes it format 2. */
+export function isLayered(bp: Blueprint): boolean {
+  return bp.layers.length > 1 || bp.blockLayers.some((l) => l !== 0) || bp.removalLayers.some((l) => l !== 0);
+}
+
+/** The block data as NBT: what `blueprint.nbt` holds, and the base of a share string. */
+export function toNbt(bp: Blueprint): { [key: string]: NbtWrite } {
+  const root: { [key: string]: NbtWrite } = {
+    DataVersion: nbt.int(bp.meta.dataVersion),
+    Size: new Int32Array(boundsSize(bp.positions, bp.removals)),
+    Palette: nbt.list(Tag.String, bp.palette),
+    Positions: packPositions(bp.positions),
+    States: bp.states,
+    Removals: packPositions(bp.removals),
+  };
+  if (isLayered(bp)) {
+    root.BlockLayers = bp.blockLayers;
+    root.RemovalLayers = bp.removalLayers;
+  }
+  return root;
+}
+
 /** Writes a `.pawprint`. With only the default layer it writes format 1 so older mods can open it. */
 export function writePawprint(bp: Blueprint): Uint8Array {
-  const layered = bp.layers.length > 1 || bp.blockLayers.some((l) => l !== 0) || bp.removalLayers.some((l) => l !== 0);
+  const layered = isLayered(bp);
   const format = layered ? 2 : 1;
   const size = boundsSize(bp.positions, bp.removals);
   const blockIds = new Set<string>();
@@ -226,27 +249,15 @@ export function writePawprint(bp: Blueprint): Uint8Array {
     meta.layers = bp.layers;
     meta.layerOrder = bp.layerOrder;
   }
-  const root: { [key: string]: NbtWrite } = {
-    DataVersion: nbt.int(meta.dataVersion),
-    Size: new Int32Array(size),
-    Palette: nbt.list(Tag.String, bp.palette),
-    Positions: packPositions(bp.positions),
-    States: bp.states,
-    Removals: packPositions(bp.removals),
-  };
-  if (layered) {
-    root.BlockLayers = bp.blockLayers;
-    root.RemovalLayers = bp.removalLayers;
-  }
   const files = new Map<string, Uint8Array>([
     ['meta.json', jsonBytes(meta)],
-    ['blueprint.nbt', writeNbt(root)],
+    ['blueprint.nbt', writeNbt(toNbt(bp))],
   ]);
   if (bp.thumbnail) files.set('thumbnail.png', bp.thumbnail);
   return writeZip(files);
 }
 
-function boundsSize(...lists: Int32Array[]): [number, number, number] {
+export function boundsSize(...lists: Int32Array[]): [number, number, number] {
   const max = [-1, -1, -1];
   for (const xyz of lists) {
     for (let i = 0; i < xyz.length; i++) max[i % 3] = Math.max(max[i % 3]!, xyz[i]!);

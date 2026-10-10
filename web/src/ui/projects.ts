@@ -1,5 +1,7 @@
 import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
-import { readPawprint, writePawprint } from '../core/format/pawprint';
+import { readPawprint, writePawprint, type Blueprint } from '../core/format/pawprint';
+import { EXTERNAL_FORMATS, formatOfFile, readExternal, writeExternal, type ExternalFormat } from '../core/format/convert';
+import { fromShareString, toShareString } from '../core/format/share';
 import { getProject, listProjects, putProject, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
 import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
@@ -17,10 +19,28 @@ export function newBlueprint(name: string): EditableBlueprint {
   return new EditableBlueprint(newMeta(name));
 }
 
-export async function importFile(bytes: Uint8Array, fallbackName: string): Promise<string> {
-  const bp = EditableBlueprint.fromBlueprint(readPawprint(bytes));
-  if (!bp.meta.name) bp.meta.name = fallbackName;
-  return createProject(bp);
+/** Extensions the app opens as blueprints: its own and other mods' formats. */
+export const BLUEPRINT_EXTENSIONS = ['pawprint', ...EXTERNAL_FORMATS.map((f) => f.extension.slice(1))];
+
+const withoutExtension = (fileName: string): string => fileName.replace(/\.(pawprint|litematic|schem|nbt)$/i, '');
+
+/** A blueprint file of any format we read (`.pawprint`, `.litematic`, `.schem`, `.nbt`), by its name. */
+function readBlueprintFile(bytes: Uint8Array, fileName: string): EditableBlueprint {
+  const format = formatOfFile(fileName);
+  const name = withoutExtension(fileName);
+  const bp = EditableBlueprint.fromBlueprint(format ? readExternal(format, bytes, newMeta(name)) : readPawprint(bytes));
+  if (!bp.meta.name) bp.meta.name = name;
+  return bp;
+}
+
+/** Makes a project from a blueprint file. `fileName` tells the format and names blueprints that have no name. */
+export async function importFile(bytes: Uint8Array, fileName: string): Promise<string> {
+  return createProject(readBlueprintFile(bytes, fileName));
+}
+
+/** Makes a project from a share string (`PAW1:…`) found anywhere in the text. */
+export async function importShare(text: string): Promise<string> {
+  return createProject(EditableBlueprint.fromBlueprint(fromShareString(text, newMeta(t('projects.shared')))));
 }
 
 export async function loadProject(id: string): Promise<{ project: StoredProject; blueprint: EditableBlueprint } | null> {
@@ -70,15 +90,16 @@ export async function openPath(path: string): Promise<string> {
         location.hash = '#/projects';
         await new Promise((r) => setTimeout(r, 500));
       }
-      const bp = EditableBlueprint.fromBlueprint(readPawprint(bytes));
+      const bp = readBlueprintFile(bytes, baseName(path));
       bp.meta.name ||= existing.name;
       await saveProject(existing.id, bp, null);
       await linkFile(existing.id, path, mtime);
     }
     return existing.id;
   }
-  const id = await importFile(bytes, baseName(path).replace(/\.pawprint$/i, ''));
-  await linkFile(id, path, mtime);
+  const id = await importFile(bytes, baseName(path));
+  // Saving writes a .pawprint, so only a .pawprint stays linked to its file.
+  if (!formatOfFile(path)) await linkFile(id, path, mtime);
   return id;
 }
 
@@ -104,6 +125,25 @@ export async function saveToFile(id: string, bp: EditableBlueprint, saveAs = fal
 export function exportFile(bp: EditableBlueprint): Promise<boolean> {
   const bytes = writePawprint(bp.toBlueprint());
   return saveBytes(safeFileName(bp.meta.name, 'blueprint') + '.pawprint', bytes, { name: 'Pawprint', extensions: ['pawprint'] }, 'application/zip');
+}
+
+/** The blueprint as other tools get it; a blueprint made here has no game version of its own, so the pack's is used. */
+function flatFor(bp: EditableBlueprint, packDataVersion: number): Blueprint {
+  const flat = bp.toBlueprint();
+  if (!flat.meta.dataVersion) flat.meta = { ...flat.meta, dataVersion: packDataVersion };
+  return flat;
+}
+
+/** Saves the blueprint in another mod's format. Layers do not exist there and are left out. */
+export function exportAs(bp: EditableBlueprint, format: ExternalFormat, packDataVersion = 0): Promise<boolean> {
+  const info = EXTERNAL_FORMATS.find((f) => f.id === format)!;
+  const bytes = writeExternal(format, flatFor(bp, packDataVersion));
+  return saveBytes(safeFileName(bp.meta.name, 'blueprint') + info.extension, bytes, { name: info.name, extensions: [info.extension.slice(1)] });
+}
+
+/** The blueprint as one line of text for chat (`PAW1:…`); the mod and this editor read it back. */
+export function shareString(bp: EditableBlueprint, packDataVersion = 0): string {
+  return toShareString(flatFor(bp, packDataVersion));
 }
 
 /** The whole blueprint of a project, ready to stamp. */

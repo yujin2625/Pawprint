@@ -2,7 +2,8 @@
   import { formatDate, t } from '../../i18n/i18n.svelte';
   import { FileFormatError } from '../../core/zip';
   import { deleteProject, listProjects, type StoredProject } from '../../storage/db';
-  import { createProject, importFile, newBlueprint, openPath } from '../projects';
+  import { BLUEPRINT_EXTENSIONS, createProject, importFile, importShare, newBlueprint, openPath } from '../projects';
+  import { hasShareString } from '../../core/format/share';
   import { isDesktop, pickFile } from '../../platform/platform';
   import { openProject } from '../session.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
@@ -39,7 +40,7 @@
     error = null;
     busy = true;
     try {
-      const id = await importFile(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.pawprint$/i, ''));
+      const id = await importFile(new Uint8Array(await file.arrayBuffer()), file.name);
       openProject(id);
     } catch (e) {
       error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
@@ -50,7 +51,7 @@
 
   /** Desktop: a file dialog, so the project stays linked to the file. */
   async function openFromDisk() {
-    const path = await pickFile({ name: 'Pawprint', extensions: ['pawprint'] });
+    const path = await pickFile({ name: t('projects.fileKinds'), extensions: BLUEPRINT_EXTENSIONS });
     if (!path) return;
     error = null;
     busy = true;
@@ -60,6 +61,42 @@
       error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
     } finally {
       busy = false;
+    }
+  }
+
+  /** A share string (`PAW1:…`) becomes a new project. */
+  async function openShare(text: string) {
+    error = null;
+    busy = true;
+    try {
+      openProject(await importShare(text));
+    } catch (e) {
+      error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** The button: takes the clipboard if the browser allows reading it, otherwise asks for the text. */
+  async function pasteShare() {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      text = '';
+    }
+    if (!hasShareString(text)) text = prompt(t('projects.sharePrompt')) ?? '';
+    if (text.trim()) await openShare(text);
+  }
+
+  /** Ctrl+V anywhere on the page with a share string in the clipboard. */
+  function pasted(e: ClipboardEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    if (!busy && hasShareString(text)) {
+      e.preventDefault();
+      void openShare(text);
     }
   }
 
@@ -86,13 +123,14 @@
   }
 </script>
 
-<svelte:window ondragover={(e) => (e.preventDefault(), (dragging = true))} ondragleave={(e) => !e.relatedTarget && (dragging = false)} ondrop={dropped} />
+<svelte:window onpaste={pasted} ondragover={(e) => (e.preventDefault(), (dragging = true))} ondragleave={(e) => !e.relatedTarget && (dragging = false)} ondrop={dropped} />
 
 <div class="head">
   <h1>{t('projects.title')}</h1>
   <button class="btn primary" type="button" disabled={busy} onclick={create}>{t('projects.new')}</button>
   <button class="btn" type="button" disabled={busy} onclick={() => (isDesktop ? openFromDisk() : input.click())}>{t('projects.open')}</button>
-  <input bind:this={input} type="file" accept=".pawprint" hidden onchange={picked} />
+  <button class="btn" type="button" disabled={busy} title={t('projects.pasteShareHelp')} onclick={pasteShare}>{t('projects.pasteShare')}</button>
+  <input bind:this={input} type="file" accept={BLUEPRINT_EXTENSIONS.map((e) => '.' + e).join(',')} hidden onchange={picked} />
 </div>
 
 {#if error}
