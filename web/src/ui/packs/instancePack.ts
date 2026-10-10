@@ -1,6 +1,7 @@
 import { buildPackFromAssets, type AssetSource } from '../../core/pack/assetPack';
 import { readZip } from '../../core/zip';
-import { baseName, instanceDone, instanceIndex, instanceLanguages, instanceRead, minecraftLanguages, type InstanceInfo } from '../../platform/platform';
+import { baseName, instanceBlockTags, instanceDone, instanceIndex, instanceLanguages, instanceRead, minecraftLanguages, type InstanceInfo } from '../../platform/platform';
+import { renderPackIcons } from '../../render/packIcons';
 import { toStoredPack } from './addPack';
 import type { StoredPack } from '../../storage/db';
 
@@ -28,6 +29,7 @@ export async function packFromInstance(dir: string, info: InstanceInfo, vanillaJ
         }
         return out;
       },
+      blockTags: instanceBlockTags,
     };
     step('blocks');
     // Vanilla names in other languages are in the launcher's assets, under the mods' and resource packs' ones.
@@ -51,6 +53,7 @@ export async function packFromInstance(dir: string, info: InstanceInfo, vanillaJ
       mods: stats.mods,
       resourcePacks: [...info.resourcePacks].reverse(),
       languages,
+      renderIcons: renderPackIcons,
     });
     step('pack');
     return toStoredPack(built.bytes);

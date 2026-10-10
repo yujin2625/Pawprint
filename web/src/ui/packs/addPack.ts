@@ -1,6 +1,7 @@
 import { readPawpack } from '../../core/pack/pawpack';
 import { pickPreviews } from '../../core/pack/previews';
 import { buildPackFromJar } from '../../core/pack/vanillaJar';
+import { renderPackIcons } from '../../render/packIcons';
 import type { StoredPack } from '../../storage/db';
 
 /** Turns a `.pawpack` (or a freshly built one) into the record kept in IndexedDB. */
@@ -32,6 +33,7 @@ export async function packFromJarBytes(jar: Uint8Array, languages?: Record<strin
     now: new Date().toISOString(),
     generator: 'pawprint-web',
     languages,
+    renderIcons: renderPackIcons,
   });
   return toStoredPack(built.bytes);
 }

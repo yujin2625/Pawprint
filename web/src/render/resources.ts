@@ -162,6 +162,24 @@ export class BlockResources {
 
   private sheet: Promise<ImageBitmap | null> | null = null;
 
+  /**
+   * Draws the block's item icon from the pack's icon sheet over the whole canvas. False when the pack has none
+   * for it.
+   */
+  async drawPackIcon(target: HTMLCanvasElement, id: string): Promise<boolean> {
+    const icons = this.pack?.icons;
+    const index = icons?.icons[id];
+    if (!icons || index === undefined) return false;
+    const sheet = await this.iconSheet();
+    if (!sheet) return false;
+    const ctx = target.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, target.width, target.height);
+    const sx = (index % icons.columns) * icons.cell, sy = Math.floor(index / icons.columns) * icons.cell;
+    ctx.drawImage(sheet, sx, sy, icons.cell, icons.cell, 0, 0, target.width, target.height);
+    return true;
+  }
+
   /** icons.png, decoded once. */
   private iconSheet(): Promise<ImageBitmap | null> {
     const bytes = this.pack?.files.get('icons.png');
