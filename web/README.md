@@ -9,6 +9,7 @@ Browser editor for Pawprint blueprints. One codebase for every Minecraft version
 npm install
 npm run dev      # http://localhost:5173
 npm test         # unit tests (core logic, language files)
+npm run e2e      # screen test in a browser (installed Chrome; CI uses Playwright's Chromium)
 npm run check    # type check
 npm run build    # static site in dist/
 ```
