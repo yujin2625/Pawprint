@@ -414,5 +414,6 @@
   "error.convert.tooLarge": "The blueprint is too large for that format.",
   "error.share.notFound": "There is no share text here. It starts with PAW1:",
   "error.share.tooLong": "The share text is too long.",
-  "error.share.damaged": "The share text is damaged. It may have been cut off when copying."
+  "error.share.damaged": "The share text is damaged. It may have been cut off when copying.",
+  "packs.busy.instance.icons": "Drawing the block icons of {name}…"
 }

@@ -6,7 +6,25 @@ import type { IconInput, IconSheet } from '../core/pack/assetPack';
  * Draws the palette icons of a pack made from game files, the way the game's inventory shows blocks: the block
  * model seen from above at an angle, or the item's flat picture (flowers, doors, signs). Models are drawn with a
  * 2D canvas: seen without perspective every face is a sheared rectangle, which a canvas transform draws exactly.
+ * Runs in the pack worker (on an OffscreenCanvas) or on the page.
  */
+
+type Canvas = OffscreenCanvas | HTMLCanvasElement;
+type Context = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+
+function makeCanvas(width: number, height: number): Canvas | null {
+  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(width, height);
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function toPng(canvas: Canvas): Promise<Blob | null> {
+  if ('convertToBlob' in canvas) return canvas.convertToBlob({ type: 'image/png' }).catch(() => null);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
 
 const CELL = 32;
 /** The game's inventory view of a block: turned 225° around Y, tilted 30°, at 0.625 of the slot. */
@@ -41,13 +59,12 @@ export async function renderPackIcons(input: IconInput): Promise<IconSheet | nul
   if (!jobs.length) return null;
 
   const columns = Math.min(256, Math.max(16, Math.ceil(Math.sqrt(jobs.length))));
-  const sheet = document.createElement('canvas');
-  sheet.width = columns * CELL;
-  sheet.height = Math.ceil(jobs.length / columns) * CELL;
-  const ctx = sheet.getContext('2d');
-  if (!ctx) return null;
+  const sheet = makeCanvas(columns * CELL, Math.ceil(jobs.length / columns) * CELL);
+  const scratch = makeCanvas(1, 1);
+  const ctx = sheet?.getContext('2d') as Context | null | undefined;
+  // No canvas here (a worker in an old browser): the pack is made without icons.
+  if (!sheet || !scratch || !ctx) return null;
   ctx.imageSmoothingEnabled = false;
-  const scratch = document.createElement('canvas');
   const images = new ImageCache(input.files);
   const icons: Record<string, number> = {};
 
@@ -66,7 +83,7 @@ export async function renderPackIcons(input: IconInput): Promise<IconSheet | nul
   }
   images.close();
   if (!Object.keys(icons).length) return null;
-  const blob = await new Promise<Blob | null>((resolve) => sheet.toBlob(resolve, 'image/png'));
+  const blob = await toPng(sheet);
   if (!blob) return null;
   return { png: new Uint8Array(await blob.arrayBuffer()), cell: CELL, columns, icons };
 }
@@ -112,11 +129,11 @@ function project(px: number, py: number, pz: number): [number, number, number] {
  * Copies part of an image into the scratch canvas, multiplied by a color (shading, tint). The picture's own
  * transparency is kept.
  */
-function tinted(scratch: HTMLCanvasElement, image: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, color: string | null): void {
+function tinted(scratch: Canvas, image: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, color: string | null): void {
   const w = Math.max(1, Math.round(sw)), h = Math.max(1, Math.round(sh));
   scratch.width = w;
   scratch.height = h;
-  const s = scratch.getContext('2d')!;
+  const s = scratch.getContext('2d') as Context;
   s.imageSmoothingEnabled = false;
   s.drawImage(image, sx, sy, sw, sh, 0, 0, w, h);
   if (!color) return;
@@ -134,7 +151,7 @@ function shadeColor(shade: number, tint: [number, number, number] | null): strin
   return `rgb(${c(tint?.[0] ?? 1)}, ${c(tint?.[1] ?? 1)}, ${c(tint?.[2] ?? 1)})`;
 }
 
-async function drawModel(ctx: CanvasRenderingContext2D, scratch: HTMLCanvasElement, images: ImageCache, quads: BakedQuad[], ox: number, oy: number): Promise<boolean> {
+async function drawModel(ctx: Context, scratch: Canvas, images: ImageCache, quads: BakedQuad[], ox: number, oy: number): Promise<boolean> {
   const faces: { quad: BakedQuad; points: [number, number, number][]; depth: number }[] = [];
   for (const quad of quads) {
     const points = [0, 1, 2, 3].map((k) => project(quad.pos[k * 3]!, quad.pos[k * 3 + 1]!, quad.pos[k * 3 + 2]!));
@@ -174,7 +191,7 @@ async function drawModel(ctx: CanvasRenderingContext2D, scratch: HTMLCanvasEleme
   return drawn;
 }
 
-async function drawFlat(ctx: CanvasRenderingContext2D, scratch: HTMLCanvasElement, layers: Uint8Array[], tint: string | null, ox: number, oy: number): Promise<boolean> {
+async function drawFlat(ctx: Context, scratch: Canvas, layers: Uint8Array[], tint: string | null, ox: number, oy: number): Promise<boolean> {
   let drawn = false;
   for (let i = 0; i < layers.length; i++) {
     const image = await decode(layers[i]);

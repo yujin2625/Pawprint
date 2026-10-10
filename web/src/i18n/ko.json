@@ -414,5 +414,6 @@
   "error.convert.tooLarge": "이 형식으로 저장하기에는 청사진이 너무 커요.",
   "error.share.notFound": "공유 문자열이 없어요. PAW1:로 시작해요.",
   "error.share.tooLong": "공유 문자열이 너무 길어요.",
-  "error.share.damaged": "공유 문자열이 손상됐어요. 복사하다 잘렸을 수 있어요."
+  "error.share.damaged": "공유 문자열이 손상됐어요. 복사하다 잘렸을 수 있어요.",
+  "packs.busy.instance.icons": "{name}의 블럭 아이콘을 그리는 중…"
 }
