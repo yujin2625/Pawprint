@@ -79,6 +79,7 @@
   "pawprint.screen.library.copy_text": "Copy as AI Text",
   "pawprint.screen.library.export_blocks": "Save Block List",
   "pawprint.ai.prompt_copied": "AI instructions copied. Paste them into an AI chat and describe the build at the end, then copy the JSON reply and press Import Clipboard.",
+  "pawprint.ai.prompt_copied_blocks": "AI instructions copied, listing %s of %s modded blocks. Paste them into an AI chat and describe the build at the end, then copy the JSON reply and press Import Clipboard.",
   "pawprint.ai.imported": "Imported \"%s\" (%s blocks).",
   "pawprint.ai.imported_with_warnings": "Imported \"%s\" with %s warning(s): %s",
   "pawprint.ai.import_failed": "Import failed (error copied to clipboard, paste it back to the AI): %s",
