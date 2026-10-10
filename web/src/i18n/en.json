@@ -394,5 +394,6 @@
   "palette.category.lights": "Candles and campfires",
   "palette.category.signs": "Signs and banners",
   "palette.category.redstone": "Buttons, plates and rails",
-  "palette.category.decoration": "Furniture and storage"
+  "palette.category.decoration": "Furniture and storage",
+  "packs.failedShort": "The block pack could not be made"
 }

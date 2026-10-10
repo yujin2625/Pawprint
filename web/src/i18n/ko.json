@@ -394,5 +394,6 @@
   "palette.category.lights": "양초와 모닥불",
   "palette.category.signs": "표지판과 현수막",
   "palette.category.redstone": "버튼·압력판·레일",
-  "palette.category.decoration": "가구와 보관함"
+  "palette.category.decoration": "가구와 보관함",
+  "packs.failedShort": "블럭 팩을 만들지 못했어요"
 }

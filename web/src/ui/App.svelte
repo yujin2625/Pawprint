@@ -13,6 +13,8 @@
   import ProjectsPage from './pages/ProjectsPage.svelte';
   import { isDesktop } from '../platform/platform';
   import { watchOpenFiles } from './openFiles';
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import { answerReplace, packJob } from './packs/packJobs.svelte';
 
   let hash = $state(location.hash);
 
@@ -48,6 +50,13 @@
       <a href="#/download" aria-current={page === 'download' ? 'page' : undefined}>{t('nav.download')}</a>
     </nav>
     <div class="spacer"></div>
+    {#if packJob.busy}
+      <span role="status"><a class="job busy" href="#/packs">{t(packJob.busy.key, packJob.busy.params)}</a></span>
+    {:else if page !== 'packs' && packJob.notice}
+      <span role="status"><a class="job" href="#/packs">{t(packJob.notice.key, packJob.notice.params)}</a></span>
+    {:else if page !== 'packs' && packJob.error}
+      <span role="alert"><a class="job failed" href="#/packs">{t('packs.failedShort')}</a></span>
+    {/if}
     <a class="settings" href="#/settings" title={t('settings.title')} aria-label={t('settings.title')} aria-current={page === 'settings' ? 'page' : undefined}><PixelIcon name="gear" /></a>
     <label>
       <span class="visually-hidden">{t('app.language')}</span>
@@ -88,6 +97,10 @@
 </div>
 
 {#if intro.open}<Intro />{/if}
+
+{#if packJob.replacing}
+  <ConfirmDialog message={t('packs.confirmReplace', { name: packJob.replacing.name })} confirmLabel={t('packs.replace')} onanswer={answerReplace} />
+{/if}
 
 <style>
   .shell {
@@ -150,6 +163,41 @@
 
   .spacer {
     flex: 1;
+  }
+
+  /* A pack being made (or just made) while another page is open. */
+  .job {
+    display: block;
+    max-width: 44ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 10px;
+    border: 2px solid var(--outline);
+    background: var(--chrome-raised);
+    color: var(--chrome-text);
+    text-decoration: none;
+  }
+
+  .job.busy {
+    animation: job-pulse 1.2s steps(2, jump-none) infinite;
+  }
+
+  .job.failed {
+    border-color: var(--danger);
+  }
+
+  @keyframes job-pulse {
+    50% {
+      border-color: var(--accent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .job.busy {
+      animation: none;
+      border-color: var(--accent);
+    }
   }
 
   .settings {

@@ -198,3 +198,30 @@ describe('pack from game files: what the files say', async () => {
     expect(pack.files.has('assets/mymod/textures/item/tulip.png')).toBe(false);
   });
 });
+
+describe('blockstates as mods write them', async () => {
+  const { ModelBaker } = await import('../src/core/model/bake');
+  const json = (v: unknown) => strToU8(JSON.stringify(v));
+  const files = new Map<string, Uint8Array>([
+    // The game accepts booleans and numbers as condition values; so must we.
+    ['assets/mymod/blockstates/cap.json', json({ multipart: [
+      { when: { up: true }, apply: { model: 'mymod:block/cap' } },
+      { when: { OR: [{ age: 3 }, { age: '1|2' }] }, apply: { model: 'mymod:block/cap' } },
+    ] })],
+    ['assets/mymod/models/block/cap.json', json({ textures: { all: 'mymod:block/cap' }, elements: [{ from: [0, 0, 0], to: [16, 16, 16], faces: { up: { texture: '#all' } } }] })],
+    ['assets/mymod/blockstates/broken.json', json({ multipart: 'nonsense', variants: 7 })],
+  ]);
+  const block = (id: string) => ({ id, properties: {}, default: {}, item: id, renderLayer: 'solid' as const, renderShape: 'model' as const, tint: null, tabs: [] });
+  const baker = new ModelBaker({ file: (p) => files.get(p), block });
+
+  it('reads multipart conditions that are not strings', () => {
+    expect(baker.bake('mymod:cap[up=true,age=0]').quads).toHaveLength(1);
+    expect(baker.bake('mymod:cap[up=false,age=3]').quads).toHaveLength(1);
+    expect(baker.bake('mymod:cap[up=true,age=2]').quads).toHaveLength(2);
+    expect(baker.bake('mymod:cap[up=false,age=0]').missing).toBe(true);
+  });
+
+  it('shows a stand-in instead of failing on a blockstate it cannot read', () => {
+    expect(baker.bake('mymod:broken').missing).toBe(true);
+  });
+});
