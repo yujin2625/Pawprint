@@ -2,7 +2,9 @@ import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint, type Blueprint } from '../core/format/pawprint';
 import { EXTERNAL_FORMATS, formatOfFile, readExternal, writeExternal, type ExternalFormat } from '../core/format/convert';
 import { fromShareString, toShareString } from '../core/format/share';
-import { getProject, listProjects, putProject, type StoredProject } from '../storage/db';
+import { aiPrompt, readTextBlueprint } from '../core/format/textBlueprint';
+import { loadDefaultPack } from './packs/activePack';
+import { getProject, listPacks, listProjects, putProject, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
 import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
 import { t } from '../i18n/i18n.svelte';
@@ -17,6 +19,28 @@ export async function createProject(bp: EditableBlueprint): Promise<string> {
 
 export function newBlueprint(name: string): EditableBlueprint {
   return new EditableBlueprint(newMeta(name));
+}
+
+/**
+ * The instructions to paste into an AI chat (the same text the mod copies), for the game version and mods of the
+ * default block pack. `hasPack` is false when there is none: the AI is then told to use vanilla blocks.
+ */
+export async function aiInstructions(): Promise<{ text: string; hasPack: boolean }> {
+  const packs = await listPacks();
+  const pack = packs.find((p) => p.isDefault) ?? packs[0];
+  return { text: aiPrompt(pack?.info.mcVersion ?? '', (pack?.info.mods ?? []).map((m) => m.id)), hasPack: !!pack };
+}
+
+/**
+ * Makes a project from the JSON an AI wrote (docs/AI_BLUEPRINT_FORMAT.md). Blocks are checked against the default
+ * block pack when there is one. Throws TextFormatError with a message for the AI.
+ */
+export async function importText(text: string): Promise<{ id: string; warnings: string[] }> {
+  const pack = await loadDefaultPack().catch(() => null);
+  const known = pack ? { blocks: new Map(pack.blocks.map((b) => [b.id, b])), complete: pack.info.propertiesComplete } : null;
+  const result = readTextBlueprint(text, newMeta(''), known);
+  if (pack) result.blueprint.meta = { ...result.blueprint.meta, mcVersion: pack.info.mcVersion, dataVersion: pack.info.dataVersion };
+  return { id: await createProject(EditableBlueprint.fromBlueprint(result.blueprint)), warnings: result.warnings };
 }
 
 /** Extensions the app opens as blueprints: its own and other mods' formats. */

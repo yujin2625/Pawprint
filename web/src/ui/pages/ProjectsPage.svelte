@@ -2,8 +2,10 @@
   import { formatDate, t } from '../../i18n/i18n.svelte';
   import { FileFormatError } from '../../core/zip';
   import { deleteProject, listProjects, type StoredProject } from '../../storage/db';
-  import { BLUEPRINT_EXTENSIONS, createProject, importFile, importShare, newBlueprint, openPath } from '../projects';
+  import { aiInstructions, BLUEPRINT_EXTENSIONS, createProject, importFile, importShare, importText, newBlueprint, openPath } from '../projects';
   import { hasShareString } from '../../core/format/share';
+  import { fixRequest, looksLikeTextBlueprint, TextFormatError } from '../../core/format/textBlueprint';
+  import { editor } from '../editor/editor.svelte';
   import { isDesktop, pickFile } from '../../platform/platform';
   import { openProject } from '../session.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
@@ -13,6 +15,7 @@
   let loaded = $state(false);
   let error = $state<{ key: string; params: Record<string, string | number> } | null>(null);
   let busy = $state(false);
+  let notice = $state<string | null>(null);
   let dragging = $state(false);
   let deleting = $state<StoredProject | null>(null);
 
@@ -64,39 +67,71 @@
     }
   }
 
-  /** A share string (`PAW1:…`) becomes a new project. */
-  async function openShare(text: string) {
-    error = null;
+  const isBlueprintText = (text: string): boolean => hasShareString(text) || looksLikeTextBlueprint(text);
+
+  /** Copied text becomes a new project: a share string (`PAW1:…`) or the JSON an AI wrote from the AI instructions. */
+  async function openText(text: string) {
+    error = notice = null;
     busy = true;
     try {
-      openProject(await importShare(text));
+      if (hasShareString(text)) {
+        openProject(await importShare(text));
+      } else if (looksLikeTextBlueprint(text)) {
+        const { id, warnings } = await importText(text);
+        if (warnings.length) {
+          editor.messageParams = { count: warnings.length, first: warnings[0]! };
+          editor.message = 'editor.aiWarnings';
+        }
+        openProject(id);
+      } else {
+        error = { key: 'error.paste.unknown', params: {} };
+      }
     } catch (e) {
-      error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
+      if (e instanceof TextFormatError) {
+        // Put a request to fix it on the clipboard, to paste straight back to the AI.
+        const copied = await navigator.clipboard.writeText(fixRequest(e)).then(() => true, () => false);
+        error = { key: copied ? 'projects.ai.failedCopied' : 'projects.ai.failed', params: { message: e.message } };
+      } else {
+        error = e instanceof FileFormatError ? { key: e.key, params: e.params } : { key: 'error.unknown', params: { message: String(e) } };
+      }
     } finally {
       busy = false;
     }
   }
 
   /** The button: takes the clipboard if the browser allows reading it, otherwise asks for the text. */
-  async function pasteShare() {
+  async function importClipboard() {
     let text = '';
     try {
       text = await navigator.clipboard.readText();
     } catch {
       text = '';
     }
-    if (!hasShareString(text)) text = prompt(t('projects.sharePrompt')) ?? '';
-    if (text.trim()) await openShare(text);
+    if (!isBlueprintText(text)) text = prompt(t('projects.sharePrompt')) ?? '';
+    if (text.trim()) await openText(text);
   }
 
-  /** Ctrl+V anywhere on the page with a share string in the clipboard. */
+  /** Ctrl+V anywhere on the page with a blueprint as text in the clipboard. */
   function pasted(e: ClipboardEvent) {
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     const text = e.clipboardData?.getData('text/plain') ?? '';
-    if (!busy && hasShareString(text)) {
+    if (!busy && isBlueprintText(text)) {
       e.preventDefault();
-      void openShare(text);
+      void openText(text);
+    }
+  }
+
+  /** Copies the instructions for an AI chat, as the mod's library screen does. */
+  async function copyPrompt() {
+    error = notice = null;
+    try {
+      const { text, hasPack } = await aiInstructions();
+      await navigator.clipboard.writeText(text);
+      notice = hasPack ? 'projects.ai.promptCopied' : 'projects.ai.promptCopiedNoPack';
+    } catch (e) {
+      console.error(e);
+      error = { key: 'editor.shareFailed', params: {} };
     }
   }
 
@@ -129,9 +164,12 @@
   <h1>{t('projects.title')}</h1>
   <button class="btn primary" type="button" disabled={busy} onclick={create}>{t('projects.new')}</button>
   <button class="btn" type="button" disabled={busy} onclick={() => (isDesktop ? openFromDisk() : input.click())}>{t('projects.open')}</button>
-  <button class="btn" type="button" disabled={busy} title={t('projects.pasteShareHelp')} onclick={pasteShare}>{t('projects.pasteShare')}</button>
+  <button class="btn" type="button" disabled={busy} title={t('projects.pasteShareHelp')} onclick={importClipboard}>{t('projects.pasteShare')}</button>
+  <button class="btn" type="button" title={t('projects.ai.copyPromptHelp')} onclick={copyPrompt}>{t('projects.ai.copyPrompt')}</button>
   <input bind:this={input} type="file" accept={BLUEPRINT_EXTENSIONS.map((e) => '.' + e).join(',')} hidden onchange={picked} />
 </div>
+
+{#if notice}<p class="notice" role="status">{t(notice)}</p>{/if}
 
 {#if error}
   <div class="error" role="alert">
@@ -186,6 +224,14 @@
 
   .head h1 {
     flex: 1;
+  }
+
+  .notice {
+    margin: 0 0 16px;
+    padding: 8px 12px;
+    border: 2px solid var(--outline);
+    background: var(--success-bg, var(--panel));
+    color: var(--text);
   }
 
   .error {

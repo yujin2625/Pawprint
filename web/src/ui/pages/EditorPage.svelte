@@ -125,7 +125,8 @@
 
   $effect(() => {
     if (!editor.message) return;
-    const timer = setTimeout(() => (editor.message = null), 4000);
+    // Messages with details (import warnings) stay longer.
+    const timer = setTimeout(() => (editor.message = null), editor.message === 'editor.aiWarnings' ? 15000 : 4000);
     return () => clearTimeout(timer);
   });
 
@@ -662,7 +663,7 @@
         <span>{editor.cursorState ? nameOf(editor.cursorState) : t('editor.emptyCell')}</span>
       {/if}
       <span class="spacer"></span>
-      {#if editor.message}<span class="message">{t(editor.message)}</span>{/if}
+      {#if editor.message}<span class="message">{t(editor.message, editor.messageParams)}</span>{/if}
       {#if locked}<span>{t('layout.lockedNote')}</span>{/if}
       {#if ctx.stats}<span>{t('editor.quads', { count: ctx.stats.quads })}</span>{/if}
     </footer>
