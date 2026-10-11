@@ -46,20 +46,29 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** A block for the instructions: its ID and whether it has an item of its own. */
+/** A block for the instructions: its ID, whether it has an item of its own, and what it looks like when known. */
 export interface AiBlock {
   id: string;
   item: boolean;
+  /** `#RRGGBB`, the average color of its texture. */
+  color?: string | null;
+  look?: 'translucent' | 'see-through' | null;
 }
 
 const namespaceOf = (id: string): string => (id.includes(':') ? id.slice(0, id.indexOf(':')) : 'minecraft');
 
-/** Modded block IDs written into the instructions, and how many the pack has. */
+const LOOK_LEGEND =
+  '"#RRGGBB" is the average color of the block\'s texture; "(translucent)" lets colored light through like stained glass; ' +
+  '"(see-through)" has clear gaps like glass, leaves or doors. Pick blocks whose colors go well together';
+
+/** Block IDs written into the instructions, and how many there were to list. */
 export interface BlockListing {
-  /** Lines "namespace: name, name, …", one per namespace. */
+  /** Lines "namespace: name #RRGGBB, name, …", one per namespace. */
   lines: string[];
   listed: number;
   total: number;
+  /** Whether any entry carries a color, so the instructions explain them. */
+  colors: boolean;
 }
 
 /** `count` entries spread evenly over the list, in its order (all of them when it is short enough). */
@@ -68,25 +77,35 @@ function spread<T>(list: T[], count: number): T[] {
   return Array.from({ length: count }, (_, i) => list[Math.floor((i * list.length) / count)]!);
 }
 
+interface Entry {
+  name: string;
+  text: string;
+}
+
 /**
- * Groups modded block IDs by namespace for the instructions, all of them by default. Over `max` (the mod keeps a
- * limit since it has no way to pick mods), every namespace gets an equal share (small
- * ones keep all their blocks), filled with blocks that have an item first; within each kind the kept IDs are spread
- * over the whole list, so a pack sorted by name does not lose everything after "d".
+ * Groups block IDs by namespace for the instructions, each with its color and look when known. Vanilla blocks are
+ * left out unless `vanilla` (the AI knows them). All are listed by default; over `max` (the mod keeps a limit since
+ * it has no way to pick mods), every namespace gets an equal share (small ones keep all their blocks), filled with
+ * blocks that have an item first, and the kept IDs are spread over the whole list so a list sorted by name does not
+ * lose everything after "d".
  */
-export function listModdedBlocks(blocks: Iterable<AiBlock>, max = Infinity): BlockListing {
-  const groups = new Map<string, { withItem: string[]; without: string[] }>();
+export function listModdedBlocks(blocks: Iterable<AiBlock>, max = Infinity, vanilla = false): BlockListing {
+  const groups = new Map<string, { withItem: Entry[]; without: Entry[] }>();
   const seen = new Set<string>();
-  for (const { id, item } of blocks) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const ns = namespaceOf(id);
-    if (ns === 'minecraft') continue;
+  let colors = false;
+  for (const block of blocks) {
+    if (seen.has(block.id)) continue;
+    seen.add(block.id);
+    const ns = namespaceOf(block.id);
+    if (ns === 'minecraft' && !vanilla) continue;
+    const name = block.id.includes(':') ? block.id.slice(ns.length + 1) : block.id;
+    const text = name + (block.color ? ` ${block.color}` : '') + (block.look ? ` (${block.look})` : '');
+    colors ||= !!block.color;
     let group = groups.get(ns);
     if (!group) groups.set(ns, (group = { withItem: [], without: [] }));
-    (item ? group.withItem : group.without).push(id.slice(ns.length + 1));
+    (block.item ? group.withItem : group.without).push({ name, text });
   }
-  const size = (g: { withItem: string[]; without: string[] }) => g.withItem.length + g.without.length;
+  const size = (g: { withItem: Entry[]; without: Entry[] }) => g.withItem.length + g.without.length;
   // Equal shares: namespaces smaller than the share give their leftover to the rest.
   const share = new Map<string, number>();
   let left = max;
@@ -98,39 +117,46 @@ export function listModdedBlocks(blocks: Iterable<AiBlock>, max = Infinity): Blo
   });
   const lines: string[] = [];
   let listed = 0, total = 0;
-  for (const ns of [...groups.keys()].sort()) {
+  const order = [...groups.keys()].sort((x, y) => (x === 'minecraft' ? -1 : y === 'minecraft' ? 1 : x < y ? -1 : 1));
+  for (const ns of order) {
     const group = groups.get(ns)!;
     const take = share.get(ns)!;
     const items = spread(group.withItem, take);
-    const kept = [...items, ...spread(group.without, take - items.length)].sort();
+    const kept = [...items, ...spread(group.without, take - items.length)].sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
     total += size(group);
     listed += kept.length;
     if (!kept.length) continue;
     const more = size(group) - kept.length;
-    lines.push(`${ns}: ${kept.join(', ')}${more ? ` (+${more} more not listed)` : ''}`);
+    lines.push(`${ns}: ${kept.map((e) => e.text).join(', ')}${more ? ` (+${more} more not listed)` : ''}`);
   }
-  return { lines, listed, total };
+  return { lines, listed, total, colors };
 }
 
 /**
  * The instructions for an AI chat. `mcVersion` and `mods` (namespaces of mods with blocks) come from the block
  * pack in use; without a pack the AI is told to stay with current vanilla blocks. With `blocks` (from
- * {@link listModdedBlocks}) the modded block IDs are listed, so the AI does not have to guess them.
+ * {@link listModdedBlocks}) the modded block IDs are listed, so the AI does not have to guess them. A `palette`
+ * listing is a build palette: the AI may use those blocks only.
  */
-export function aiPrompt(mcVersion: string, mods: string[], blocks?: BlockListing): string {
+export function aiPrompt(mcVersion: string, mods: string[], blocks?: BlockListing, palette = false): string {
   const namespaces = [...new Set(mods)].filter((m) => m && m !== 'minecraft').sort();
   const listed = !!blocks?.lines.length;
-  const modText = !namespaces.length
-    ? ''
-    : listed
-      ? ` and these mods (namespaces): ${namespaces.join(', ')}. Modded blocks are listed at the end; use only those modded IDs` +
-        (blocks.listed < blocks.total ? ', and vanilla blocks where none of them fits' : '')
-      : ` and these mods (namespaces): ${namespaces.join(', ')}. If unsure whether a modded block ID exists, prefer vanilla blocks`;
   const game = mcVersion ? `Minecraft ${mcVersion}` : 'the latest Minecraft Java Edition';
+  let modText = '';
+  if (listed && palette) modText = '. Use only the blocks of the build palette listed at the end, and "air"';
+  else if (namespaces.length && listed) {
+    modText = ` and these mods (namespaces): ${namespaces.join(', ')}. Modded blocks are listed at the end; use only those modded IDs` +
+      (blocks.listed < blocks.total ? ', and vanilla blocks where none of them fits' : '');
+  } else if (namespaces.length) {
+    modText = ` and these mods (namespaces): ${namespaces.join(', ')}. If unsure whether a modded block ID exists, prefer vanilla blocks`;
+  }
   let text = PROMPT.replace('{game}', game).replace('{mods}', modText);
   if (listed) {
-    const list = `Modded blocks in this game ("namespace: names"; write them as "namespace:name"). Any vanilla block of ${game} may be used too:\n${blocks.lines.join('\n')}\n\n`;
-    text = text.replace('Build request: ', list + 'Build request: ');
+    const legend = blocks.colors ? `. ${LOOK_LEGEND}` : '';
+    const head = palette
+      ? `Build palette ("namespace: names"; write them as "namespace:name")${legend}:`
+      : `Modded blocks in this game ("namespace: names"; write them as "namespace:name"). Any vanilla block of ${game} may be used too${legend}:`;
+    text = text.replace('Build request: ', `${head}\n${blocks.lines.join('\n')}\n\nBuild request: `);
   }
   return text;
 }
@@ -159,6 +185,12 @@ export function aiPromptForBlocks(mcVersion: string, blocks: AiBlock[], mods?: R
   });
   const listing = listModdedBlocks(chosen);
   return { text: aiPrompt(mcVersion, chosen.map((b) => namespaceOf(b.id)), listing), listing };
+}
+
+/** The instructions with a build palette: the chosen blocks only (vanilla ones too), each with its color. */
+export function aiPromptForPalette(mcVersion: string, blocks: AiBlock[]): { text: string; listing: BlockListing } {
+  const listing = listModdedBlocks(blocks, Infinity, true);
+  return { text: aiPrompt(mcVersion, [], listing, true), listing };
 }
 
 /** Whether a text looks like an AI's answer in this format (possibly inside a code fence or with chatter around it). */
