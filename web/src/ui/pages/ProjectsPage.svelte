@@ -10,6 +10,7 @@
   import { openProject } from '../session.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import AiPromptDialog from '../AiPromptDialog.svelte';
+  import { fillThumbnails } from '../thumbnails';
 
   let input: HTMLInputElement;
   let projects = $state<StoredProject[]>([]);
@@ -20,13 +21,32 @@
   let dragging = $state(false);
   let deleting = $state<StoredProject | null>(null);
 
+  let alive = true;
+  let filling = false;
+
   async function refresh() {
     projects = await listProjects();
     loaded = true;
+    void fillMissing();
+  }
+
+  /** Projects that were only opened or imported have no picture yet; draw them in the background. */
+  async function fillMissing() {
+    if (filling) return;
+    filling = true;
+    try {
+      const missing = projects.filter((p) => !p.thumbnail).map((p) => p.id);
+      await fillThumbnails(missing, (id, thumbnail) => {
+        projects = projects.map((p) => (p.id === id ? { ...p, thumbnail } : p));
+      }, () => !alive);
+    } finally {
+      filling = false;
+    }
   }
 
   $effect(() => {
     void refresh();
+    return () => (alive = false);
   });
 
   const thumbs = $derived(projects.map((p) => ({ id: p.id, url: p.thumbnail ? URL.createObjectURL(p.thumbnail) : null })));
