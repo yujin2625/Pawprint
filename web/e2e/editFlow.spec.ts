@@ -69,6 +69,10 @@ test('make a pack from a jar, paint in 2D, download and reopen the blueprint', a
   await page.locator('input[type=file][accept*=".pawprint"]').setInputFiles({ name: 'painted.pawprint', mimeType: 'application/octet-stream', buffer: readFileSync(file) });
   await expect(page).toHaveURL(/#\/editor\//);
   await page.waitForFunction(() => (window as unknown as { __blueprint?: { blockCount: number } }).__blueprint?.blockCount === 3);
+
+  // Both projects get a picture in the list, also the one that was only opened.
+  await page.goto('./#/projects');
+  await expect(page.locator('article.card img')).toHaveCount(2, { timeout: 30_000 });
 });
 
 test('copy AI instructions for a pack, import the AI answer', async ({ page, context }) => {
@@ -92,4 +96,33 @@ test('copy AI instructions for a pack, import the AI answer', async ({ page, con
   await page.getByRole('button', { name: 'Import clipboard' }).click();
   await expect(page).toHaveURL(/#\/editor\//);
   await page.waitForFunction(() => (window as unknown as { __blueprint?: { blockCount: number } }).__blueprint?.blockCount === 4);
+
+  // Back to the AI for changes: the copied text holds the rules and the build, which reads back the same.
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('button', { name: 'Copy for AI to change' }).click();
+  await expect(page.getByText(/Copied for AI \(about \d+ tokens\)/)).toBeVisible();
+  // The Windows clipboard turns line breaks into CR LF.
+  const forAi = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n');
+  expect(forAi).toContain('Here is the current build in this format.');
+  expect(forAi.endsWith('Change request: ')).toBe(true);
+  const json = forAi.slice(forAi.indexOf('```json\n') + 8, forAi.lastIndexOf('\n```'));
+  await page.evaluate((text) => navigator.clipboard.writeText(text), json);
+  await page.goto('./#/projects');
+  await page.evaluate(() => delete (window as unknown as { __blueprint?: unknown }).__blueprint);
+  await page.getByRole('button', { name: 'Import clipboard' }).click();
+  await expect(page).toHaveURL(/#\/editor\//);
+  await page.waitForFunction(() => (window as unknown as { __blueprint?: { blockCount: number } }).__blueprint?.blockCount === 4);
+});
+
+test('imported blueprints get a picture in the project list without being opened', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await addJarPack(page);
+  await page.goto('./#/projects');
+  const share = { pawprint: 1, name: 'Wall', operations: [{ shape: 'box', from: [0, 0, 0], to: [4, 2, 0], block: 'minecraft:test_planks' }] };
+  await page.evaluate((text) => navigator.clipboard.writeText(text), JSON.stringify(share));
+  await page.getByRole('button', { name: 'Import clipboard' }).click();
+  await expect(page).toHaveURL(/#\/editor\//);
+  // Straight back, before the editor could take a picture: the list draws it.
+  await page.goto('./#/projects');
+  await expect(page.locator('article.card img')).toHaveCount(1, { timeout: 30_000 });
 });

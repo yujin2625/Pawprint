@@ -193,6 +193,79 @@ export function aiPromptForPalette(mcVersion: string, blocks: AiBlock[]): { text
   return { text: aiPrompt(mcVersion, [], listing, true), listing };
 }
 
+/** Characters for the palette, readable ones first; the same order as the mod's TextBlueprintWriter. */
+const TEXT_CHARACTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!$%&*+-=?@^~';
+/** Past the ASCII set: Latin-1 letters, then Greek, then CJK; all single characters. */
+const EXTRA_RANGES: [number, number][] = [[0xc0, 0xff], [0x391, 0x3c9], [0x4e00, 0x9fff]];
+const REMOVAL = '_';
+const EMPTY = '.';
+
+function textCharacter(index: number): string {
+  if (index < TEXT_CHARACTERS.length) return TEXT_CHARACTERS[index]!;
+  let extra = index - TEXT_CHARACTERS.length;
+  for (const [from, to] of EXTRA_RANGES) {
+    const count = to - from + 1;
+    if (extra < count) return String.fromCodePoint(from + extra);
+    extra -= count;
+  }
+  throw new TextFormatError('Too many different blocks for the text format.');
+}
+
+/**
+ * Writes a blueprint in the text format as layers only (one character per block, "_" for spots that must be
+ * empty), so it can be handed to an AI to change. Same output as the mod's TextBlueprintWriter.
+ */
+export function writeTextBlueprint(bp: Blueprint): string {
+  const root: Record<string, unknown> = { pawprint: TEXT_VERSION, name: bp.meta.name };
+  if (bp.meta.description) root.description = bp.meta.description;
+  if (bp.meta.tags.length) root.tags = bp.meta.tags;
+
+  // A character for each palette entry that is actually used, in the order blocks come.
+  const characters = new Map<number, string>();
+  const palette: Record<string, string> = {};
+  for (const state of bp.states) {
+    if (characters.has(state)) continue;
+    const c = textCharacter(characters.size);
+    characters.set(state, c);
+    palette[c] = bp.palette[state]!;
+  }
+  if (bp.removals.length) palette[REMOVAL] = AIR;
+  root.palette = palette;
+
+  let sizeX = 0, sizeY = 0, sizeZ = 0;
+  for (const list of [bp.positions, bp.removals]) {
+    for (let i = 0; i < list.length; i += 3) {
+      sizeX = Math.max(sizeX, list[i]! + 1);
+      sizeY = Math.max(sizeY, list[i + 1]! + 1);
+      sizeZ = Math.max(sizeZ, list[i + 2]! + 1);
+    }
+  }
+  const grid = Array.from({ length: sizeY }, () => Array.from({ length: sizeZ }, () => new Array<string>(sizeX).fill(EMPTY)));
+  for (let i = 0; i < bp.states.length; i++) {
+    grid[bp.positions[i * 3 + 1]!]![bp.positions[i * 3 + 2]!]![bp.positions[i * 3]!] = characters.get(bp.states[i]!)!;
+  }
+  for (let i = 0; i < bp.removals.length; i += 3) {
+    grid[bp.removals[i + 1]!]![bp.removals[i + 2]!]![bp.removals[i]!] = REMOVAL;
+  }
+  // Trailing "nothing" is left out; the reader treats missing characters as ".".
+  root.layers = { grid: grid.map((layer) => layer.map((row) => row.join('').replace(/\.+$/, ''))) };
+  return JSON.stringify(root, null, 2);
+}
+
+/**
+ * Instructions for an AI to change an existing build: the format rules, the build as text, and a line for the
+ * change request. `mods` are the namespaces of the block pack, so the AI may also use their blocks.
+ */
+export function aiEditPrompt(mcVersion: string, mods: string[], bp: Blueprint): string {
+  const current = writeTextBlueprint(bp);
+  return aiPrompt(mcVersion, mods).replace(
+    'Build request: ',
+    'Here is the current build in this format. Change it as asked below: keep everything the request does not mention, ' +
+      'keep the blocks it already uses unless asked otherwise, and reply with the whole changed build.\n' +
+      '```json\n' + current + '\n```\n\nChange request: ',
+  );
+}
+
 /** Whether a text looks like an AI's answer in this format (possibly inside a code fence or with chatter around it). */
 export function looksLikeTextBlueprint(text: string): boolean {
   return /"pawprint"\s*:/.test(text) && text.indexOf('{') >= 0;
