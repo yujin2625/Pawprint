@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Blueprint, PawprintMeta } from '../src/core/format/pawprint';
-import { aiPrompt, aiPromptForBlocks, estimateTokens, fixRequest, listModdedBlocks, moddedNamespaces, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
+import { aiPrompt, aiPromptForBlocks, aiPromptForPalette, estimateTokens, fixRequest, listModdedBlocks, moddedNamespaces, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
 import type { BlockDef } from '../src/core/pack/types';
 
 const meta = (): PawprintMeta => ({
@@ -42,7 +42,7 @@ describe('AI instructions', () => {
   it('lists modded blocks by namespace, leaving vanilla out', () => {
     const ids = ['minecraft:stone', 'create:brass_block', 'aether:skyroot_planks', 'create:andesite_casing', 'create:brass_block'];
     const blocks = listModdedBlocks(ids.map((id) => ({ id, item: true })));
-    expect(blocks).toEqual({ lines: ['aether: skyroot_planks', 'create: andesite_casing, brass_block'], listed: 3, total: 3 });
+    expect(blocks).toEqual({ lines: ['aether: skyroot_planks', 'create: andesite_casing, brass_block'], listed: 3, total: 3, colors: false });
     const text = aiPrompt('1.21.1', ['create', 'aether'], blocks);
     expect(text).toContain('these mods (namespaces): aether, create. Modded blocks are listed at the end; use only those modded IDs.');
     expect(text).toContain('Any vanilla block of Minecraft 1.21.1 may be used too:\naether: skyroot_planks\ncreate: andesite_casing, brass_block\n\nBuild request: ');
@@ -84,8 +84,31 @@ describe('AI instructions', () => {
     expect(none.text).toContain('Only use blocks that exist in Minecraft 1.20.1.');
   });
 
+  it('gives each block the color and look of its texture', () => {
+    const { text, listing } = aiPromptForBlocks('1.20.1', [
+      { id: 'create:brass_casing', item: true, color: '#755530', look: null },
+      { id: 'create:framed_glass', item: true, color: '#AAD2D7', look: 'see-through' },
+      { id: 'create:belt', item: false },
+    ]);
+    expect(listing.lines).toEqual(['create: belt, brass_casing #755530, framed_glass #AAD2D7 (see-through)']);
+    expect(text).toContain(`may be used too. "#RRGGBB" is the average color of the block's texture;`);
+    expect(text).toContain('Pick blocks whose colors go well together:\ncreate: belt');
+  });
+
+  it('lists a build palette, vanilla blocks first, and allows nothing else', () => {
+    const { text, listing } = aiPromptForPalette('1.20.1', [
+      { id: 'create:brass_casing', item: true, color: '#755530' },
+      { id: 'minecraft:spruce_planks', item: true, color: '#735532' },
+      { id: 'minecraft:glass', item: true, color: '#B0D6DB', look: 'see-through' },
+    ]);
+    expect(listing.lines).toEqual(['minecraft: glass #B0D6DB (see-through), spruce_planks #735532', 'create: brass_casing #755530']);
+    expect(text).toContain('Only use blocks that exist in Minecraft 1.20.1. Use only the blocks of the build palette listed at the end, and "air".');
+    expect(text).toContain('Build palette ("namespace: names"; write them as "namespace:name"). "#RRGGBB"');
+    expect(text).not.toContain('these mods');
+  });
+
   it('gives only mod names when there is no list', () => {
-    expect(aiPrompt('1.21.1', ['create'], { lines: [], listed: 0, total: 0 })).toContain('If unsure whether a modded block ID exists');
+    expect(aiPrompt('1.21.1', ['create'], { lines: [], listed: 0, total: 0, colors: false })).toContain('If unsure whether a modded block ID exists');
   });
 });
 
