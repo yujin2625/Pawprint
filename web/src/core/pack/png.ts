@@ -133,3 +133,108 @@ function concat(parts: Uint8Array[]): Uint8Array {
   }
   return out;
 }
+
+/** A decoded image as 8-bit RGBA, rows top to bottom. */
+export interface Pixels {
+  width: number;
+  height: number;
+  rgba: Uint8Array;
+}
+
+/**
+ * Decodes a non-interlaced PNG of any color type and bit depth to 8-bit RGBA (16-bit samples keep their high byte).
+ * Null when the file cannot be read.
+ */
+export function pngPixels(bytes: Uint8Array): Pixels | null {
+  if (bytes.length < 33 || SIGNATURE.some((b, i) => bytes[i] !== b)) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let width = 0, height = 0, depth = 0, color = -1, interlace = 0;
+  let palette: Uint8Array | null = null, trns: Uint8Array | null = null;
+  const idat: Uint8Array[] = [];
+  for (let at = 8; at + 12 <= bytes.length; ) {
+    const length = view.getUint32(at);
+    const type = String.fromCharCode(bytes[at + 4]!, bytes[at + 5]!, bytes[at + 6]!, bytes[at + 7]!);
+    const data = bytes.subarray(at + 8, at + 8 + length);
+    if (data.length < length) return null;
+    if (type === 'IHDR') {
+      if (length < 13) return null;
+      width = view.getUint32(at + 8);
+      height = view.getUint32(at + 12);
+      depth = data[8]!;
+      color = data[9]!;
+      interlace = data[12]!;
+    } else if (type === 'PLTE') palette = data;
+    else if (type === 'tRNS') trns = data;
+    else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    at += 12 + length;
+  }
+  const channels = ({ 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 } as Record<number, number>)[color];
+  if (!channels || !width || !height || width * height > MAX_PIXELS || interlace !== 0 || !idat.length) return null;
+  if (![1, 2, 4, 8, 16].includes(depth) || (depth < 8 && color !== 0 && color !== 3) || (color === 3 && (!palette || depth > 8))) return null;
+  const bitsPerPixel = channels * depth;
+  const stride = Math.ceil((width * bitsPerPixel) / 8);
+  const bpp = Math.max(1, bitsPerPixel >> 3);
+  let raw: Uint8Array;
+  try {
+    raw = unzlibSync(concat(idat));
+  } catch {
+    return null;
+  }
+  if (raw.length < (stride + 1) * height) return null;
+
+  const rgba = new Uint8Array(width * height * 4);
+  const sample = depth === 16 ? 2 : 1;
+  // A gray or RGB color named by tRNS is transparent (compared at 8 bits, as kept).
+  const key = trns && (color === 0 || color === 2) ? Array.from({ length: channels }, (_, c) => (depth === 16 ? trns![c * 2]! : trns![c * 2 + 1]!)) : null;
+  const scale = depth < 8 ? 255 / ((1 << depth) - 1) : 1;
+  let prev = new Uint8Array(stride);
+  let line = new Uint8Array(stride);
+  for (let y = 0; y < height; y++) {
+    const start = y * (stride + 1);
+    const filter = raw[start]!;
+    for (let i = 0; i < stride; i++) {
+      const x = raw[start + 1 + i]!;
+      const a = i >= bpp ? line[i - bpp]! : 0;
+      const b = prev[i]!;
+      const c = i >= bpp ? prev[i - bpp]! : 0;
+      let value: number;
+      if (filter === 0) value = x;
+      else if (filter === 1) value = x + a;
+      else if (filter === 2) value = x + b;
+      else if (filter === 3) value = x + ((a + b) >> 1);
+      else if (filter === 4) value = x + paeth(a, b, c);
+      else return null;
+      line[i] = value & 255;
+    }
+    for (let px = 0; px < width; px++) {
+      const out = (y * width + px) * 4;
+      if (depth < 8) {
+        const bit = px * depth;
+        const v = (line[bit >> 3]! >> (8 - depth - (bit & 7))) & ((1 << depth) - 1);
+        if (color === 3) {
+          rgba.set(palette!.subarray(v * 3, v * 3 + 3), out);
+          rgba[out + 3] = trns && v < trns.length ? trns[v]! : 255;
+        } else {
+          const g = Math.round(v * scale);
+          rgba.set([g, g, g, key && key[0] === v ? 0 : 255], out);
+        }
+        continue;
+      }
+      const s = (ch: number): number => line[px * bpp + ch * sample]!;
+      if (color === 3) {
+        const v = s(0);
+        rgba.set(palette!.subarray(v * 3, v * 3 + 3), out);
+        rgba[out + 3] = trns && v < trns.length ? trns[v]! : 255;
+      } else if (color === 0 || color === 4) {
+        const g = s(0);
+        rgba.set([g, g, g, color === 4 ? s(1) : key && key[0] === g ? 0 : 255], out);
+      } else {
+        const r = s(0), g = s(1), bl = s(2);
+        rgba.set([r, g, bl, color === 6 ? s(3) : key && key[0] === r && key[1] === g && key[2] === bl ? 0 : 255], out);
+      }
+    }
+    [prev, line] = [line, prev];
+  }
+  return { width, height, rgba };
+}

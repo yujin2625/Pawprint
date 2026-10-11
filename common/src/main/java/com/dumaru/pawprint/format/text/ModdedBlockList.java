@@ -16,15 +16,15 @@ public final class ModdedBlockList {
     /** At most this many IDs are listed (about 15k tokens), so the instructions fit any AI chat. */
     public static final int MAX_LISTED = 3000;
 
-    /** The lines, how many IDs they hold and how many modded blocks there are. */
-    public record Listing(List<String> lines, int listed, int total) {
+    /** The lines, how many IDs they hold, how many modded blocks there are and whether any entry has a color. */
+    public record Listing(List<String> lines, int listed, int total, boolean colors) {
     }
 
     private ModdedBlockList() {
     }
 
-    /** A block ID and whether the block has an item of its own. */
-    public record Block(String id, boolean item) {
+    /** A block ID, whether the block has an item of its own, and its rough color ({@code #RRGGBB}) or null. */
+    public record Block(String id, boolean item, String color) {
     }
 
     /**
@@ -36,6 +36,7 @@ public final class ModdedBlockList {
         Map<String, List<String>> withItem = new TreeMap<>();
         Map<String, List<String>> without = new TreeMap<>();
         Set<String> seen = new HashSet<>();
+        boolean colors = false;
         for (Block block : blocks) {
             if (!seen.add(block.id())) {
                 continue;
@@ -47,7 +48,10 @@ public final class ModdedBlockList {
             }
             withItem.computeIfAbsent(namespace, k -> new ArrayList<>());
             without.computeIfAbsent(namespace, k -> new ArrayList<>());
-            (block.item() ? withItem : without).get(namespace).add(block.id().substring(colon + 1));
+            // "name #RRGGBB": a space sorts before any character of a name, so these still sort by name.
+            String entry = block.id().substring(colon + 1) + (block.color() != null ? " " + block.color() : "");
+            colors |= block.color() != null;
+            (block.item() ? withItem : without).get(namespace).add(entry);
         }
         // Equal shares: namespaces smaller than the share give their leftover to the rest.
         Map<String, Integer> share = new TreeMap<>();
@@ -76,7 +80,7 @@ public final class ModdedBlockList {
             int more = size - kept.size();
             lines.add(ns + ": " + String.join(", ", kept) + (more > 0 ? " (+" + more + " more not listed)" : ""));
         }
-        return new Listing(lines, listed, total);
+        return new Listing(lines, listed, total, colors);
     }
 
     /** {@code count} entries spread evenly over the list, in its order (all of them when it is short enough). */

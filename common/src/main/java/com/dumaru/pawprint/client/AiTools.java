@@ -56,13 +56,16 @@ public final class AiTools {
 
     /**
      * The instructions with this game's version and installed block mods filled in, listing the modded block IDs
-     * (blocks with an item first when they do not all fit) so the AI does not have to guess them.
+     * (blocks with an item first when they do not all fit) with their map colors, so the AI does not have to guess
+     * them and can match colors.
      */
     public static Prompt prompt() {
         List<ModdedBlockList.Block> all = new ArrayList<>();
         for (Block block : BuiltInRegistries.BLOCK) {
             if (!(block instanceof LiquidBlock)) {
-                all.add(new ModdedBlockList.Block(BuiltInRegistries.BLOCK.getKey(block).toString(), block.asItem() != Items.AIR));
+                int color = block.defaultMapColor().col;
+                all.add(new ModdedBlockList.Block(BuiltInRegistries.BLOCK.getKey(block).toString(), block.asItem() != Items.AIR,
+                        color != 0 ? String.format("#%06X", color) : null));
             }
         }
         ModdedBlockList.Listing blocks = ModdedBlockList.of(all, ModdedBlockList.MAX_LISTED);
@@ -87,8 +90,11 @@ public final class AiTools {
         }
         String text = PROMPT.formatted(game, modText);
         if (!blocks.lines().isEmpty()) {
+            String legend = blocks.colors()
+                    ? ". \"#RRGGBB\" is the block's rough color (its color on maps). Pick blocks whose colors go well together"
+                    : "";
             String list = "Modded blocks in this game (\"namespace: names\"; write them as \"namespace:name\"). Any vanilla block of "
-                    + game + " may be used too:\n" + String.join("\n", blocks.lines()) + "\n\n";
+                    + game + " may be used too" + legend + ":\n" + String.join("\n", blocks.lines()) + "\n\n";
             text = text.replace("Build request: ", list + "Build request: ");
         }
         return new Prompt(text, blocks.listed(), blocks.total());

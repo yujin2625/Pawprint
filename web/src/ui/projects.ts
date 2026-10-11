@@ -5,6 +5,9 @@ import { fromShareString, toShareString } from '../core/format/share';
 import { moddedNamespaces, readTextBlueprint, type AiBlock } from '../core/format/textBlueprint';
 import { loadDefaultPack, loadPack } from './packs/activePack';
 import type { LoadedPack } from '../core/pack/pawpack';
+import type { PackLanguages } from '../core/pack/types';
+import { blockLooks, type BlockLook } from '../core/pack/blockLooks';
+import { buildIndex, type SearchEntry } from '../core/search/blockSearch';
 import { getProject, getSetting, listProjects, putProject, setSetting, type StoredProject } from '../storage/db';
 import { copy, paste, type Clip } from '../core/edit/clip';
 import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
@@ -25,17 +28,36 @@ export function newBlueprint(name: string): EditableBlueprint {
 /** The block pack the AI instructions were last copied for; its blocks check what the AI answers. */
 const AI_PACK = 'aiPack';
 
-/** What the AI instructions are made from: a block pack's version, blocks and mods, and the mods left out last time. */
+/** How the instructions name blocks: every block of the chosen mods, or a build palette of chosen blocks. */
+export type AiMode = 'mods' | 'palette';
+
+/** What the AI instructions were made from for a pack last time, kept so the dialog opens the same way. */
+export interface AiChoice {
+  mode: AiMode;
+  /** Mods unchecked in the mods mode; new mods start checked. */
+  excluded: string[];
+  /** Blocks of the build palette. */
+  palette: string[];
+  /** Whether each block comes with the color and look of its texture. */
+  colors: boolean;
+}
+
+/** What the AI instructions are made from: a block pack's version, blocks (with colors) and mods. */
 export interface AiSource {
   packId: string | null;
   mcVersion: string;
+  /** Blocks a build can use (no fluids, nothing invisible), with the color and look of their texture. */
   blocks: AiBlock[];
   mods: { namespace: string; blocks: number; name: string | null }[];
-  /** Mods unchecked the last time instructions were copied for this pack; new mods start checked. */
-  excluded: string[];
+  /** For finding blocks by ID or name in any of the pack's languages. */
+  index: SearchEntry[];
+  languages: PackLanguages;
+  choice: AiChoice;
 }
 
-const excludedKey = (packId: string): string => `aiExcluded:${packId}`;
+const choiceKey = (packId: string): string => `aiChoice:${packId}`;
+/** Texture colors take a moment for a big pack, so they are worked out once per pack. */
+const looksCache = new Map<string, Map<string, BlockLook>>();
 
 /**
  * The blocks of a block pack (the default one when `packId` is not given) for the AI instructions (the same text the
@@ -44,22 +66,33 @@ const excludedKey = (packId: string): string => `aiExcluded:${packId}`;
  */
 export async function aiSource(packId?: string): Promise<AiSource> {
   const pack = (packId ? await loadPack(packId) : null) ?? (await loadDefaultPack());
-  if (!pack) return { packId: null, mcVersion: '', blocks: [], mods: [], excluded: [] };
-  const blocks = pack.blocks.filter((b) => !b.fluid).map((b) => ({ id: b.id, item: !!b.item }));
+  const none: AiChoice = { mode: 'mods', excluded: [], palette: [], colors: true };
+  if (!pack) return { packId: null, mcVersion: '', blocks: [], mods: [], index: [], languages: {}, choice: none };
+  let looks = looksCache.get(pack.info.id);
+  if (!looks) {
+    await new Promise((resolve) => setTimeout(resolve)); // Let "Reading the pack…" show first.
+    looks = blockLooks(pack.blocks, pack.files);
+    looksCache.set(pack.info.id, looks);
+  }
+  const usable = pack.blocks.filter((b) => !b.fluid && b.renderShape !== 'invisible' && !b.id.endsWith(':air'));
+  const blocks = usable.map((b) => ({ id: b.id, item: !!b.item, color: looks.get(b.id)?.color ?? null, look: looks.get(b.id)?.look ?? null }));
   const names = new Map((pack.info.mods ?? []).map((m) => [m.id, m.name]));
+  const saved = await getSetting<Partial<AiChoice>>(choiceKey(pack.info.id)).catch(() => undefined);
   return {
     packId: pack.info.id,
     mcVersion: pack.info.mcVersion,
     blocks,
     mods: moddedNamespaces(blocks).map((m) => ({ ...m, name: names.get(m.namespace) ?? null })),
-    excluded: (await getSetting<string[]>(excludedKey(pack.info.id)).catch(() => undefined)) ?? [],
+    index: buildIndex(usable, pack.languages),
+    languages: pack.languages,
+    choice: { mode: saved?.mode === 'palette' ? 'palette' : 'mods', excluded: saved?.excluded ?? [], palette: saved?.palette ?? [], colors: saved?.colors ?? true },
   };
 }
 
-/** Called once the instructions are copied: the AI's answer is checked against this pack, and the mods left out are kept for next time. */
-export async function rememberAiChoice(packId: string | null, excluded: string[]): Promise<void> {
+/** Called once the instructions are copied: the AI's answer is checked against this pack, and the choice is kept for next time. */
+export async function rememberAiChoice(packId: string | null, choice: AiChoice): Promise<void> {
   await setSetting(AI_PACK, packId ?? undefined).catch(() => undefined);
-  if (packId) await setSetting(excludedKey(packId), excluded).catch(() => undefined);
+  if (packId) await setSetting(choiceKey(packId), choice).catch(() => undefined);
 }
 
 /** The pack to check an AI's answer against: the one its instructions were copied for, else the default one. */
