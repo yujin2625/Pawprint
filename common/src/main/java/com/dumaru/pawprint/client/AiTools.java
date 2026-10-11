@@ -59,23 +59,19 @@ public final class AiTools {
      * (blocks with an item first when they do not all fit) so the AI does not have to guess them.
      */
     public static Prompt prompt() {
-        List<String> withItem = new ArrayList<>();
-        List<String> withoutItem = new ArrayList<>();
+        List<ModdedBlockList.Block> all = new ArrayList<>();
         for (Block block : BuiltInRegistries.BLOCK) {
-            if (block instanceof LiquidBlock) {
-                continue;
+            if (!(block instanceof LiquidBlock)) {
+                all.add(new ModdedBlockList.Block(BuiltInRegistries.BLOCK.getKey(block).toString(), block.asItem() != Items.AIR));
             }
-            String id = BuiltInRegistries.BLOCK.getKey(block).toString();
-            (block.asItem() != Items.AIR ? withItem : withoutItem).add(id);
         }
-        withItem.addAll(withoutItem);
-        ModdedBlockList.Listing blocks = ModdedBlockList.of(withItem, ModdedBlockList.MAX_LISTED);
+        ModdedBlockList.Listing blocks = ModdedBlockList.of(all, ModdedBlockList.MAX_LISTED);
         String game = "Minecraft " + SharedConstants.getCurrentVersion().name();
         TreeSet<String> mods = new TreeSet<>();
-        for (String id : withItem) {
-            int colon = id.indexOf(':');
-            if (colon > 0 && !id.startsWith("minecraft:")) {
-                mods.add(id.substring(0, colon));
+        for (ModdedBlockList.Block block : all) {
+            int colon = block.id().indexOf(':');
+            if (colon > 0 && !block.id().startsWith("minecraft:")) {
+                mods.add(block.id().substring(0, colon));
             }
         }
         String modText;

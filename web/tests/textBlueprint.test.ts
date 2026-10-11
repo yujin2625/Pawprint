@@ -40,7 +40,8 @@ describe('AI instructions', () => {
   });
 
   it('lists modded blocks by namespace, leaving vanilla out', () => {
-    const blocks = listModdedBlocks(['minecraft:stone', 'create:brass_block', 'aether:skyroot_planks', 'create:andesite_casing', 'create:brass_block']);
+    const ids = ['minecraft:stone', 'create:brass_block', 'aether:skyroot_planks', 'create:andesite_casing', 'create:brass_block'];
+    const blocks = listModdedBlocks(ids.map((id) => ({ id, item: true })));
     expect(blocks).toEqual({ lines: ['aether: skyroot_planks', 'create: andesite_casing, brass_block'], listed: 3, total: 3 });
     const text = aiPrompt('1.21.1', ['create', 'aether'], blocks);
     expect(text).toContain('these mods (namespaces): aether, create. Modded blocks are listed at the end; use only those modded IDs.');
@@ -48,12 +49,17 @@ describe('AI instructions', () => {
     expect(text.endsWith('Build request: ')).toBe(true);
   });
 
-  it('shares the limit among mods and keeps the first IDs of each', () => {
-    const ids = ['small:a', 'small:b', ...Array.from({ length: 10 }, (_, i) => `big:b${i}`), ...Array.from({ length: 10 }, (_, i) => `mid:m${i}`)];
-    const blocks = listModdedBlocks(ids, 8);
+  it('shares the limit among mods, spread over each list, blocks with an item first', () => {
+    const block = (id: string, item = true) => ({ id, item });
+    const blocks = listModdedBlocks([
+      block('small:a'), block('small:b'),
+      ...Array.from({ length: 10 }, (_, i) => block(`big:b${i}`)),
+      ...Array.from({ length: 8 }, (_, i) => block(`mid:m${i}`, false)), block('mid:x'),
+    ], 8);
     expect(blocks.listed).toBe(8);
-    expect(blocks.total).toBe(22);
-    expect(blocks.lines).toEqual(['big: b0, b1, b2 (+7 more not listed)', 'mid: m0, m1, m2 (+7 more not listed)', 'small: a, b']);
+    expect(blocks.total).toBe(21);
+    // big: every third of 10; mid: its one block with an item, then two of the rest spread out.
+    expect(blocks.lines).toEqual(['big: b0, b3, b6 (+7 more not listed)', 'mid: m0, m4, x (+6 more not listed)', 'small: a, b']);
     expect(aiPrompt('1.21.1', ['big', 'mid', 'small'], blocks)).toContain('use only those modded IDs, and vanilla blocks where none of them fits.');
   });
 

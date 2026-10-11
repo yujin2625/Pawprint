@@ -28,15 +28,15 @@ const AI_PACK = 'aiPack';
 /**
  * The instructions to paste into an AI chat (the same text the mod copies), for the game version and mods of a
  * block pack (the default one when `packId` is not given). With `listBlocks` the pack's modded block IDs are
- * listed, blocks with an item first, so the AI uses real IDs. `blocks` counts them whether listed or not; `packId`
+ * listed (blocks with an item first when they do not all fit), so the AI uses real IDs. `blocks` counts them whether listed or not; `packId`
  * is null when there is no pack: the AI is then told to use vanilla blocks.
  */
 export async function aiInstructions(packId?: string, listBlocks = true): Promise<{ text: string; packId: string | null; blocks: BlockListing | null }> {
   const pack = (packId ? await loadPack(packId) : null) ?? (await loadDefaultPack());
   if (!pack) return { text: aiPrompt('', []), packId: null, blocks: null };
-  const ids = pack.blocks.filter((b) => !b.fluid).sort((a, b) => Number(!a.item) - Number(!b.item)).map((b) => b.id);
-  const namespaces = ids.map((id) => (id.includes(':') ? id.slice(0, id.indexOf(':')) : 'minecraft'));
-  const blocks = listModdedBlocks(ids);
+  const solid = pack.blocks.filter((b) => !b.fluid);
+  const namespaces = solid.map((b) => (b.id.includes(':') ? b.id.slice(0, b.id.indexOf(':')) : 'minecraft'));
+  const blocks = listModdedBlocks(solid.map((b) => ({ id: b.id, item: !!b.item })));
   return { text: aiPrompt(pack.info.mcVersion, namespaces, listBlocks ? blocks : undefined), packId: pack.info.id, blocks };
 }
 
