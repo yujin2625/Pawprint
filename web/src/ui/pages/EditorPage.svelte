@@ -18,6 +18,8 @@
   import { writePawprint } from '../../core/format/pawprint';
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
+  import { setThumbnail } from '../thumbnails';
+  import { AI_LARGE_TOKENS, aiEditPrompt, estimateTokens, moddedNamespaces, TextFormatError } from '../../core/format/textBlueprint';
   import { PANELS } from '../panels';
   import {
     applyBuiltIn, BUILT_IN, fromFile, isUsable, loadCurrent, loadPresets, openPanel, retitle, saveCurrent, savePresets, toFile,
@@ -75,6 +77,7 @@
         ctx.pack = p;
         ctx.resources = new BlockResources(p, 4096);
         ctx.blueprint = loaded.blueprint;
+        needsThumbnail = !loaded.project.thumbnail;
         if (import.meta.env.DEV) (window as unknown as { __blueprint?: unknown }).__blueprint = loaded.blueprint;
       } catch (e) {
         failed = 'editor.loadFailed';
@@ -88,6 +91,15 @@
       ctx.resources = null;
       ctx.stats = null;
     };
+  });
+
+  /** A project opened without a picture gets one as soon as the 3D view has drawn it. */
+  let needsThumbnail = $state(false);
+  $effect(() => {
+    const stats = ctx.stats, id = projectId;
+    if (!needsThumbnail || !stats || !stats.sectionsTotal || stats.sectionsDone < stats.sectionsTotal || !viewports[0]) return;
+    needsThumbnail = false;
+    void viewports[0].snapshot().then((blob) => blob && setThumbnail(id, blob)).catch((e) => console.warn('Could not take the picture', e));
   });
 
   // Autosave a moment after edits; also keeps the undo/redo buttons and panels current.
@@ -306,6 +318,23 @@
     } catch (e) {
       console.error(e);
       editor.message = 'editor.shareFailed';
+    }
+  }
+
+  /** Copies instructions for an AI to change this build: the format rules, the build as text and a line for the request. */
+  async function copyForAi() {
+    const bp = ctx.blueprint;
+    if (!bp) return;
+    try {
+      const mods = ctx.pack ? moddedNamespaces(ctx.pack.blocks.map((b) => ({ id: b.id, item: !!b.item }))).map((m) => m.namespace) : [];
+      const text = aiEditPrompt(ctx.pack?.info.mcVersion || bp.meta.mcVersion, mods, bp.toBlueprint());
+      await navigator.clipboard.writeText(text);
+      const tokens = estimateTokens(text);
+      editor.messageParams = { tokens };
+      editor.message = tokens > AI_LARGE_TOKENS ? 'editor.aiEditCopiedLarge' : 'editor.aiEditCopied';
+    } catch (e) {
+      console.error(e);
+      editor.message = e instanceof TextFormatError ? 'editor.aiEditTooMany' : 'editor.shareFailed';
     }
   }
 
@@ -559,6 +588,7 @@
           {/each}
           <div class="sep"></div>
           <button class="item" type="button" title={t('editor.shareHelp')} onclick={() => (copyShare(), close())}>{t('editor.copyShare')}</button>
+          <button class="item" type="button" title={t('editor.aiEditHelp')} onclick={() => (copyForAi(), close())}>{t('editor.aiEdit')}</button>
         {/snippet}
       </Menu>
       {#if isDesktop}
