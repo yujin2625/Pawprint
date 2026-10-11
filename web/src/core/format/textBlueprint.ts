@@ -47,38 +47,51 @@ export interface BlockListing {
   total: number;
 }
 
+/** `count` entries spread evenly over the list, in its order (all of them when it is short enough). */
+function spread<T>(list: T[], count: number): T[] {
+  if (count >= list.length) return list;
+  return Array.from({ length: count }, (_, i) => list[Math.floor((i * list.length) / count)]!);
+}
+
 /**
  * Groups modded block IDs by namespace for the instructions. Over `max`, every namespace gets an equal share (small
- * ones keep all their blocks) and the earliest IDs of each are kept, so callers put the most useful first.
+ * ones keep all their blocks), filled with blocks that have an item first; within each kind the kept IDs are spread
+ * over the whole list, so a pack sorted by name does not lose everything after "d".
  */
-export function listModdedBlocks(ids: Iterable<string>, max = MAX_LISTED_BLOCKS): BlockListing {
-  const groups = new Map<string, string[]>();
-  for (const id of new Set(ids)) {
+export function listModdedBlocks(blocks: Iterable<{ id: string; item: boolean }>, max = MAX_LISTED_BLOCKS): BlockListing {
+  const groups = new Map<string, { withItem: string[]; without: string[] }>();
+  const seen = new Set<string>();
+  for (const { id, item } of blocks) {
+    if (seen.has(id)) continue;
+    seen.add(id);
     const colon = id.indexOf(':');
     const ns = colon < 0 ? 'minecraft' : id.slice(0, colon);
     if (ns === 'minecraft') continue;
-    let names = groups.get(ns);
-    if (!names) groups.set(ns, (names = []));
-    names.push(id.slice(colon + 1));
+    let group = groups.get(ns);
+    if (!group) groups.set(ns, (group = { withItem: [], without: [] }));
+    (item ? group.withItem : group.without).push(id.slice(colon + 1));
   }
+  const size = (g: { withItem: string[]; without: string[] }) => g.withItem.length + g.without.length;
   // Equal shares: namespaces smaller than the share give their leftover to the rest.
   const share = new Map<string, number>();
   let left = max;
-  const bySize = [...groups].sort((a, b) => a[1].length - b[1].length);
-  bySize.forEach(([ns, names], i) => {
-    const take = Math.min(names.length, Math.floor(left / (bySize.length - i)));
+  const bySize = [...groups].sort((a, b) => size(a[1]) - size(b[1]));
+  bySize.forEach(([ns, group], i) => {
+    const take = Math.min(size(group), Math.floor(left / (bySize.length - i)));
     share.set(ns, take);
     left -= take;
   });
   const lines: string[] = [];
   let listed = 0, total = 0;
   for (const ns of [...groups.keys()].sort()) {
-    const names = groups.get(ns)!;
-    const kept = names.slice(0, share.get(ns)).sort();
-    total += names.length;
+    const group = groups.get(ns)!;
+    const take = share.get(ns)!;
+    const items = spread(group.withItem, take);
+    const kept = [...items, ...spread(group.without, take - items.length)].sort();
+    total += size(group);
     listed += kept.length;
     if (!kept.length) continue;
-    const more = names.length - kept.length;
+    const more = size(group) - kept.length;
     lines.push(`${ns}: ${kept.join(', ')}${more ? ` (+${more} more not listed)` : ''}`);
   }
   return { lines, listed, total };
