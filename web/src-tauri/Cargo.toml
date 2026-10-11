@@ -1,6 +1,6 @@
 [package]
 name = "pawprint"
-version = "0.1.1"
+version = "0.1.2"
 description = "Pawprint blueprint editor"
 license = "PolyForm-Noncommercial-1.0.0"
 repository = "https://github.com/yujin2625/Pawprint"

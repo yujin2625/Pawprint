@@ -36,8 +36,23 @@ Format "Pawprint Text Blueprint v1":
 
 Build request: `;
 
-/** At most this many modded block IDs go into the instructions (about 15k tokens), so they fit any AI chat. */
-export const MAX_LISTED_BLOCKS = 3000;
+/** Above this many tokens some AI chats cut a message or skim the end of a long list. */
+export const AI_LARGE_TOKENS = 20_000;
+/** Above this many tokens only AIs with a large context window take the instructions whole. */
+export const AI_HUGE_TOKENS = 60_000;
+
+/** A rough token count for AI chats: about four characters per token for this kind of text. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/** A block for the instructions: its ID and whether it has an item of its own. */
+export interface AiBlock {
+  id: string;
+  item: boolean;
+}
+
+const namespaceOf = (id: string): string => (id.includes(':') ? id.slice(0, id.indexOf(':')) : 'minecraft');
 
 /** Modded block IDs written into the instructions, and how many the pack has. */
 export interface BlockListing {
@@ -54,22 +69,22 @@ function spread<T>(list: T[], count: number): T[] {
 }
 
 /**
- * Groups modded block IDs by namespace for the instructions. Over `max`, every namespace gets an equal share (small
+ * Groups modded block IDs by namespace for the instructions, all of them by default. Over `max` (the mod keeps a
+ * limit since it has no way to pick mods), every namespace gets an equal share (small
  * ones keep all their blocks), filled with blocks that have an item first; within each kind the kept IDs are spread
  * over the whole list, so a pack sorted by name does not lose everything after "d".
  */
-export function listModdedBlocks(blocks: Iterable<{ id: string; item: boolean }>, max = MAX_LISTED_BLOCKS): BlockListing {
+export function listModdedBlocks(blocks: Iterable<AiBlock>, max = Infinity): BlockListing {
   const groups = new Map<string, { withItem: string[]; without: string[] }>();
   const seen = new Set<string>();
   for (const { id, item } of blocks) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const colon = id.indexOf(':');
-    const ns = colon < 0 ? 'minecraft' : id.slice(0, colon);
+    const ns = namespaceOf(id);
     if (ns === 'minecraft') continue;
     let group = groups.get(ns);
     if (!group) groups.set(ns, (group = { withItem: [], without: [] }));
-    (item ? group.withItem : group.without).push(id.slice(colon + 1));
+    (item ? group.withItem : group.without).push(id.slice(ns.length + 1));
   }
   const size = (g: { withItem: string[]; without: string[] }) => g.withItem.length + g.without.length;
   // Equal shares: namespaces smaller than the share give their leftover to the rest.
@@ -118,6 +133,32 @@ export function aiPrompt(mcVersion: string, mods: string[], blocks?: BlockListin
     text = text.replace('Build request: ', list + 'Build request: ');
   }
   return text;
+}
+
+/** The mods (namespaces) that have blocks in a list, with how many, by name. */
+export function moddedNamespaces(blocks: Iterable<AiBlock>): { namespace: string; blocks: number }[] {
+  const counts = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const { id } of blocks) {
+    const ns = namespaceOf(id);
+    if (ns === 'minecraft' || seen.has(id)) continue;
+    seen.add(id);
+    counts.set(ns, (counts.get(ns) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([namespace, n]) => ({ namespace, blocks: n }));
+}
+
+/**
+ * The instructions for a block list, naming and listing only the chosen mods (all of them when `mods` is not
+ * given). The AI is told to use only listed modded IDs, so a mod left out is not used at all.
+ */
+export function aiPromptForBlocks(mcVersion: string, blocks: AiBlock[], mods?: ReadonlySet<string>): { text: string; listing: BlockListing } {
+  const chosen = blocks.filter((b) => {
+    const ns = namespaceOf(b.id);
+    return ns !== 'minecraft' && (!mods || mods.has(ns));
+  });
+  const listing = listModdedBlocks(chosen);
+  return { text: aiPrompt(mcVersion, chosen.map((b) => namespaceOf(b.id)), listing), listing };
 }
 
 /** Whether a text looks like an AI's answer in this format (possibly inside a code fence or with chatter around it). */

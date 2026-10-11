@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Blueprint, PawprintMeta } from '../src/core/format/pawprint';
-import { aiPrompt, fixRequest, listModdedBlocks, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
+import { aiPrompt, aiPromptForBlocks, estimateTokens, fixRequest, listModdedBlocks, moddedNamespaces, looksLikeTextBlueprint, readTextBlueprint, TextFormatError, type KnownBlocks } from '../src/core/format/textBlueprint';
 import type { BlockDef } from '../src/core/pack/types';
 
 const meta = (): PawprintMeta => ({
@@ -61,6 +61,27 @@ describe('AI instructions', () => {
     // big: every third of 10; mid: its one block with an item, then two of the rest spread out.
     expect(blocks.lines).toEqual(['big: b0, b3, b6 (+7 more not listed)', 'mid: m0, m4, x (+6 more not listed)', 'small: a, b']);
     expect(aiPrompt('1.21.1', ['big', 'mid', 'small'], blocks)).toContain('use only those modded IDs, and vanilla blocks where none of them fits.');
+  });
+
+  it('lists every block without a limit, and only the chosen mods', () => {
+    const blocks = [
+      ...Array.from({ length: 5000 }, (_, i) => ({ id: `create:b${i}`, item: true })),
+      { id: 'ae2:controller', item: true }, { id: 'ae2:cable_bus', item: false }, { id: 'minecraft:stone', item: true },
+    ];
+    expect(moddedNamespaces(blocks)).toEqual([{ namespace: 'ae2', blocks: 2 }, { namespace: 'create', blocks: 5000 }]);
+    const all = aiPromptForBlocks('1.20.1', blocks);
+    expect(all.listing).toMatchObject({ listed: 5002, total: 5002 });
+    expect(all.text).toContain('these mods (namespaces): ae2, create. Modded blocks are listed at the end; use only those modded IDs.');
+    expect(estimateTokens(all.text)).toBe(Math.ceil(all.text.length / 4));
+
+    const onlyAe2 = aiPromptForBlocks('1.20.1', blocks, new Set(['ae2']));
+    expect(onlyAe2.listing.lines).toEqual(['ae2: cable_bus, controller']);
+    expect(onlyAe2.text).toContain('these mods (namespaces): ae2. Modded');
+    expect(onlyAe2.text).not.toContain('create');
+
+    const none = aiPromptForBlocks('1.20.1', blocks, new Set());
+    expect(none.listing.listed).toBe(0);
+    expect(none.text).toContain('Only use blocks that exist in Minecraft 1.20.1.');
   });
 
   it('gives only mod names when there is no list', () => {
