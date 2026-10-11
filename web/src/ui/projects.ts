@@ -2,7 +2,7 @@ import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint, type Blueprint } from '../core/format/pawprint';
 import { EXTERNAL_FORMATS, formatOfFile, readExternal, writeExternal, type ExternalFormat } from '../core/format/convert';
 import { fromShareString, toShareString } from '../core/format/share';
-import { aiPrompt, listModdedBlocks, readTextBlueprint, type BlockListing } from '../core/format/textBlueprint';
+import { moddedNamespaces, readTextBlueprint, type AiBlock } from '../core/format/textBlueprint';
 import { loadDefaultPack, loadPack } from './packs/activePack';
 import type { LoadedPack } from '../core/pack/pawpack';
 import { getProject, getSetting, listProjects, putProject, setSetting, type StoredProject } from '../storage/db';
@@ -25,24 +25,41 @@ export function newBlueprint(name: string): EditableBlueprint {
 /** The block pack the AI instructions were last copied for; its blocks check what the AI answers. */
 const AI_PACK = 'aiPack';
 
-/**
- * The instructions to paste into an AI chat (the same text the mod copies), for the game version and mods of a
- * block pack (the default one when `packId` is not given). With `listBlocks` the pack's modded block IDs are
- * listed (blocks with an item first when they do not all fit), so the AI uses real IDs. `blocks` counts them whether listed or not; `packId`
- * is null when there is no pack: the AI is then told to use vanilla blocks.
- */
-export async function aiInstructions(packId?: string, listBlocks = true): Promise<{ text: string; packId: string | null; blocks: BlockListing | null }> {
-  const pack = (packId ? await loadPack(packId) : null) ?? (await loadDefaultPack());
-  if (!pack) return { text: aiPrompt('', []), packId: null, blocks: null };
-  const solid = pack.blocks.filter((b) => !b.fluid);
-  const namespaces = solid.map((b) => (b.id.includes(':') ? b.id.slice(0, b.id.indexOf(':')) : 'minecraft'));
-  const blocks = listModdedBlocks(solid.map((b) => ({ id: b.id, item: !!b.item })));
-  return { text: aiPrompt(pack.info.mcVersion, namespaces, listBlocks ? blocks : undefined), packId: pack.info.id, blocks };
+/** What the AI instructions are made from: a block pack's version, blocks and mods, and the mods left out last time. */
+export interface AiSource {
+  packId: string | null;
+  mcVersion: string;
+  blocks: AiBlock[];
+  mods: { namespace: string; blocks: number; name: string | null }[];
+  /** Mods unchecked the last time instructions were copied for this pack; new mods start checked. */
+  excluded: string[];
 }
 
-/** Called once the instructions are copied: the AI's answer will be checked against this pack. */
-export async function rememberAiPack(packId: string | null): Promise<void> {
+const excludedKey = (packId: string): string => `aiExcluded:${packId}`;
+
+/**
+ * The blocks of a block pack (the default one when `packId` is not given) for the AI instructions (the same text the
+ * mod copies, docs/AI_BLUEPRINT_FORMAT.md). `packId` is null when there is no pack: the AI is then told to use
+ * vanilla blocks.
+ */
+export async function aiSource(packId?: string): Promise<AiSource> {
+  const pack = (packId ? await loadPack(packId) : null) ?? (await loadDefaultPack());
+  if (!pack) return { packId: null, mcVersion: '', blocks: [], mods: [], excluded: [] };
+  const blocks = pack.blocks.filter((b) => !b.fluid).map((b) => ({ id: b.id, item: !!b.item }));
+  const names = new Map((pack.info.mods ?? []).map((m) => [m.id, m.name]));
+  return {
+    packId: pack.info.id,
+    mcVersion: pack.info.mcVersion,
+    blocks,
+    mods: moddedNamespaces(blocks).map((m) => ({ ...m, name: names.get(m.namespace) ?? null })),
+    excluded: (await getSetting<string[]>(excludedKey(pack.info.id)).catch(() => undefined)) ?? [],
+  };
+}
+
+/** Called once the instructions are copied: the AI's answer is checked against this pack, and the mods left out are kept for next time. */
+export async function rememberAiChoice(packId: string | null, excluded: string[]): Promise<void> {
   await setSetting(AI_PACK, packId ?? undefined).catch(() => undefined);
+  if (packId) await setSetting(excludedKey(packId), excluded).catch(() => undefined);
 }
 
 /** The pack to check an AI's answer against: the one its instructions were copied for, else the default one. */
