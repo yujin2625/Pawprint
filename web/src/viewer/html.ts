@@ -15,7 +15,27 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(out);
 }
 
-const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+function fromBase64(text: string): Uint8Array {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** The `.pawprint` file inside a page `viewerHtml` made, or null if the page is not one. */
+export function blueprintOfViewerHtml(html: string): Uint8Array | null {
+  const found = /<script type="application\/json" id="pawprint-data">([\s\S]*?)<\/script>/.exec(html);
+  if (!found) return null;
+  try {
+    // Undo scriptSafe: `<\/script` is already valid JSON, `<\!--` is not.
+    const data = JSON.parse(found[1]!.replace(/<\\!--/g, '<!--')) as Partial<ViewerData>;
+    return typeof data.blueprint === 'string' ? fromBase64(data.blueprint) : null;
+  } catch {
+    return null;
+  }
+}
+
+const escapeHtml =(s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 /** Keeps text inside a <script> element from closing it. */
 const scriptSafe = (s: string) => s.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
 

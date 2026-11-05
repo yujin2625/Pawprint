@@ -1,7 +1,7 @@
 import { EditableBlueprint, newMeta } from '../core/blueprint/editable';
 import { readPawprint, writePawprint, type Blueprint } from '../core/format/pawprint';
 import { EXTERNAL_FORMATS, formatOfFile, readExternal, writeExternal, type ExternalFormat } from '../core/format/convert';
-import { fromShareString, toShareString } from '../core/format/share';
+import { fromShareString, hasShareString, toShareString } from '../core/format/share';
 import { moddedNamespaces, readTextBlueprint, type AiBlock } from '../core/format/textBlueprint';
 import { loadDefaultPack, loadPack } from './packs/activePack';
 import type { LoadedPack } from '../core/pack/pawpack';
@@ -12,6 +12,8 @@ import { getProject, getSetting, listProjects, putProject, setSetting, type Stor
 import { copy, paste, type Clip } from '../core/edit/clip';
 import { askYesNo, baseName, fileModified, pickSavePath, readFile, safeFileName, saveBytes, writeFile } from '../platform/platform';
 import { t } from '../i18n/i18n.svelte';
+import { FileFormatError } from '../core/zip';
+import { blueprintOfViewerHtml } from '../viewer/html';
 
 /** Projects: blueprints kept in this browser, stored as whole `.pawprint` files. */
 
@@ -107,22 +109,32 @@ async function aiPack(): Promise<LoadedPack | null> {
  */
 export async function importText(text: string): Promise<{ id: string; warnings: string[] }> {
   const pack = await aiPack();
-  const known = pack ? { blocks: new Map(pack.blocks.map((b) => [b.id, b])), complete: pack.info.propertiesComplete } : null;
-  const result = readTextBlueprint(text, newMeta(''), known);
+  const result = readTextBlueprint(text, newMeta(''), knownBlocks(pack));
   if (pack) result.blueprint.meta = { ...result.blueprint.meta, mcVersion: pack.info.mcVersion, dataVersion: pack.info.dataVersion };
   return { id: await createProject(EditableBlueprint.fromBlueprint(result.blueprint)), warnings: result.warnings };
 }
 
-/** Extensions the app opens as blueprints: its own and other mods' formats. */
-export const BLUEPRINT_EXTENSIONS = ['pawprint', ...EXTERNAL_FORMATS.map((f) => f.extension.slice(1))];
+const knownBlocks = (pack: LoadedPack | null) => (pack ? { blocks: new Map(pack.blocks.map((b) => [b.id, b])), complete: pack.info.propertiesComplete } : null);
 
-const withoutExtension = (fileName: string): string => fileName.replace(/\.(pawprint|litematic|schem|nbt)$/i, '');
+/** Extensions the app opens as blueprints: its own, other mods' formats and the 3D viewer page (everything Export writes). */
+export const BLUEPRINT_EXTENSIONS = ['pawprint', ...EXTERNAL_FORMATS.map((f) => f.extension.slice(1)), 'html', 'htm'];
 
-/** A blueprint file of any format we read (`.pawprint`, `.litematic`, `.schem`, `.nbt`), by its name. */
+const withoutExtension = (fileName: string): string => fileName.replace(/\.(pawprint|litematic|schem|nbt|html?)$/i, '');
+const isViewerPage = (fileName: string): boolean => /\.html?$/i.test(fileName);
+
+/** The blueprint inside a page the 3D viewer export wrote. */
+function readViewerPage(bytes: Uint8Array): Blueprint {
+  const pawprint = blueprintOfViewerHtml(new TextDecoder().decode(bytes));
+  if (!pawprint) throw new FileFormatError('error.viewer.noBlueprint');
+  return readPawprint(pawprint);
+}
+
+/** A blueprint file of any format we read (`.pawprint`, `.litematic`, `.schem`, `.nbt`, viewer `.html`), by its name. */
 function readBlueprintFile(bytes: Uint8Array, fileName: string): EditableBlueprint {
   const format = formatOfFile(fileName);
   const name = withoutExtension(fileName);
-  const bp = EditableBlueprint.fromBlueprint(format ? readExternal(format, bytes, newMeta(name)) : readPawprint(bytes));
+  const flat = format ? readExternal(format, bytes, newMeta(name)) : isViewerPage(fileName) ? readViewerPage(bytes) : readPawprint(bytes);
+  const bp = EditableBlueprint.fromBlueprint(flat);
   if (!bp.meta.name) bp.meta.name = name;
   return bp;
 }
@@ -193,7 +205,7 @@ export async function openPath(path: string): Promise<string> {
   }
   const id = await importFile(bytes, baseName(path));
   // Saving writes a .pawprint, so only a .pawprint stays linked to its file.
-  if (!formatOfFile(path)) await linkFile(id, path, mtime);
+  if (/\.pawprint$/i.test(path)) await linkFile(id, path, mtime);
   return id;
 }
 
@@ -245,6 +257,27 @@ export async function loadClip(id: string): Promise<Clip | null> {
   const loaded = await loadProject(id);
   const bounds = loaded?.blueprint.bounds();
   return loaded && bounds ? copy(loaded.blueprint, bounds) : null;
+}
+
+function wholeClip(bp: EditableBlueprint): Clip {
+  const bounds = bp.bounds();
+  if (!bounds) throw new FileFormatError('error.convert.empty');
+  return copy(bp, bounds);
+}
+
+/** A blueprint file of any format Export writes, ready to stamp into the open build. */
+export function clipFromFile(bytes: Uint8Array, fileName: string): Clip {
+  return wholeClip(readBlueprintFile(bytes, fileName));
+}
+
+/**
+ * A share string (`PAW1:…`) or an AI's JSON reply, ready to stamp into the open build. The AI's blocks are checked
+ * against `pack`; throws TextFormatError with a message for the AI.
+ */
+export function clipFromText(text: string, pack: LoadedPack | null): { clip: Clip; warnings: string[] } {
+  if (hasShareString(text)) return { clip: wholeClip(EditableBlueprint.fromBlueprint(fromShareString(text, newMeta('')))), warnings: [] };
+  const result = readTextBlueprint(text, newMeta(''), knownBlocks(pack));
+  return { clip: wholeClip(EditableBlueprint.fromBlueprint(result.blueprint)), warnings: result.warnings };
 }
 
 /** Saves a clip as its own project tagged "stamp", so it shows in the stamp list (and can be edited like any blueprint). */

@@ -9,16 +9,20 @@ use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
-/// Files given on the command line (a double-clicked `.pawprint` / `.pawpack`) that the page has not picked up yet.
+/// Files given on the command line (a double-clicked `.pawprint` / `.pawpack`, or another mod's blueprint) that the
+/// page has not picked up yet.
 #[derive(Default)]
 struct OpenFiles(Mutex<Vec<String>>);
+
+/// What the app opens when double-clicked: its own files and the blueprint formats Export writes.
+const OPEN_EXTENSIONS: [&str; 5] = [".pawprint", ".pawpack", ".litematic", ".schem", ".nbt"];
 
 fn file_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
   args
     .into_iter()
     .filter(|a| {
       let lower = a.to_lowercase();
-      (lower.ends_with(".pawprint") || lower.ends_with(".pawpack")) && PathBuf::from(a).is_file()
+      OPEN_EXTENSIONS.iter().any(|ext| lower.ends_with(ext)) && PathBuf::from(a).is_file()
     })
     .collect()
 }
