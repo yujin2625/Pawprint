@@ -5,8 +5,8 @@ import { openPath } from './projects';
 import { openProject } from './session.svelte';
 
 /**
- * Desktop: files double-clicked in the file manager. A `.pawprint` becomes a project and opens in the editor; a
- * `.pawpack` is added to the packs (replacing the same pack, keeping its name and default mark).
+ * Desktop: files double-clicked in the file manager. A blueprint (`.pawprint`, `.litematic`, `.schem`, `.nbt`) becomes a
+ * project and opens in the editor; a `.pawpack` is added to the packs (replacing the same pack, keeping its name and default mark).
  */
 export async function openPaths(paths: string[]): Promise<void> {
   for (const path of paths) {

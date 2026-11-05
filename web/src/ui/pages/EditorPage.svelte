@@ -9,7 +9,9 @@
   import { hiddenLayers, moveCellsTo, protectedLayers, rows } from '../../core/blueprint/layers';
   import { getSetting, setSetting } from '../../storage/db';
   import { loadDefaultPack } from '../packs/activePack';
-  import { exportAs, exportFile, loadProject, saveProject, saveStamp, saveToFile, shareString } from '../projects';
+  import { BLUEPRINT_EXTENSIONS, clipFromFile, clipFromText, exportAs, exportFile, loadProject, saveProject, saveStamp, saveToFile, shareString } from '../projects';
+  import { hasShareString } from '../../core/format/share';
+  import type { Clip } from '../../core/edit/clip';
   import { EXTERNAL_FORMATS, type ExternalFormat } from '../../core/format/convert';
   import { FileFormatError } from '../../core/zip';
   import { isDesktop, saveBytes } from '../../platform/platform';
@@ -19,7 +21,7 @@
   import { editor, TOOL_KEYS } from '../editor/editor.svelte';
   import { ctx, activeSlice, viewports } from '../editor/context.svelte';
   import { setThumbnail } from '../thumbnails';
-  import { AI_LARGE_TOKENS, aiEditPrompt, estimateTokens, moddedNamespaces, TextFormatError } from '../../core/format/textBlueprint';
+  import { AI_LARGE_TOKENS, aiEditPrompt, estimateTokens, looksLikeTextBlueprint, moddedNamespaces, TextFormatError } from '../../core/format/textBlueprint';
   import { PANELS } from '../panels';
   import {
     applyBuiltIn, BUILT_IN, fromFile, isUsable, loadCurrent, loadPresets, openPanel, retitle, saveCurrent, savePresets, toFile,
@@ -42,6 +44,7 @@
   let locked = $state(false);
   let presetName = $state('');
   let layoutInput: HTMLInputElement | undefined = $state();
+  let importInput: HTMLInputElement | undefined = $state();
   /** Desktop: the file this project is linked to. */
   let filePath = $state<string | null>(null);
   /** Set while the desktop window closes: panel windows close with it, and that must not end up in the saved layout. */
@@ -138,7 +141,8 @@
   $effect(() => {
     if (!editor.message) return;
     // Messages with details (import warnings) stay longer.
-    const timer = setTimeout(() => (editor.message = null), editor.message === 'editor.aiWarnings' ? 15000 : 4000);
+    const long = editor.message === 'editor.aiWarnings' || editor.message === 'editor.importFailedAi';
+    const timer = setTimeout(() => (editor.message = null), long ? 15000 : 4000);
     return () => clearTimeout(timer);
   });
 
@@ -319,6 +323,77 @@
       console.error(e);
       editor.message = 'editor.shareFailed';
     }
+  }
+
+  /** An imported blueprint goes on the stamp tool, to place into this build where the user clicks. */
+  function stampImported(clip: Clip, warnings: string[] = []) {
+    editor.clip = clip;
+    editor.tool = 'stamp';
+    if (warnings.length) {
+      editor.messageParams = { count: warnings.length, first: warnings[0]! };
+      editor.message = 'editor.aiWarnings';
+    } else {
+      editor.messageParams = { size: clip.size.join('×') };
+      editor.message = 'editor.imported';
+    }
+  }
+
+  function importFailed(e: unknown) {
+    console.error(e);
+    if (e instanceof FileFormatError) {
+      editor.messageParams = e.params;
+      editor.message = e.key;
+    } else if (e instanceof TextFormatError) {
+      editor.messageParams = { message: e.message };
+      editor.message = 'editor.importFailedAi';
+    } else {
+      editor.messageParams = { message: String(e) };
+      editor.message = 'error.unknown';
+    }
+  }
+
+  /** A file of any format Export writes: .pawprint, other mods' formats or a 3D viewer page. */
+  async function importBlueprintFile(file: File) {
+    if (!ctx.blueprint) return;
+    try {
+      stampImported(clipFromFile(new Uint8Array(await file.arrayBuffer()), file.name));
+    } catch (e) {
+      importFailed(e);
+    }
+  }
+
+  function importPicked() {
+    const file = importInput?.files?.[0];
+    if (importInput) importInput.value = '';
+    if (file) void importBlueprintFile(file);
+  }
+
+  /** Share text (PAW1:…) or an AI's JSON reply from the clipboard; asks for it if the browser does not allow reading it. */
+  async function importText() {
+    if (!ctx.blueprint) return;
+    let text = await navigator.clipboard.readText().catch(() => '');
+    if (!hasShareString(text) && !looksLikeTextBlueprint(text)) text = prompt(t('projects.sharePrompt')) ?? '';
+    if (!text.trim()) return;
+    if (!hasShareString(text) && !looksLikeTextBlueprint(text)) {
+      editor.message = 'error.paste.unknown';
+      return;
+    }
+    try {
+      const { clip, warnings } = clipFromText(text, ctx.pack);
+      stampImported(clip, warnings);
+    } catch (e) {
+      importFailed(e);
+    }
+  }
+
+  const hasFiles = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes('Files');
+
+  /** A blueprint file dropped anywhere on the editor goes on the stamp tool too. */
+  function droppedFile(e: DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    const file = e.dataTransfer?.files[0];
+    if (file) void importBlueprintFile(file);
   }
 
   /** Copies instructions for an AI to change this build: the format rules, the build as text and a line for the request. */
@@ -517,7 +592,7 @@
   const brushTool = $derived(editor.tool === 'pencil' || editor.tool === 'eraser' || editor.tool === 'line');
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} ondragover={(e) => hasFiles(e) && e.preventDefault()} ondrop={droppedFile} />
 
 {#if failed}
   <section class="none panel">
@@ -580,6 +655,13 @@
       <button class="btn" type="button" onclick={() => viewports[0]?.frame()}>{t('editor.frame')}</button>
       <button class="btn" type="button" disabled={!ctx.blueprint || sending} title={t('editor.sendGameHelp')} onclick={sendGame}>{t('editor.sendGame')}</button>
       <button class="btn" type="button" disabled={!ctx.blueprint} title={t('editor.viewerHelp')} onclick={() => ctx.blueprint && exportViewer(ctx.blueprint, ctx.pack)}>{t('editor.viewer')}</button>
+      <Menu label={t('editor.import')} align="right">
+        {#snippet children(close)}
+          <button class="item" type="button" disabled={!ctx.blueprint} title={t('editor.importFileHelp')} onclick={() => (importInput?.click(), close())}>{t('editor.importFile')}</button>
+          <button class="item" type="button" disabled={!ctx.blueprint} title={t('editor.importTextHelp')} onclick={() => (importText(), close())}>{t('editor.importText')}</button>
+        {/snippet}
+      </Menu>
+      <input bind:this={importInput} type="file" accept={BLUEPRINT_EXTENSIONS.map((e) => '.' + e).join(',')} hidden onchange={importPicked} />
       <Menu label={t('editor.export')} align="right">
         {#snippet children(close)}
           <div class="heading">{t('editor.exportOther')}</div>
