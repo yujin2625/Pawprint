@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Pawprint",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "identifier": "io.github.yujin2625.pawprint",
   "build": {
     "frontendDist": "../dist",
@@ -53,6 +53,27 @@
         "description": "Pawprint block pack",
         "role": "Viewer",
         "mimeType": "application/x-pawpack"
+      },
+      {
+        "ext": ["litematic"],
+        "name": "Litematica schematic",
+        "description": "Litematica schematic",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["schem"],
+        "name": "WorldEdit schematic",
+        "description": "WorldEdit schematic",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["nbt"],
+        "name": "Minecraft structure",
+        "description": "Minecraft structure",
+        "role": "Viewer",
+        "rank": "Alternate"
       }
     ],
     "windows": {
